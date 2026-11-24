@@ -378,47 +378,58 @@ describe("passkey enrolment on the hash chain", () => {
     }>;
   }
 
-  function enrolDirect(key: TestPasskey, label?: string) {
+  function enrolDirect(key: TestPasskey, options: { label?: string; workspace_id?: string } = {}) {
     return store.enrollPersonPasskey({
-      credential_id: key.credentialId, public_key_spki: key.spki, algorithm: -7, rp_id: RP_ID, origin: ORIGIN,
-      ...(label !== undefined ? { label } : {}),
+      credential_id: key.credentialId, public_key_spki: key.spki, algorithm: -7, rp_id: RP_ID, origin: ORIGIN, ...options,
     });
   }
 
-  const fingerprintOf = (key: TestPasskey) => sha256(Buffer.from(key.spki, "base64url")).toString("hex");
+  const spkiFingerprint = (spki: string) => sha256(Buffer.from(spki, "base64url")).toString("hex");
+  const fingerprintOf = (key: TestPasskey) => spkiFingerprint(key.spki);
+  const eventCount = () => (store.db.query(`SELECT count(*) AS n FROM events`).get() as { n: number }).n;
 
-  test("enrolment and revocation each append one event to every workspace, with public facts only", () => {
+  /** One passkey act on a proposal, by whatever key the assertion is signed with. */
+  function act(key: TestPasskey, proposalId: string, kind: "agree" | "reject", reason?: string) {
+    const challenge = store.personActChallenge({ proposal_report_id: proposalId, act: kind, ...(reason ? { reason } : {}) });
+    return store.recordPersonActWithPasskey({
+      proposal_report_id: proposalId, act: kind, ...(reason ? { reason } : {}), assertion: assert(key, challenge.challenge),
+    });
+  }
+
+  test("enrolling with a workspace records it there with public facts only, and nowhere else", () => {
     const here = session("here");
     const there = otherWorkspace();
     expect(there.workspace.id).not.toBe(here.workspace.id);
     const key = makePasskey();
+    const before = eventCount();
     // Even a direct store call, with no terminal, leaves the event.
-    enrolDirect(key, "Touch ID");
+    enrolDirect(key, { label: "Touch ID", workspace_id: here.workspace.id });
     clock = new Date("2026-10-29T00:05:00.000Z");
     store.revokePersonPasskey(key.credentialId);
-    for (const handle of [here, there]) {
-      const events = passkeyEvents(handle.workspace.id);
-      expect(events.map((event) => [event.type, event.entity_id, event.actor, event.session_id])).toEqual([
-        ["person.passkey_enrolled", key.credentialId, "person:desk", null],
-        ["person.passkey_revoked", key.credentialId, "person:desk", null],
-      ]);
-      // The whole payload, so nothing else (the key itself, a private part) can slip in.
-      expect(JSON.parse(events[0]!.payload_json)).toEqual({
-        fingerprint: fingerprintOf(key),
-        rp_id: RP_ID,
-        origin: ORIGIN,
-        label: "Touch ID",
-        enrolled_at: "2026-10-29T00:00:00.000Z",
-        recorded: "at_enrolment",
-      });
-      expect(JSON.parse(events[1]!.payload_json)).toEqual({
-        fingerprint: fingerprintOf(key),
-        revoked_at: "2026-10-29T00:05:00.000Z",
-      });
-      expect(store.verifyJournal(handle.workspace.id)).toBe(true);
-      for (const event of store.eventsSince(handle.workspace.id).events.filter((item) => item.type.startsWith("person.passkey_"))) {
-        for (const reader of [here, there]) expect(store.eventAddressesSession(event, reader.session.id)).toBe(false);
-      }
+    // One enrolment and one revocation in the workspace named, nothing in the other.
+    expect(eventCount()).toBe(before + 2);
+    expect(passkeyEvents(there.workspace.id)).toEqual([]);
+    const events = passkeyEvents(here.workspace.id);
+    expect(events.map((event) => [event.type, event.entity_id, event.actor, event.session_id])).toEqual([
+      ["person.passkey_enrolled", key.credentialId, "person:desk", null],
+      ["person.passkey_revoked", key.credentialId, "person:desk", null],
+    ]);
+    // The whole payload, so nothing else (the key itself, a private part) can slip in.
+    expect(JSON.parse(events[0]!.payload_json)).toEqual({
+      fingerprint: fingerprintOf(key),
+      rp_id: RP_ID,
+      origin: ORIGIN,
+      label: "Touch ID",
+      enrolled_at: "2026-10-29T00:00:00.000Z",
+      recorded: "at_enrolment",
+    });
+    expect(JSON.parse(events[1]!.payload_json)).toEqual({
+      fingerprint: fingerprintOf(key),
+      revoked_at: "2026-10-29T00:05:00.000Z",
+    });
+    expect(store.verifyJournal(here.workspace.id)).toBe(true);
+    for (const event of store.eventsSince(here.workspace.id).events.filter((item) => item.type.startsWith("person.passkey_"))) {
+      for (const reader of [here, there]) expect(store.eventAddressesSession(event, reader.session.id)).toBe(false);
     }
     // The event is in the chain: changing the recorded fingerprint breaks it.
     store.db.query(`UPDATE events SET payload_json = replace(payload_json, ?, ?) WHERE type = 'person.passkey_enrolled'`)
@@ -429,17 +440,49 @@ describe("passkey enrolment on the hash chain", () => {
   test("an unlabelled key has no label field, and a refused enrolment or revocation appends nothing", () => {
     const here = session("here");
     const key = makePasskey();
-    enrolDirect(key);
+    enrolDirect(key, { workspace_id: here.workspace.id });
     expect(JSON.parse(passkeyEvents(here.workspace.id)[0]!.payload_json)).not.toHaveProperty("label");
-    expect(errorCode(() => enrolDirect(key))).toBe("passkey_already_enrolled");
+    const before = eventCount();
+    expect(errorCode(() => enrolDirect(key, { workspace_id: here.workspace.id }))).toBe("passkey_already_enrolled");
     expect(errorCode(() => store.revokePersonPasskey("bm90LWVucm9sbGVk"))).toBe("passkey_not_enrolled");
-    expect(passkeyEvents(here.workspace.id)).toHaveLength(1);
+    // An unknown workspace enrols nothing.
+    const other = makePasskey();
+    expect(errorCode(() => enrolDirect(other, { workspace_id: "workspace_missing" }))).toBe("workspace_not_found");
+    expect(store.listPersonPasskeys().map((passkey) => passkey.credential_id)).toEqual([key.credentialId]);
+    expect(eventCount()).toBe(before);
   });
 
-  test("a workspace opened after the enrolment gets it once, just before the key's first act there", () => {
+  test("the enrol command's --workspace is checked before the prompt, shown there, and recorded", () => {
+    const here = session("here");
+    const key = makePasskey();
+    const readStdin = () => JSON.stringify({
+      credential_id: key.credentialId, public_key_spki: key.spki, algorithm: -7, rp_id: RP_ID, origin: ORIGIN,
+    });
+    const unasked = terminal("yes");
+    expect(desk(["passkey-enroll", "--file=-", "--workspace", "workspace_missing"], { openTty: unasked.openTty, readStdin }).receipt.error)
+      .toBe("workspace_not_found");
+    expect(unasked.opened()).toBe(0);
+    const asked = terminal("yes");
+    expect(desk(["passkey-enroll", "--file=-", "--workspace", here.workspace.id], { openTty: asked.openTty, readStdin }).receipt.status).toBe("ok");
+    expect(asked.written.join("")).toContain(`recorded now in the chain of workspace ${here.workspace.id}`);
+    expect(passkeyEvents(here.workspace.id).map((event) => event.type)).toEqual(["person.passkey_enrolled"]);
+    // Without it the prompt says when it will be recorded, and nothing is.
+    const other = makePasskey();
+    const quiet = terminal("yes");
+    const before = eventCount();
+    desk(["passkey-enroll", "--file=-"], {
+      openTty: quiet.openTty,
+      readStdin: () => JSON.stringify({ credential_id: other.credentialId, public_key_spki: other.spki, algorithm: -7, rp_id: RP_ID, origin: ORIGIN }),
+    });
+    expect(quiet.written.join("")).toContain("only just before the key first acts there");
+    expect(eventCount()).toBe(before);
+  });
+
+  test("a key enrolled without a workspace is recorded once, just before its first act there", () => {
     const key = makePasskey();
     enrolDirect(key);
     const { proposal } = consentedProposal();
+    const there = otherWorkspace();
     const id = proposal.proposal.id;
     const workspace = proposal.proposal.workspace_id;
     expect(passkeyEvents(workspace)).toEqual([]);
@@ -449,17 +492,46 @@ describe("passkey enrolment on the hash chain", () => {
       .toBe("passkey_challenge_mismatch");
     expect(passkeyEvents(workspace)).toEqual([]);
 
-    const agree = store.personActChallenge({ proposal_report_id: id, act: "agree" });
-    store.recordPersonActWithPasskey({ proposal_report_id: id, act: "agree", assertion: assert(key, agree.challenge) });
-    const reject = store.personActChallenge({ proposal_report_id: id, act: "reject", reason: "Not now." });
-    store.recordPersonActWithPasskey({
-      proposal_report_id: id, act: "reject", reason: "Not now.", assertion: assert(key, reject.challenge),
-    });
+    act(key, id, "agree");
+    act(key, id, "reject", "Not now.");
     expect(store.eventsSince(workspace).events.slice(-3).map((event) => event.type))
       .toEqual(["person.passkey_enrolled", "proposal.agreed", "proposal.rejected"]);
     const [event] = passkeyEvents(workspace);
     expect(JSON.parse(event!.payload_json)).toMatchObject({ fingerprint: fingerprintOf(key), recorded: "before_first_act" });
+    // Revoking reaches the workspace it acted in, and only that one.
+    store.revokePersonPasskey(key.credentialId);
+    expect(passkeyEvents(workspace).map((item) => item.type)).toEqual(["person.passkey_enrolled", "person.passkey_revoked"]);
+    expect(passkeyEvents(there.workspace.id)).toEqual([]);
     expect(store.verifyJournal(workspace)).toBe(true);
+  });
+
+  test("an act in a second workspace records the enrolment there too, and a key revoked before any act leaves nothing", () => {
+    const { author: here, proposal } = consentedProposal();
+    const key = makePasskey();
+    const unused = makePasskey();
+    enrolDirect(key, { workspace_id: here.workspace.id });
+    enrolDirect(unused);
+    const before = eventCount();
+    store.revokePersonPasskey(unused.credentialId);
+    expect(eventCount()).toBe(before);
+    // Recorded here at enrolment, so the act adds no second one.
+    act(key, proposal.proposal.id, "agree");
+    expect(passkeyEvents(here.workspace.id).map((event) => JSON.parse(event.payload_json).recorded)).toEqual(["at_enrolment"]);
+    const there = otherWorkspace();
+    const peer = store.startSession({ root_path: join(directory, "other-repo"), actor: "elsewhere-peer" });
+    const opened = store.openProposalForSession({
+      ...there.credential, idempotency_key: "open-there", question: "Elsewhere?", criteria: "It holds.", extent: "Nothing here.",
+    });
+    store.appendReportForSession({
+      ...peer.credential, idempotency_key: "support-there", kind: "inference", body: "Yes.", relation: "supports",
+      target_report_id: opened.proposal.id,
+    });
+    act(key, opened.proposal.id, "agree");
+    expect(passkeyEvents(there.workspace.id).map((event) => JSON.parse(event.payload_json).recorded)).toEqual(["before_first_act"]);
+    store.revokePersonPasskey(key.credentialId);
+    for (const workspace of [here.workspace.id, there.workspace.id]) {
+      expect(passkeyEvents(workspace).map((event) => event.type)).toEqual(["person.passkey_enrolled", "person.passkey_revoked"]);
+    }
   });
 
   test("a key written straight into the table is journaled as before_first_act, by its own fingerprint", () => {
@@ -471,12 +543,74 @@ describe("passkey enrolment on the hash chain", () => {
       INSERT INTO person_passkeys (credential_id, public_key_spki, algorithm, rp_id, origin, label, fingerprint, sign_count, enrolled_at, revoked_at)
       VALUES (?, ?, -7, ?, ?, NULL, ?, 0, '2026-10-01T00:00:00.000Z', NULL)
     `).run(key.credentialId, key.spki, RP_ID, ORIGIN, "f".repeat(64));
-    const agree = store.personActChallenge({ proposal_report_id: id, act: "agree" });
-    store.recordPersonActWithPasskey({ proposal_report_id: id, act: "agree", assertion: assert(key, agree.challenge) });
-    const [event] = passkeyEvents(proposal.proposal.workspace_id);
-    expect(JSON.parse(event!.payload_json)).toMatchObject({
+    act(key, id, "agree");
+    const event = store.eventsSince(proposal.proposal.workspace_id).events.find((item) => item.type === "person.passkey_enrolled")!;
+    // enrolled_at is the row's claim; only the event's own occurred_at dates the journaling.
+    expect(event.payload).toMatchObject({
       fingerprint: fingerprintOf(key), enrolled_at: "2026-10-01T00:00:00.000Z", recorded: "before_first_act",
     });
+    expect(event.occurred_at).toBe("2026-10-29T00:00:00.000Z");
+  });
+
+  test("a key swapped in after the enrolment is accepted as before, and its own fingerprint is recorded before its act", () => {
+    const { proposal } = consentedProposal();
+    const id = proposal.proposal.id;
+    const workspace = proposal.proposal.workspace_id;
+    const enrolledKey = makePasskey();
+    enrolDirect(enrolledKey, { workspace_id: workspace });
+    act(enrolledKey, id, "agree");
+    expect(passkeyEvents(workspace)).toHaveLength(1);
+
+    // A same-user process writes another key over the row, keeping its credential id and stored fingerprint.
+    const swapped: TestPasskey = { ...makePasskey(), credentialId: enrolledKey.credentialId };
+    const swap = (key: TestPasskey) =>
+      store.db.query(`UPDATE person_passkeys SET public_key_spki = ? WHERE credential_id = ?`).run(key.spki, key.credentialId);
+    swap(swapped);
+    const rejected = act(swapped, id, "reject", "By another key.");
+    expect(rejected.person.acts.at(-1)).toMatchObject({ act: "reject", basis: "user_verified_passkey" });
+    expect(store.eventsSince(workspace).events.slice(-2).map((event) => event.type))
+      .toEqual(["person.passkey_enrolled", "proposal.rejected"]);
+    // Swapped back: recorded again, so the last enrolment before each act always names that act's key.
+    swap(enrolledKey);
+    act(enrolledKey, id, "agree");
+    expect(passkeyEvents(workspace).map((event) => {
+      const payload = JSON.parse(event.payload_json) as { fingerprint: string; recorded: string };
+      return [payload.fingerprint, payload.recorded];
+    })).toEqual([
+      [fingerprintOf(enrolledKey), "at_enrolment"],
+      [fingerprintOf(swapped), "before_first_act"],
+      [fingerprintOf(enrolledKey), "before_first_act"],
+    ]);
+    let lastEnrolled: unknown = null;
+    let acts = 0;
+    for (const event of store.eventsSince(workspace).events) {
+      if (event.type === "person.passkey_enrolled") lastEnrolled = event.payload.fingerprint;
+      if (event.type !== "proposal.agreed" && event.type !== "proposal.rejected") continue;
+      const { proof } = event.payload.person_act as { proof: { public_key_spki: string } };
+      expect(spkiFingerprint(proof.public_key_spki)).toBe(lastEnrolled as string);
+      acts += 1;
+    }
+    expect(acts).toBe(3);
+    expect(store.verifyJournal(workspace)).toBe(true);
+  });
+
+  test("a revocation names the key's own fingerprint, and the stored copy only when the key cannot be parsed", () => {
+    const here = session("here");
+    const forged = makePasskey();
+    const broken = makePasskey();
+    for (const key of [forged, broken]) enrolDirect(key, { workspace_id: here.workspace.id });
+    store.db.query(`UPDATE person_passkeys SET fingerprint = ? WHERE credential_id = ?`).run("0".repeat(64), forged.credentialId);
+    const tty = terminal("yes");
+    expect(desk(["passkey-revoke", "--credential", forged.credentialId], { openTty: tty.openTty }).receipt.status).toBe("ok");
+    // The terminal shows the fingerprint the event records.
+    expect(tty.written.join("")).toContain(`key fingerprint (sha256): ${fingerprintOf(forged)}`);
+    store.db.query(`UPDATE person_passkeys SET public_key_spki = 'AAAA' WHERE credential_id = ?`).run(broken.credentialId);
+    expect(store.revokePersonPasskey(broken.credentialId).revoked_at).not.toBeNull();
+    expect(passkeyEvents(here.workspace.id).filter((event) => event.type === "person.passkey_revoked")
+      .map((event) => [event.entity_id, JSON.parse(event.payload_json).fingerprint])).toEqual([
+      [forged.credentialId, fingerprintOf(forged)],
+      [broken.credentialId, fingerprintOf(broken)],
+    ]);
   });
 });
 
@@ -815,6 +949,29 @@ describe("ceremonies served by the desk", () => {
     const enrolled = await attempt("yes");
     expect(enrolled.posted).toMatchObject({ ok: true, origin });
     expect(store.listPersonPasskeys().map((passkey) => passkey.label)).toEqual(["Air Touch ID"]);
+  });
+
+  test("an enrolment ceremony takes --workspace, checked before the page is served", async () => {
+    const here = session("here");
+    const listen = port();
+    const argv = (workspace: string) =>
+      ["passkey-enroll", "--ceremony", `--db=${databasePath}`, `--port=${listen}`, `--workspace=${workspace}`];
+    const refused = await runCeremonyCli(argv("workspace_missing"), {}, { storeNow: () => clock, openTty: terminal("yes").openTty }, {
+      out: () => { throw new Error("a page was served"); },
+    });
+    expect(JSON.parse(refused.line)).toMatchObject({ status: "error", error: "workspace_not_found" });
+    const key = makePasskey();
+    const ceremony = await runCeremony(argv(here.workspace.id), { openTty: terminal("yes").openTty });
+    const clientData = Buffer.from(JSON.stringify({
+      type: "webauthn.create", challenge: ceremony.data.challenge, origin: `http://localhost:${listen}`, crossOrigin: false,
+    })).toString("base64url");
+    expect(await ceremony.post({
+      credential_id: key.credentialId, public_key_spki: key.spki, algorithm: -7, client_data_json: clientData,
+    })).toMatchObject({ ok: true });
+    await ceremony.done;
+    expect(store.eventsSince(here.workspace.id).events.at(-1)).toMatchObject({
+      type: "person.passkey_enrolled", entity_id: key.credentialId, payload: { recorded: "at_enrolment" },
+    });
   });
 
   test("--no-open leaves the browser alone, and applies only to ceremonies", async () => {

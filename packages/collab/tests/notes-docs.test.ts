@@ -275,6 +275,16 @@ describe("PROTOCOL.md", () => {
     expect(protocol).not.toMatch(/person\s+agreed\s+by\s+<basis>/);
   });
 
+  test("says what an enrolment event proves, and that the act's own proof holds the fingerprint to compare", () => {
+    for (const path of ["PROTOCOL.md", "README.md"]) {
+      const text = read(path).replace(/\s+/g, " ");
+      expect(text).toContain("the key in the act's own proof");
+      expect(text).toContain("row's claim");
+      expect(text).toContain("--workspace");
+      expect(text).not.toMatch(/(every workspace's (hash )?chain)/);
+    }
+  });
+
   test("no document says the terminal route authenticates the person", () => {
     for (const path of ["PROTOCOL.md", "README.md", "skills/coordinate-agent-work/REFERENCE.md", HERMES_SKILL]) {
       const text = read(path).replace(/\s+/g, " ");

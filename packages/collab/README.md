@@ -983,8 +983,8 @@ through MCP. Code: `src/{person-desk,ceremony,passkey,tty}.ts`. Tests:
 | `consent --proposal <id>` / `reject --proposal <id> --reason <text>` | show the exact act and proposal bytes on `/dev/tty` and record only on `yes` typed there (`basis: controlling_terminal`, which proves no terminal and no person: see below) |
 | `ceremony --proposal <id> --act agree\|reject [--reason <text>] [--via <ssh-destination>] [--no-open]` | serve a one-time signing page on the passkey's origin (`http://localhost:17778` by default); Touch ID signs the act bytes and the desk records them (`basis: user_verified_passkey`) |
 | `set-aside --proposal <id> --challenge <report id> --reason <text> [--passkey-assertion <path>\|-]`, or `ceremony ... --act set-aside --challenge <report id> --reason <text>` | consent/v2 only: show the objection in full and set aside a standing challenge whose voice has no live session; `proposals` lists which can be (`set_aside_options`) |
-| `passkey-enroll --ceremony [--label <text>] [--no-open]` | serve a one-time page that creates the passkey, then show its fingerprint on `/dev/tty` and enrol it only on `yes` |
-| `passkey-enroll --file <path>\|-`, `passkey-export --credential <id>`, `passkey-revoke --credential <id>` | enrol a passkey exported from another table, export one, or revoke one; enrol and revoke are confirmed on `/dev/tty` |
+| `passkey-enroll --ceremony [--label <text>] [--no-open] [--workspace <id>]` | serve a one-time page that creates the passkey, then show its fingerprint on `/dev/tty` and enrol it only on `yes`; `--workspace` records the enrolment in that workspace's chain now |
+| `passkey-enroll --file <path>\|- [--workspace <id>]`, `passkey-export --credential <id>`, `passkey-revoke --credential <id>` | enrol a passkey exported from another table, export one, or revoke one; enrol and revoke are confirmed on `/dev/tty` |
 | `challenge --proposal <id> --act agree` or `--act reject --reason <text>`, then `consent`/`reject` with `--passkey-assertion <path>\|-` | the same passkey act in two steps, for a page the desk does not serve |
 | `say --workspace <id> --body <text> [--proposal <id>] --idempotency-key <key>` | a desk note; about a proposal it is routed to the author session, or for a desk proposal to every consulted voice |
 | `propose --workspace <id> --question <text> --criteria <text> --extent <text> [--known-conflicts <text>] [--topic <text>] [--consult-seconds <n>] --idempotency-key <key>` | a desk proposal (`origin: person_relayed`, author voice `person`), settled by every agent voice |
@@ -1030,12 +1030,20 @@ RP ID hash, user presence and user verification, the signature counter, and
 the ES256 signature, then journals the assertion with the public key in the
 event, so the act can be re-verified without this database.
 
-Enrolling or revoking a passkey appends `person.passkey_enrolled` or
-`person.passkey_revoked` to every workspace's hash chain, with the key's SHA-256
-fingerprint and never private material; a workspace opened later gets the
-enrolment just before the key's first act there (`recorded: before_first_act`).
-Compare that fingerprint with the one your own device shows: the events say
-that a key was recorded and when, not who enrolled it.
+A passkey's enrolment is journaled as `person.passkey_enrolled`, with the key's
+SHA-256 fingerprint and never private material, in the hash chain of each
+workspace where it is used and in no other: when `passkey-enroll` names it with
+`--workspace` (`recorded: at_enrolment`), or just before the key first acts there
+(`recorded: before_first_act`). If another key has since been written over the
+row, its fingerprint is recorded before its act too; nothing is refused.
+`person.passkey_revoked` goes to each chain that holds an enrolment of the key,
+so a key enrolled without a workspace and revoked before it acted leaves no
+event. The fingerprint to compare with your own key's (shown when you enrolled
+it) is the one of the key in the act's own proof, the SHA-256 of the bytes
+`proof.public_key_spki` encodes. In a `before_first_act` event, `enrolled_at`,
+`rp_id`, `origin` and `label` are the table row's claim; only the event's
+`occurred_at` and its place in the chain date the journaling. None of it shows
+who enrolled the key.
 
 The ceremony pages come from the installed desk, not from an application that
 agents edit: the page that shows the bytes decides what Touch ID signs, and

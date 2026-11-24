@@ -276,7 +276,7 @@ var MIN_PROPOSAL_CONSULT_SECONDS = 10 * 60;
 var MAX_PROPOSAL_CONSULT_SECONDS = 7 * 24 * 60 * 60;
 var PERSON_ACT_PROTOCOL = "agenttool.collab-person-act/1";
 var PERSON_SET_ASIDE_PROTOCOL = "agenttool.collab-person-set-aside/1";
-var PERSON_ACT_BASIS_NOTE = "What a person act's basis proves: only user_verified_passkey carries a proof that can be re-verified without " + "this database (the assertion and the key's public key are journaled with the act), and it shows that a key " + "enrolled in this journal signed these bytes, not whose key it is: compare its fingerprint with the person's own. " + "controlling_terminal says the terminal path asserted a yes: it proves no terminal and no person, since a process " + "running as the same user can record one through the store or answer through a pseudo-terminal. " + "relayed_by_session is a session's account, and can only stop work.";
+var PERSON_ACT_BASIS_NOTE = "What a person act's basis proves: only user_verified_passkey carries a proof that can be re-verified without " + "this database (the assertion and the key's public key are journaled with the act), and it shows that a key " + "enrolled in this journal signed these bytes, not whose key it is: compare the fingerprint of the key in the act's own " + "proof (the SHA-256 of proof.public_key_spki's bytes) with the person's own. " + "controlling_terminal says the terminal path asserted a yes: it proves no terminal and no person, since a process " + "running as the same user can record one through the store or answer through a pseudo-terminal. " + "relayed_by_session is a session's account, and can only stop work.";
 function personActBasisNote(statuses) {
   return statuses.some((status) => status.person.acts.length > 0 || (status.set_asides?.length ?? 0) > 0) ? { basis_note: PERSON_ACT_BASIS_NOTE } : {};
 }
@@ -1724,6 +1724,14 @@ function parsePasskeyPublicKey(spki) {
 }
 function passkeyFingerprint(spki) {
   return sha2562(base64urlDecode(spki, "public_key_spki", 1024)).toString("hex");
+}
+function storedPasskeyFingerprint(passkey) {
+  try {
+    parsePasskeyPublicKey(passkey.public_key_spki);
+    return passkeyFingerprint(passkey.public_key_spki);
+  } catch {
+    return passkey.fingerprint;
+  }
 }
 function validatePasskeyScope(rpId, origin) {
   if (typeof rpId !== "string" || !/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(rpId)) {
@@ -5414,6 +5422,8 @@ class CollabStoreCore {
   enrollPersonPasskey(input) {
     const enrollment = normalizePasskeyEnrollment(input);
     const transaction = this.db.transaction(() => {
+      if (input.workspace_id !== undefined)
+        this.requireWorkspace(input.workspace_id);
       if (this.db.query(`SELECT 1 FROM person_passkeys WHERE credential_id = ?`).get(enrollment.credential_id)) {
         throw new CollabError("passkey_already_enrolled", "This credential id is already enrolled");
       }
@@ -5423,9 +5433,9 @@ class CollabStoreCore {
           fingerprint, sign_count, enrolled_at, revoked_at
         ) VALUES (?, ?, -7, ?, ?, ?, ?, 0, ?, NULL)
       `).run(enrollment.credential_id, enrollment.public_key_spki, enrollment.rp_id, enrollment.origin, enrollment.label, passkeyFingerprint(enrollment.public_key_spki), this.timestamp());
-      const passkey = this.requirePersonPasskey(enrollment.credential_id);
-      for (const workspace of this.listWorkspaces())
-        this.journalPasskeyEnrolment(workspace.id, passkey, "at_enrolment");
+      if (input.workspace_id !== undefined) {
+        this.journalPasskeyEnrolment(input.workspace_id, this.requirePersonPasskey(enrollment.credential_id), "at_enrolment");
+      }
     });
     transaction.immediate();
     this.tightenFileModes();
@@ -5443,9 +5453,12 @@ class CollabStoreCore {
         throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
       }
       const passkey = this.requirePersonPasskey(credentialId);
-      for (const workspace of this.listWorkspaces()) {
-        this.appendEvent(workspace.id, "person.passkey_revoked", passkey.credential_id, PERSON_DESK_ACTOR, {
-          fingerprint: passkey.fingerprint,
+      const recordedIn = this.db.query(`
+        SELECT DISTINCT workspace_id FROM events WHERE type = 'person.passkey_enrolled' AND entity_id = ? ORDER BY workspace_id
+      `).all(passkey.credential_id);
+      for (const { workspace_id } of recordedIn) {
+        this.appendEvent(workspace_id, "person.passkey_revoked", passkey.credential_id, PERSON_DESK_ACTOR, {
+          fingerprint: storedPasskeyFingerprint(passkey),
           revoked_at: passkey.revoked_at
         });
       }
@@ -5465,17 +5478,20 @@ class CollabStoreCore {
       fingerprint: passkeyFingerprint(passkey.public_key_spki),
       rp_id: passkey.rp_id,
       origin: passkey.origin,
-      ...passkey.label !== null ? { label: passkey.label } : {},
+      ...typeof passkey.label === "string" ? { label: passkey.label } : {},
       enrolled_at: passkey.enrolled_at,
       recorded
     });
   }
   journalPasskeyBeforeFirstAct(workspaceId, passkey) {
-    const journaled = this.db.query(`
-      SELECT 1 FROM events WHERE workspace_id = ? AND type = 'person.passkey_enrolled' AND entity_id = ? LIMIT 1
+    const last = this.db.query(`
+      SELECT json_extract(payload_json, '$.fingerprint') AS fingerprint FROM events
+      WHERE workspace_id = ? AND type = 'person.passkey_enrolled' AND entity_id = ?
+      ORDER BY sequence DESC LIMIT 1
     `).get(workspaceId, passkey.credential_id);
-    if (!journaled)
+    if (last?.fingerprint !== passkeyFingerprint(passkey.public_key_spki)) {
       this.journalPasskeyEnrolment(workspaceId, passkey, "before_first_act");
+    }
   }
   appendPersonNote(input) {
     const normalized = {
@@ -11613,7 +11629,7 @@ function confirmOnTty(request, options = {}) {
 var PERSON_DESK_PROTOCOL = "agenttool.collab-host/1";
 var EXIT_NOT_CONFIRMED = 3;
 var MAX_JSON_INPUT_BYTES = 64 * 1024;
-var PERSON_DESK_USAGE = "usage: agenttool-collab-host person <verb> [--db <path>], where <verb> is one of: " + "workspaces | voices --workspace <id> | proposals --workspace <id> [--proposal <id> | --limit <n>]" + " | inbox [--workspace <id>]" + " | challenge --proposal <id> --act agree | challenge --proposal <id> --act reject --reason <text>" + " | challenge --proposal <id> --act set-aside --challenge <report id> --reason <text>" + " | consent --proposal <id> [--passkey-assertion <path>|-]" + " | reject --proposal <id> --reason <text> [--passkey-assertion <path>|-]" + " | set-aside --proposal <id> --challenge <report id> --reason <text> [--passkey-assertion <path>|-]" + " | ceremony --proposal <id> --act agree|reject|set-aside [--challenge <report id>] [--reason <text>] [--via <ssh-destination>] [--port <n>] [--no-open]" + " | say --workspace <id> --body <text> [--proposal <id>] --idempotency-key <key>" + " | propose --workspace <id> --question <text> --criteria <text> --extent <text>" + " [--known-conflicts <text>] [--topic <text>] [--consult-seconds <n>] --idempotency-key <key>" + " | withdraw --workspace <id> --proposal <id> --reason <text> --idempotency-key <key>" + " | passkey-enroll (--file <path>|- | --ceremony [--label <text>] [--port <n>] [--no-open])" + " | passkeys | passkey-export --credential <id> | passkey-revoke --credential <id>";
+var PERSON_DESK_USAGE = "usage: agenttool-collab-host person <verb> [--db <path>], where <verb> is one of: " + "workspaces | voices --workspace <id> | proposals --workspace <id> [--proposal <id> | --limit <n>]" + " | inbox [--workspace <id>]" + " | challenge --proposal <id> --act agree | challenge --proposal <id> --act reject --reason <text>" + " | challenge --proposal <id> --act set-aside --challenge <report id> --reason <text>" + " | consent --proposal <id> [--passkey-assertion <path>|-]" + " | reject --proposal <id> --reason <text> [--passkey-assertion <path>|-]" + " | set-aside --proposal <id> --challenge <report id> --reason <text> [--passkey-assertion <path>|-]" + " | ceremony --proposal <id> --act agree|reject|set-aside [--challenge <report id>] [--reason <text>] [--via <ssh-destination>] [--port <n>] [--no-open]" + " | say --workspace <id> --body <text> [--proposal <id>] --idempotency-key <key>" + " | propose --workspace <id> --question <text> --criteria <text> --extent <text>" + " [--known-conflicts <text>] [--topic <text>] [--consult-seconds <n>] --idempotency-key <key>" + " | withdraw --workspace <id> --proposal <id> --reason <text> --idempotency-key <key>" + " | passkey-enroll (--file <path>|- | --ceremony [--label <text>] [--port <n>] [--no-open]) [--workspace <id>]" + " | passkeys | passkey-export --credential <id> | passkey-revoke --credential <id>";
 var VERB_OPTIONS = {
   workspaces: { required: [], optional: [] },
   voices: { required: ["workspace"], optional: [] },
@@ -11630,7 +11646,7 @@ var VERB_OPTIONS = {
     optional: ["known-conflicts", "topic", "consult-seconds"]
   },
   withdraw: { required: ["workspace", "proposal", "reason", "idempotency-key"], optional: [] },
-  "passkey-enroll": { required: [], optional: ["file", "ceremony", "label", "port", "no-open"] },
+  "passkey-enroll": { required: [], optional: ["file", "ceremony", "label", "port", "no-open", "workspace"] },
   passkeys: { required: [], optional: [] },
   "passkey-export": { required: ["credential"], optional: [] },
   "passkey-revoke": { required: ["credential"], optional: [] }
@@ -11885,6 +11901,7 @@ ${status.proposal_bytes}`;
       if (values.file === undefined) {
         throw new CollabError("usage_error", `passkey-enroll needs --file or --ceremony; ${PERSON_DESK_USAGE}`);
       }
+      const workspaceId = enrolmentWorkspace(store2, values);
       const read = readJsonInput(values.file, deps);
       const exported = read.protocol === PERSON_DESK_PROTOCOL && read.command === "person passkey-export" && typeof read.enrollment === "object" && read.enrollment !== null && !Array.isArray(read.enrollment);
       const input = exported ? read.enrollment : read;
@@ -11896,7 +11913,9 @@ ${status.proposal_bytes}`;
         origin: input.origin,
         label: values.label ?? input.label
       });
-      return confirmEnrollment(store2, enrollment, deps) ? done({ passkey: store2.enrollPersonPasskey(enrollment) }) : { cancelled: true };
+      if (!confirmEnrollment(store2, enrollment, workspaceId, deps))
+        return { cancelled: true };
+      return done({ passkey: store2.enrollPersonPasskey({ ...enrollment, workspace_id: workspaceId }) });
     }
     case "passkeys":
       return done({ passkeys: store2.listPersonPasskeys() });
@@ -11916,10 +11935,11 @@ ${status.proposal_bytes}`;
     }
     case "passkey-revoke": {
       const passkey = activePasskey(store2, values.credential);
-      const bytes = canonicalJson({ revoke: passkey.credential_id, fingerprint: passkey.fingerprint });
+      const fingerprint = storedPasskeyFingerprint(passkey);
+      const bytes = canonicalJson({ revoke: passkey.credential_id, fingerprint });
       const confirmed = confirmOnTty({
         act: "revoke a passkey",
-        summary: [`key fingerprint (sha256): ${passkey.fingerprint}`, `origin ${passkey.origin}`],
+        summary: [`key fingerprint (sha256): ${fingerprint}`, `origin ${passkey.origin}`],
         bytes,
         sha256: createHash6("sha256").update(bytes).digest("hex")
       }, { openTty: deps.openTty, now: deps.now });
@@ -11931,7 +11951,13 @@ ${status.proposal_bytes}`;
       throw new CollabError("usage_error", "person ceremony serves a page; run it through agenttool-collab-host");
   }
 }
-function confirmEnrollment(store2, enrollment, deps) {
+function enrolmentWorkspace(store2, values) {
+  if (values.workspace !== undefined && !store2.listWorkspaces().some((workspace) => workspace.id === values.workspace)) {
+    throw new CollabError("workspace_not_found", "No workspace in this journal has this id; person workspaces lists them");
+  }
+  return values.workspace;
+}
+function confirmEnrollment(store2, enrollment, workspaceId, deps) {
   if (store2.listPersonPasskeys().some((key) => key.credential_id === enrollment.credential_id)) {
     throw new CollabError("passkey_already_enrolled", "This credential id is already enrolled");
   }
@@ -11942,6 +11968,7 @@ function confirmEnrollment(store2, enrollment, deps) {
       `key fingerprint (sha256): ${passkeyFingerprint(enrollment.public_key_spki)}`,
       `relying party ${enrollment.rp_id}, signing origin ${enrollment.origin}`,
       `label ${JSON.stringify(enrollment.label)}`,
+      workspaceId !== undefined ? `recorded now in the chain of workspace ${workspaceId}; in any other, just before the key first acts there` : "recorded in a workspace's chain only just before the key first acts there (--workspace records it now)",
       "Enrol only a passkey you just created yourself; it will sign agreements in your name."
     ],
     bytes,
@@ -12240,6 +12267,7 @@ async function enrollCeremony(values, env, deps, io, command) {
   const origin = `http://localhost:${port}`;
   const store2 = openDeskStore(values, env, deps);
   try {
+    const workspaceId = enrolmentWorkspace(store2, values);
     const challenge = randomBytes2(32).toString("base64url");
     const data = {
       kind: "enroll",
@@ -12260,10 +12288,10 @@ async function enrollCeremony(values, env, deps, io, command) {
         origin,
         label: values.label ?? "Touch ID"
       });
-      if (!confirmEnrollment(store2, enrollment, deps)) {
+      if (!confirmEnrollment(store2, enrollment, workspaceId, deps)) {
         throw new CollabError("not_confirmed", "Not confirmed at the terminal; nothing was enrolled");
       }
-      const passkey = store2.enrollPersonPasskey(enrollment);
+      const passkey = store2.enrollPersonPasskey({ ...enrollment, workspace_id: workspaceId });
       return { enrolled: true, fingerprint: passkey.fingerprint, origin: passkey.origin };
     });
     return { status: "ok", ...result };

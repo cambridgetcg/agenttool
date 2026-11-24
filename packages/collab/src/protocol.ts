@@ -444,7 +444,8 @@ export type PersonActBasis = "relayed_by_session" | "controlling_terminal" | "us
 export const PERSON_ACT_BASIS_NOTE =
   "What a person act's basis proves: only user_verified_passkey carries a proof that can be re-verified without "
   + "this database (the assertion and the key's public key are journaled with the act), and it shows that a key "
-  + "enrolled in this journal signed these bytes, not whose key it is: compare its fingerprint with the person's own. "
+  + "enrolled in this journal signed these bytes, not whose key it is: compare the fingerprint of the key in the act's own "
+  + "proof (the SHA-256 of proof.public_key_spki's bytes) with the person's own. "
   + "controlling_terminal says the terminal path asserted a yes: it proves no terminal and no person, since a process "
   + "running as the same user can record one through the store or answer through a pseudo-terminal. "
   + "relayed_by_session is a session's account, and can only stop work.";
@@ -665,8 +666,8 @@ export type CollabEventType =
   | "ballot.cast"
   | "ballot.revealed"
   | "ballot.closed"
-  // The person desk enrolled or revoked a passkey: its public facts, in every
-  // workspace's chain. Addressed to no one, and older builds page over them.
+  // The person desk enrolled or revoked a passkey: its public facts, in the
+  // chains it concerns. Addressed to no one, and older builds page over them.
   | "person.passkey_enrolled"
   | "person.passkey_revoked";
 

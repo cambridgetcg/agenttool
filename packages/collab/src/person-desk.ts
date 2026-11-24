@@ -43,7 +43,7 @@ import {
   type DeskSoftSpotsEntry,
 } from "./desk-soft-spots.js";
 import { CollabError } from "./errors.js";
-import { normalizePasskeyEnrollment, passkeyFingerprint } from "./passkey.js";
+import { normalizePasskeyEnrollment, passkeyFingerprint, storedPasskeyFingerprint } from "./passkey.js";
 import { CONSENT_RULE, CONSENT_RULE_V2, personActBasisNote, type CollabReport, type ConsentRule, type ProposalStatus } from "./protocol.js";
 import { CollabStore } from "./store-notes.js";
 import { confirmOnTty, type OpenTty } from "./tty.js";
@@ -66,7 +66,7 @@ export const PERSON_DESK_USAGE =
   + " | propose --workspace <id> --question <text> --criteria <text> --extent <text>"
   + " [--known-conflicts <text>] [--topic <text>] [--consult-seconds <n>] --idempotency-key <key>"
   + " | withdraw --workspace <id> --proposal <id> --reason <text> --idempotency-key <key>"
-  + " | passkey-enroll (--file <path>|- | --ceremony [--label <text>] [--port <n>] [--no-open])"
+  + " | passkey-enroll (--file <path>|- | --ceremony [--label <text>] [--port <n>] [--no-open]) [--workspace <id>]"
   + " | passkeys | passkey-export --credential <id> | passkey-revoke --credential <id>";
 
 export interface PersonDeskDeps {
@@ -101,7 +101,7 @@ export const VERB_OPTIONS: Record<Verb, { required: string[]; optional: string[]
     optional: ["known-conflicts", "topic", "consult-seconds"],
   },
   withdraw: { required: ["workspace", "proposal", "reason", "idempotency-key"], optional: [] },
-  "passkey-enroll": { required: [], optional: ["file", "ceremony", "label", "port", "no-open"] },
+  "passkey-enroll": { required: [], optional: ["file", "ceremony", "label", "port", "no-open", "workspace"] },
   passkeys: { required: [], optional: [] },
   "passkey-export": { required: ["credential"], optional: [] },
   "passkey-revoke": { required: ["credential"], optional: [] },
@@ -365,6 +365,7 @@ function runVerb(
       if (values.file === undefined) {
         throw new CollabError("usage_error", `passkey-enroll needs --file or --ceremony; ${PERSON_DESK_USAGE}`);
       }
+      const workspaceId = enrolmentWorkspace(store, values);
       const read = readJsonInput(values.file, deps);
       // Take `passkey-export`'s receipt as it is, so export can pipe into enrol.
       const exported = read.protocol === PERSON_DESK_PROTOCOL && read.command === "person passkey-export"
@@ -378,7 +379,8 @@ function runVerb(
         origin: input.origin,
         label: values.label ?? input.label,
       });
-      return confirmEnrollment(store, enrollment, deps) ? done({ passkey: store.enrollPersonPasskey(enrollment) }) : { cancelled: true };
+      if (!confirmEnrollment(store, enrollment, workspaceId, deps)) return { cancelled: true };
+      return done({ passkey: store.enrollPersonPasskey({ ...enrollment, workspace_id: workspaceId }) });
     }
     case "passkeys":
       return done({ passkeys: store.listPersonPasskeys() });
@@ -398,10 +400,12 @@ function runVerb(
     }
     case "passkey-revoke": {
       const passkey = activePasskey(store, values.credential!);
-      const bytes = canonicalJson({ revoke: passkey.credential_id, fingerprint: passkey.fingerprint });
+      // The fingerprint the revocation records: the key's own, not the row's copy.
+      const fingerprint = storedPasskeyFingerprint(passkey);
+      const bytes = canonicalJson({ revoke: passkey.credential_id, fingerprint });
       const confirmed = confirmOnTty({
         act: "revoke a passkey",
-        summary: [`key fingerprint (sha256): ${passkey.fingerprint}`, `origin ${passkey.origin}`],
+        summary: [`key fingerprint (sha256): ${fingerprint}`, `origin ${passkey.origin}`],
         bytes,
         sha256: createHash("sha256").update(bytes).digest("hex"),
       }, { openTty: deps.openTty, now: deps.now });
@@ -413,10 +417,19 @@ function runVerb(
   }
 }
 
+/** The workspace `passkey-enroll --workspace` names, checked before anything is shown or served. */
+export function enrolmentWorkspace(store: CollabStore, values: Values): string | undefined {
+  if (values.workspace !== undefined && !store.listWorkspaces().some((workspace) => workspace.id === values.workspace)) {
+    throw new CollabError("workspace_not_found", "No workspace in this journal has this id; person workspaces lists them");
+  }
+  return values.workspace;
+}
+
 /** Show a normalised enrolment at the terminal; true only for "yes". */
 export function confirmEnrollment(
   store: CollabStore,
   enrollment: ReturnType<typeof normalizePasskeyEnrollment>,
+  workspaceId: string | undefined,
   deps: PersonDeskDeps,
 ): boolean {
   if (store.listPersonPasskeys().some((key) => key.credential_id === enrollment.credential_id)) {
@@ -429,6 +442,9 @@ export function confirmEnrollment(
       `key fingerprint (sha256): ${passkeyFingerprint(enrollment.public_key_spki)}`,
       `relying party ${enrollment.rp_id}, signing origin ${enrollment.origin}`,
       `label ${JSON.stringify(enrollment.label)}`,
+      workspaceId !== undefined
+        ? `recorded now in the chain of workspace ${workspaceId}; in any other, just before the key first acts there`
+        : "recorded in a workspace's chain only just before the key first acts there (--workspace records it now)",
       "Enrol only a passkey you just created yourself; it will sign agreements in your name.",
     ],
     bytes,

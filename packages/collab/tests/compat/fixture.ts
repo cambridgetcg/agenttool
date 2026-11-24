@@ -34,7 +34,7 @@ export const REST_EVENT_TYPES = ["session.rested", "session.returned"] as const;
 
 /**
  * The event types passkey enrolment adds: a key enrolled and a key revoked, in
- * every workspace's chain. No build before this one knows them, and they
+ * the chains they concern. No build before this one knows them, and they
  * address no one.
  */
 export const PASSKEY_EVENT_TYPES = ["person.passkey_enrolled", "person.passkey_revoked"] as const;
@@ -1068,7 +1068,7 @@ export const FIXTURE_STEPS: FixtureStep[] = [
     produces: [...PASSKEY_EVENT_TYPES],
     run(context) {
       const [kept, revoked] = FIXTURE_PASSKEYS;
-      const scope = { algorithm: -7, rp_id: "localhost", origin: "http://localhost:17778" };
+      const scope = { algorithm: -7, rp_id: "localhost", origin: "http://localhost:17778", workspace_id: context.manifest.workspace_id! };
       context.store.enrollPersonPasskey({ ...kept, ...scope, label: "Touch ID 協作" });
       context.store.enrollPersonPasskey({ ...revoked, ...scope });
       context.clock.advance();

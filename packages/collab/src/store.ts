@@ -94,6 +94,7 @@ import {
   normalizePasskeyAssertion,
   normalizePasskeyEnrollment,
   passkeyFingerprint,
+  storedPasskeyFingerprint,
   personActChallenge,
   verifyPasskeyAssertion,
 } from "./passkey.js";
@@ -4427,10 +4428,10 @@ export class CollabStoreCore {
 
   /**
    * Enrol a passkey after the host CLI confirmed it at the controlling
-   * terminal. The store does not check that terminal itself, so the
-   * enrolment is journaled: person.passkey_enrolled, with the key's public
-   * facts, is appended to every workspace's chain, and a workspace opened
-   * later gets it before the key's first act there.
+   * terminal. The store does not check that terminal itself, so a key's
+   * enrolment is journaled as person.passkey_enrolled, with its public facts,
+   * in each workspace it concerns and in no other: here when the enrolment
+   * names one, and otherwise just before the key first acts there.
    */
   enrollPersonPasskey(input: {
     credential_id: string;
@@ -4439,9 +4440,12 @@ export class CollabStoreCore {
     rp_id: string;
     origin: string;
     label?: string | null;
+    /** The workspace whose chain records this enrolment now; none waits for the key's first act. */
+    workspace_id?: string;
   }): PersonPasskey {
     const enrollment = normalizePasskeyEnrollment(input);
     const transaction = this.db.transaction(() => {
+      if (input.workspace_id !== undefined) this.requireWorkspace(input.workspace_id);
       if (this.db.query(`SELECT 1 FROM person_passkeys WHERE credential_id = ?`).get(enrollment.credential_id)) {
         throw new CollabError("passkey_already_enrolled", "This credential id is already enrolled");
       }
@@ -4459,8 +4463,9 @@ export class CollabStoreCore {
         passkeyFingerprint(enrollment.public_key_spki),
         this.timestamp(),
       );
-      const passkey = this.requirePersonPasskey(enrollment.credential_id);
-      for (const workspace of this.listWorkspaces()) this.journalPasskeyEnrolment(workspace.id, passkey, "at_enrolment");
+      if (input.workspace_id !== undefined) {
+        this.journalPasskeyEnrolment(input.workspace_id, this.requirePersonPasskey(enrollment.credential_id), "at_enrolment");
+      }
     });
     transaction.immediate();
     this.tightenFileModes();
@@ -4472,6 +4477,11 @@ export class CollabStoreCore {
       .all() as PersonPasskeyRow[]).map((row) => ({ ...row, algorithm: -7 as const }));
   }
 
+  /**
+   * Revoke a passkey. person.passkey_revoked goes to each chain that holds an
+   * enrolment of this credential, and to no other, so a key revoked before it
+   * was enrolled in, or acted in, a workspace leaves nothing there.
+   */
   revokePersonPasskey(credentialId: string): PersonPasskey {
     const transaction = this.db.transaction(() => {
       const changed = this.db.query(`
@@ -4481,9 +4491,13 @@ export class CollabStoreCore {
         throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
       }
       const passkey = this.requirePersonPasskey(credentialId);
-      for (const workspace of this.listWorkspaces()) {
-        this.appendEvent(workspace.id, "person.passkey_revoked", passkey.credential_id, PERSON_DESK_ACTOR, {
-          fingerprint: passkey.fingerprint,
+      const recordedIn = this.db.query(`
+        SELECT DISTINCT workspace_id FROM events WHERE type = 'person.passkey_enrolled' AND entity_id = ? ORDER BY workspace_id
+      `).all(passkey.credential_id) as Array<{ workspace_id: string }>;
+      for (const { workspace_id } of recordedIn) {
+        this.appendEvent(workspace_id, "person.passkey_revoked", passkey.credential_id, PERSON_DESK_ACTOR, {
+          // Falls back to the row's copy for a key that cannot be parsed: revoking never refuses.
+          fingerprint: storedPasskeyFingerprint(passkey),
           revoked_at: passkey.revoked_at,
         });
       }
@@ -4504,8 +4518,10 @@ export class CollabStoreCore {
    * only (its SPKI's SHA-256 fingerprint, relying party, origin, label and
    * enrolment time), never private material and never the key itself, which
    * a passkey act's proof carries. `recorded` says when it was journaled:
-   * at enrolment, or before the key's first act in a workspace opened later
-   * (or a key the table holds that no enrolment journaled).
+   * at_enrolment, when the enrolment named this workspace, or
+   * before_first_act, just before an act by a key whose fingerprint this chain
+   * had not recorded last. Only the fingerprint is computed here: everything
+   * else is the row's claim, which before_first_act did not see enrolled.
    */
   private journalPasskeyEnrolment(
     workspaceId: string,
@@ -4517,18 +4533,28 @@ export class CollabStoreCore {
       fingerprint: passkeyFingerprint(passkey.public_key_spki),
       rp_id: passkey.rp_id,
       origin: passkey.origin,
-      ...(passkey.label !== null ? { label: passkey.label } : {}),
+      ...(typeof passkey.label === "string" ? { label: passkey.label } : {}),
       enrolled_at: passkey.enrolled_at,
       recorded,
     });
   }
 
-  /** So every passkey act in a workspace's chain follows that key's enrolment there. */
+  /**
+   * So that before every passkey act in a workspace's chain, the last
+   * enrolment of its credential there names the fingerprint of the key in the
+   * act's own proof. The row can change under a credential id (a key written
+   * over it, say), so the key's fingerprint is compared, not only the id; a
+   * mismatch is recorded and never refused, since the record is what shows it.
+   */
   private journalPasskeyBeforeFirstAct(workspaceId: string, passkey: PersonPasskey): void {
-    const journaled = this.db.query(`
-      SELECT 1 FROM events WHERE workspace_id = ? AND type = 'person.passkey_enrolled' AND entity_id = ? LIMIT 1
-    `).get(workspaceId, passkey.credential_id);
-    if (!journaled) this.journalPasskeyEnrolment(workspaceId, passkey, "before_first_act");
+    const last = this.db.query(`
+      SELECT json_extract(payload_json, '$.fingerprint') AS fingerprint FROM events
+      WHERE workspace_id = ? AND type = 'person.passkey_enrolled' AND entity_id = ?
+      ORDER BY sequence DESC LIMIT 1
+    `).get(workspaceId, passkey.credential_id) as { fingerprint: unknown } | null;
+    if (last?.fingerprint !== passkeyFingerprint(passkey.public_key_spki)) {
+      this.journalPasskeyEnrolment(workspaceId, passkey, "before_first_act");
+    }
   }
 
   /**

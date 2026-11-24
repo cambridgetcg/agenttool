@@ -28873,7 +28873,7 @@ var MIN_PROPOSAL_CONSULT_SECONDS = 10 * 60;
 var MAX_PROPOSAL_CONSULT_SECONDS = 7 * 24 * 60 * 60;
 var PERSON_ACT_PROTOCOL = "agenttool.collab-person-act/1";
 var PERSON_SET_ASIDE_PROTOCOL = "agenttool.collab-person-set-aside/1";
-var PERSON_ACT_BASIS_NOTE = "What a person act's basis proves: only user_verified_passkey carries a proof that can be re-verified without " + "this database (the assertion and the key's public key are journaled with the act), and it shows that a key " + "enrolled in this journal signed these bytes, not whose key it is: compare its fingerprint with the person's own. " + "controlling_terminal says the terminal path asserted a yes: it proves no terminal and no person, since a process " + "running as the same user can record one through the store or answer through a pseudo-terminal. " + "relayed_by_session is a session's account, and can only stop work.";
+var PERSON_ACT_BASIS_NOTE = "What a person act's basis proves: only user_verified_passkey carries a proof that can be re-verified without " + "this database (the assertion and the key's public key are journaled with the act), and it shows that a key " + "enrolled in this journal signed these bytes, not whose key it is: compare the fingerprint of the key in the act's own " + "proof (the SHA-256 of proof.public_key_spki's bytes) with the person's own. " + "controlling_terminal says the terminal path asserted a yes: it proves no terminal and no person, since a process " + "running as the same user can record one through the store or answer through a pseudo-terminal. " + "relayed_by_session is a session's account, and can only stop work.";
 function personActBasisNote(statuses) {
   return statuses.some((status) => status.person.acts.length > 0 || (status.set_asides?.length ?? 0) > 0) ? { basis_note: PERSON_ACT_BASIS_NOTE } : {};
 }
@@ -32187,6 +32187,14 @@ function parsePasskeyPublicKey(spki) {
 function passkeyFingerprint(spki) {
   return sha2563(base64urlDecode(spki, "public_key_spki", 1024)).toString("hex");
 }
+function storedPasskeyFingerprint(passkey) {
+  try {
+    parsePasskeyPublicKey(passkey.public_key_spki);
+    return passkeyFingerprint(passkey.public_key_spki);
+  } catch {
+    return passkey.fingerprint;
+  }
+}
 function validatePasskeyScope(rpId, origin) {
   if (typeof rpId !== "string" || !/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(rpId)) {
     throw new CollabError("passkey_scope_invalid", "rp_id must be a lowercase host name");
@@ -35282,6 +35290,8 @@ class CollabStoreCore {
   enrollPersonPasskey(input) {
     const enrollment = normalizePasskeyEnrollment(input);
     const transaction = this.db.transaction(() => {
+      if (input.workspace_id !== undefined)
+        this.requireWorkspace(input.workspace_id);
       if (this.db.query(`SELECT 1 FROM person_passkeys WHERE credential_id = ?`).get(enrollment.credential_id)) {
         throw new CollabError("passkey_already_enrolled", "This credential id is already enrolled");
       }
@@ -35291,9 +35301,9 @@ class CollabStoreCore {
           fingerprint, sign_count, enrolled_at, revoked_at
         ) VALUES (?, ?, -7, ?, ?, ?, ?, 0, ?, NULL)
       `).run(enrollment.credential_id, enrollment.public_key_spki, enrollment.rp_id, enrollment.origin, enrollment.label, passkeyFingerprint(enrollment.public_key_spki), this.timestamp());
-      const passkey = this.requirePersonPasskey(enrollment.credential_id);
-      for (const workspace of this.listWorkspaces())
-        this.journalPasskeyEnrolment(workspace.id, passkey, "at_enrolment");
+      if (input.workspace_id !== undefined) {
+        this.journalPasskeyEnrolment(input.workspace_id, this.requirePersonPasskey(enrollment.credential_id), "at_enrolment");
+      }
     });
     transaction.immediate();
     this.tightenFileModes();
@@ -35311,9 +35321,12 @@ class CollabStoreCore {
         throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
       }
       const passkey = this.requirePersonPasskey(credentialId);
-      for (const workspace of this.listWorkspaces()) {
-        this.appendEvent(workspace.id, "person.passkey_revoked", passkey.credential_id, PERSON_DESK_ACTOR, {
-          fingerprint: passkey.fingerprint,
+      const recordedIn = this.db.query(`
+        SELECT DISTINCT workspace_id FROM events WHERE type = 'person.passkey_enrolled' AND entity_id = ? ORDER BY workspace_id
+      `).all(passkey.credential_id);
+      for (const { workspace_id } of recordedIn) {
+        this.appendEvent(workspace_id, "person.passkey_revoked", passkey.credential_id, PERSON_DESK_ACTOR, {
+          fingerprint: storedPasskeyFingerprint(passkey),
           revoked_at: passkey.revoked_at
         });
       }
@@ -35333,17 +35346,20 @@ class CollabStoreCore {
       fingerprint: passkeyFingerprint(passkey.public_key_spki),
       rp_id: passkey.rp_id,
       origin: passkey.origin,
-      ...passkey.label !== null ? { label: passkey.label } : {},
+      ...typeof passkey.label === "string" ? { label: passkey.label } : {},
       enrolled_at: passkey.enrolled_at,
       recorded
     });
   }
   journalPasskeyBeforeFirstAct(workspaceId, passkey) {
-    const journaled = this.db.query(`
-      SELECT 1 FROM events WHERE workspace_id = ? AND type = 'person.passkey_enrolled' AND entity_id = ? LIMIT 1
+    const last = this.db.query(`
+      SELECT json_extract(payload_json, '$.fingerprint') AS fingerprint FROM events
+      WHERE workspace_id = ? AND type = 'person.passkey_enrolled' AND entity_id = ?
+      ORDER BY sequence DESC LIMIT 1
     `).get(workspaceId, passkey.credential_id);
-    if (!journaled)
+    if (last?.fingerprint !== passkeyFingerprint(passkey.public_key_spki)) {
       this.journalPasskeyEnrolment(workspaceId, passkey, "before_first_act");
+    }
   }
   appendPersonNote(input) {
     const normalized = {

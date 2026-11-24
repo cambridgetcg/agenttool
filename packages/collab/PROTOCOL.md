@@ -1226,15 +1226,16 @@ voice.
 | propose | This voice put these exact bytes to the agents and the person. |
 | decide | The server derived the authority: on an agreed proposal, the agreed extent and the person's act, with what that act's basis proves; otherwise nothing, or this session's own word, and it says which. |
 | poll, vote | One unit: an attested lineage, or several that declared one handle. Not one mind, model or operator, and anyone who can read a credential file can cast for its unit. |
-| agree, reject | Meant only for the person, and no MCP tool records an agreement; the two routes prove different things. `user_verified_passkey`: a key enrolled in this journal signed these exact act bytes, and the journaled assertion re-verifies without this database; whose key it is, it does not show (enrolment is journaled as `person.passkey_enrolled`, with the fingerprint to compare with the person's own key). `controlling_terminal`: the terminal path asserted that a yes was read; it proves no terminal and no person, since a process running as the same user can call the store's terminal method directly or answer the prompt through a pseudo-terminal. A relayed rejection says which session relayed it, and can only stop. |
+| agree, reject | Meant only for the person, and no MCP tool records an agreement; the two routes prove different things. `user_verified_passkey`: a key enrolled in this journal signed these exact act bytes, and the journaled assertion re-verifies without this database; whose key it is, it does not show. The fingerprint to compare with the person's own key is the one of the key in the act's own proof (the SHA-256 of the bytes `proof.public_key_spki` encodes), not an enrolment's: a row can be changed after it was enrolled. `controlling_terminal`: the terminal path asserted that a yes was read; it proves no terminal and no person, since a process running as the same user can call the store's terminal method directly or answer the prompt through a pseudo-terminal. A relayed rejection says which session relayed it, and can only stop. |
 | set aside | As agree: by the same two routes with the same limits, on a consent/v2 proposal, while no session of the challenger's voice was live. It says the challenge no longer blocks, not that it was wrong. |
 
 Nothing on this surface calls anything but the person's agreement, within its extent,
 authority, and the record says how far each basis shows that the person gave it. A
 process running as the same user can record a terminal act, and can enrol a key of its
-own and sign with it; what tells that apart is outside this journal: the key's
-fingerprint compared with the person's own. A journal head witnessed elsewhere shows
-later rewriting, not who acted. There is no resume by seat (see Decisions).
+own, or write one over an enrolled row, and sign with it; what tells that apart is
+outside this journal: the fingerprint of the key in the act's own proof, compared with
+the person's own. A journal head witnessed elsewhere shows later rewriting, not who
+acted. There is no resume by seat (see Decisions).
 
 ## Storage and compatibility
 
@@ -1254,22 +1255,39 @@ SQLite file and re-verify the whole chain on every open.
   (entity: the cite), and `ballot.opened`, `ballot.cast`, `ballot.revealed` and
   `ballot.closed` (entity: the poll report); consent/v2 adds
   `proposal.challenge_set_aside` (entity: the proposal report). Declared rest, which
-came from its own line, adds `session.rested` and `session.returned` (entity: the
-session). Passkey enrolment adds `person.passkey_enrolled` and
-  `person.passkey_revoked` (entity: the credential id), addressed to no one. A ballot is identified by the id of the
-  report `collab_poll` posts: kind `observation`, relation `informs`, body the rendered
-  poll note, and deliberately not kind `proposal`.
-- **Passkey enrolment is journaled.** A key belongs to the whole journal and a chain to
-  one workspace, so enrolling appends `person.passkey_enrolled` to every workspace's
-  chain, and revoking `person.passkey_revoked`. The first carries the SHA-256
-  fingerprint of the key's SPKI, `rp_id`, `origin`, `label` when it has one,
-  `enrolled_at`, and `recorded`: `at_enrolment`, or `before_first_act` when the chain had
-  no such event (a workspace opened later, a key an older build enrolled, or a row
-  written straight into the table) and the key then acted there. The second carries the
-  fingerprint and `revoked_at`. Neither carries private material or the key itself,
-  which a passkey act's proof holds. They show that a key was recorded and when, not who
-  enrolled it: their actor, `person:desk`, is a label the store writes. An older build
-  that enrols or revokes still journals neither.
+  came from its own line, adds `session.rested` and `session.returned` (entity: the
+  session). Passkey enrolment adds `person.passkey_enrolled` and
+  `person.passkey_revoked` (entity: the credential id), addressed to no one. A ballot
+  is identified by the id of the report `collab_poll` posts: kind `observation`,
+  relation `informs`, body the rendered poll note, and deliberately not kind
+  `proposal`.
+- **Passkey enrolment is journaled where the key is used.** A key belongs to the whole
+  journal and a chain to one workspace, and nothing is broadcast to the others.
+  `person.passkey_enrolled` is appended to a workspace's chain when the enrolment names
+  that workspace (`person passkey-enroll --workspace <id>`; `recorded: at_enrolment`),
+  and otherwise in the same transaction as, and just before, the key's first act there
+  (`recorded: before_first_act`): a key enrolled without that workspace or by an older
+  build, or a row written straight into the table. It is appended again, as
+  `before_first_act`, when the key that acts is not the one its chain last recorded for
+  that credential, as when another key was written over the row. So before each act this
+  build records, the last enrolment of its credential names the fingerprint of the key
+  in the act's own proof, and that proof is where to compare it: an earlier enrolment
+  shows only an earlier key. Nothing is refused for a mismatch.
+- **What an enrolment event says.** The SHA-256 `fingerprint` of the key's SPKI, computed
+  from the key; `rp_id`, `origin`, `label` when it has one, and `enrolled_at`, copied
+  from the key's row; and `recorded`. For `before_first_act` those copied fields are the
+  row's claim, which anyone able to write the table can have set (the act's proof names
+  the `rp_id` and `origin` its signature was checked against); only the event's own
+  `occurred_at` and its place in the chain date the journaling. Neither event carries
+  private material or the key itself, which a passkey act's proof holds, and neither
+  shows who enrolled: their actor, `person:desk`, is a label the store writes.
+- **Revoking** appends `person.passkey_revoked` (`fingerprint`, `revoked_at`) to each
+  chain that holds an enrolment of that credential, and to no other. Its fingerprint is
+  computed from the key the row holds then, or is the row's stored copy when that key
+  cannot be parsed, so revoking never refuses. What stays unrecorded: a key enrolled
+  without a workspace and revoked before it acted leaves no event anywhere, a key
+  leaves none in a workspace it was neither enrolled in nor acted in, and an older
+  build that enrols or revokes journals neither.
 - **New optional payload fields**, present only when set: `report.posted.note =
   "collab-note/1"` and `session.joined.model`.
 - **Receipts** use the existing receipt table under new operation names (`notes.*.v1`)
