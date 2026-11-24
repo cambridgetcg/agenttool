@@ -527,8 +527,8 @@ const fixture = lazy(async (): Promise<Fixture> => {
 
 /**
  * The fixture's one root is no Git repository, so its completions record why
- * no paths were listed. This second journal holds the listed form: a Git root,
- * capped lists and a same-voice review of each outcome.
+ * no paths were listed. This second journal holds the observed form: a Git
+ * root, capped names and a same-voice review of each outcome.
  */
 const listedChanges = lazy(async (): Promise<string> => {
   const directory = join(work, "listed-changes");
@@ -570,17 +570,16 @@ const listedChanges = lazy(async (): Promise<string> => {
 });
 
 describe("forward-compatibility fixture", () => {
-  test("a second journal holds the listed form of the changed paths, capped, and both review outcomes", async () => {
+  test("a second journal holds the observed form of the changed paths, names capped, and both review outcomes", async () => {
     const rows = eventRows(join(await listedChanges(), "collab.sqlite"));
     expect(laterOptionalKeysIn(rows)).toEqual([
       "task.accepted.reviewer_relation",
       "task.changes_requested.reviewer_relation",
-      "task.reported_complete.changed_paths",
       "task.reported_complete.changed_paths_basis",
       "task.reported_complete.changed_paths_count",
-      "task.reported_complete.changed_paths_truncated",
       "task.reported_complete.outside_scopes",
       "task.reported_complete.outside_scopes_count",
+      "task.reported_complete.outside_scopes_truncated",
     ]);
   }, TEST_TIMEOUT_MS);
 
@@ -870,7 +869,7 @@ for (const revision of revisions) {
       }
     }, TEST_TIMEOUT_MS);
 
-    test("opens and verifies a journal whose completions list changed paths", async () => {
+    test("opens and verifies a journal whose completions name paths outside their scopes", async () => {
       const listedCopy = copyJournal(await listedChanges(), join(directory, "listed-changes"));
       const output = await runWorker(["verify", join(await archive(revision), "src"), listedCopy]);
       expect(output.errors).toEqual({});

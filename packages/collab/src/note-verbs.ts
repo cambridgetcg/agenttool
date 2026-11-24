@@ -2999,16 +2999,6 @@ async function finishTask(
   const completion = completed.completion_report_id!;
   const reviewed = completed.completion_policy === "accepted";
   const changes = recordedChanges(ctx, workspaceId, task.id, completion);
-  if (changes?.outside_scopes_count) {
-    // A few names, quoted: they are the worktree's text, and the result carries the list.
-    const shownPaths = (changes.outside_scopes ?? []).slice(0, 5).map((path) => JSON.stringify(path));
-    const more = changes.outside_scopes_count - shownPaths.length;
-    advice.push(
-      `The server saw ${changes.outside_scopes_count} changed path${changes.outside_scopes_count === 1 ? "" : "s"} outside this task's path scopes `
-        + `since its base checkpoint: ${shownPaths.join(", ")}${more > 0 ? ` and ${more} more` : ""}. `
-        + "This is recorded for the reviewer, not refused; changes already present at the claim count too.",
-    );
-  }
   // Said as the task stands now, so a replay after the review does not say it still waits.
   const now = ctx.store.getTask(workspaceId, task.id);
   const accepted = reviewed && now.completion_report_id === completion && now.review_status === "accepted";
@@ -3040,7 +3030,7 @@ async function finishTask(
   };
 }
 
-/** The changed paths a completion recorded; null when none or unreadable (the completion committed). */
+/** What a completion recorded about its changed paths; null when nothing or unreadable (the completion committed). */
 function recordedChanges(ctx: NoteVerbContext, workspaceId: string, taskId: string, completionId: string): CompletionChanges | null {
   try {
     return ctx.store.completionChanges(workspaceId, taskId, completionId);

@@ -582,22 +582,29 @@ export interface PersonInbox {
 /**
  * What a completion recorded about the paths its worktree changed (record-only;
  * never a refusal). `server_observed`: the server's own Git listed the paths
- * changed since the base checkpoint's HEAD, tracked and untracked, names only.
- * The base HEAD is the claim's, so changes already present at the claim count
+ * changed since the base checkpoint's HEAD, tracked and untracked. Only counts
+ * and the names outside the task's path scopes are kept, never the whole list.
+ * The base is that of the latest claim, takeover or accepted handoff, so it
+ * covers no earlier round, and uncommitted changes already present then count
  * too. `unavailable`: nothing was listed, and `changed_paths_reason` says why.
  * Observed outside the write transaction, so the worktree may have changed
  * between the observation and the record.
  */
 export interface CompletionChanges {
   changed_paths_basis: "server_observed" | "unavailable";
-  /** Sorted; capped (see changed_paths_truncated). Present only when server_observed. */
-  changed_paths?: string[];
+  /** Present only when server_observed. */
   changed_paths_count?: number;
-  /** Changed paths within no path scope: the claim's segment-aware, case-folded rule. */
+  /**
+   * The first changed paths, sorted, within no path scope (the claim's
+   * segment-aware, case-folded rule), at most 20 names of at most 200
+   * characters, with control, bidirectional and invisible characters escaped.
+   * This and its count are absent for a coordination task and a task without
+   * path scopes.
+   */
   outside_scopes?: string[];
   outside_scopes_count?: number;
-  /** Present, and true, only when a list was capped. */
-  changed_paths_truncated?: true;
+  /** Present, and true, only when outside_scopes leaves a name out or cuts one short. */
+  outside_scopes_truncated?: true;
   /** Present only when unavailable. */
   changed_paths_reason?: string;
 }

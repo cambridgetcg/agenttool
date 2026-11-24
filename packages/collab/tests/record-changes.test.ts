@@ -1,13 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { spawnSync, type SpawnSyncOptions } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { SessionHandle, Task } from "../src/protocol.js";
-import { observeChangedPaths } from "../src/repository.js";
+import { captureRepoCheckpoint, observeChangedPaths, type RepositoryProbeOptions } from "../src/repository.js";
 import {
   changedPathFields,
-  MAX_RECORDED_CHANGED_PATH_BYTES,
-  MAX_RECORDED_CHANGED_PATHS,
+  MAX_RECORDED_OUTSIDE_PATHS,
+  MAX_RECORDED_PATH_CHARS,
   pathWithinScopesFolded,
+  recordedPathName,
   reviewerRelationAdvice,
 } from "../src/store-notes.js";
 import { completedTask, git, journal, ok, runCleanup, type Journal } from "./notes-helpers.js";
@@ -45,8 +47,30 @@ function completionPayload(j: Journal, taskId: string): Record<string, any> {
     && (event.type === "task.reported_complete" || event.type === "task.completed")).at(-1)!.payload;
 }
 
+/** Every changed-path field of a payload or a result, and the old list's name in case it comes back. */
+function changeKeys(source: Record<string, any>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(source).filter(([key]) => /^(changed_paths|outside_scopes)/.test(key)));
+}
+
+/** The paths since `base` as a completion observes them: from the capture's own status, and Git only if asked. */
+function observe(root: string, base: string, options: RepositoryProbeOptions = {}) {
+  let status: Buffer | null = null;
+  const checkpoint = captureRepoCheckpoint(root, "wt_test", (listed) => { status = listed; });
+  return observeChangedPaths(root, base, checkpoint.head_sha!, status, options);
+}
+
+/** A process runner that records each call and then really runs it. */
+function recorder() {
+  const calls: Array<{ args: string[]; env: NodeJS.ProcessEnv }> = [];
+  const spawn = (args: string[], options: SpawnSyncOptions) => {
+    calls.push({ args, env: options.env! });
+    return spawnSync("git", args, options);
+  };
+  return { calls, spawn };
+}
+
 describe("observeChangedPaths", () => {
-  test("lists tracked changes against the base commit and untracked files, never ignored ones", () => {
+  test("lists what the capture's status read and, once HEAD moved, what the commits changed; never ignored files", () => {
     const j = journal({ git: true });
     j.write("gone.txt", "gone\n");
     j.write("old name.txt", "a file long enough to be found as a rename\n");
@@ -54,9 +78,12 @@ describe("observeChangedPaths", () => {
     git(j.root, ["commit", "-q", "-m", "base"]);
     const base = git(j.root, ["rev-parse", "HEAD"]);
     j.write(".gitignore", "build/\n");
-    j.write("src/brief.ts", "added and removed again since the base\n");
-    git(j.root, ["add", ".gitignore", "src/brief.ts"]);
+    j.write("src/brief.ts", "added since the base, and gone again uncommitted\n");
+    j.write("src/undone.ts", "added and removed again by commits\n");
+    git(j.root, ["add", ".gitignore", "src"]);
     git(j.root, ["commit", "-q", "-m", "after base"]);
+    git(j.root, ["rm", "-q", "src/undone.ts"]);
+    git(j.root, ["commit", "-q", "-m", "undo"]);
     git(j.root, ["mv", "old name.txt", "new name.txt"]);
     rmSync(join(j.root, "gone.txt"));
     // A nested repository: Git names its directory and does not look inside.
@@ -69,22 +96,62 @@ describe("observeChangedPaths", () => {
     j.write("notes/new file.md", "untracked\n");
     j.write("build/out.js", "ignored\n");
     rmSync(join(j.root, "src", "brief.ts"));
-    // Committed since the base, unstaged, deleted, nested, both sides of a rename, untracked, staged; sorted.
-    expect(observeChangedPaths(j.root, base)).toEqual({
+    // Committed since the base, unstaged, deleted, nested, both sides of a
+    // rename, untracked, staged; sorted. A commit undone by a commit is no change.
+    expect(observe(j.root, base)).toEqual({
       ok: true,
       paths: [
-        ".gitignore", "README.txt", "gone.txt", "nested/", "new name.txt", "notes/new file.md", "old name.txt", "src/staged.ts",
+        ".gitignore", "README.txt", "gone.txt", "nested/", "new name.txt", "notes/new file.md", "old name.txt", "src/brief.ts", "src/staged.ts",
       ],
     });
   });
 
-  test("a base that is not a commit here is unavailable, with a reason", () => {
+  test("runs no Git of its own while HEAD is the base, and one names-only diff, without locks or fetches, once it moved", () => {
     const j = journal({ git: true });
-    expect(observeChangedPaths(j.root, "0".repeat(40))).toEqual({
+    const base = git(j.root, ["rev-parse", "HEAD"]);
+    j.write("README.txt", "changed\n");
+    const still = recorder();
+    expect(observe(j.root, base, { spawn: still.spawn })).toEqual({ ok: true, paths: ["README.txt"] });
+    expect(still.calls).toEqual([]);
+    git(j.root, ["commit", "-q", "-a", "-m", "moved"]);
+    const head = git(j.root, ["rev-parse", "HEAD"]);
+    const moved = recorder();
+    expect(observe(j.root, base, { spawn: moved.spawn })).toEqual({ ok: true, paths: ["README.txt"] });
+    expect(moved.calls).toHaveLength(1);
+    expect(moved.calls[0]!.args).toEqual([
+      "-C", j.root, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none",
+      "--name-only", "-z", `${base}..${head}`, "--",
+    ]);
+    expect(moved.calls[0]!.env).toMatchObject({ GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1" });
+  });
+
+  test("reads a rename as both its paths, a copy as its new path, and refuses a status it does not know", () => {
+    const sha = "a".repeat(40);
+    const paths = (status: string) => observeChangedPaths("/nowhere", sha, sha, Buffer.from(status));
+    expect(paths("R  new\0old\0 R wnew\0wold\0C  copy\0source\0UU both\0 M x -> y\0?? un\0"))
+      .toEqual({ ok: true, paths: ["both", "copy", "new", "old", "un", "wnew", "wold", "x -> y"] });
+    expect(paths("")).toEqual({ ok: true, paths: [] });
+    const unreadable = { ok: false, reason: "Git reported a changed path that cannot be read safely" } as const;
+    for (const status of ["## main\0", "!! ignored\0", "R  new\0", "M\0", " M ../up\0", " M /abs\0", " M cut"]) {
+      expect(paths(status)).toEqual(unreadable);
+    }
+  });
+
+  test("a base that is not a commit here, or a status Git could not give, is unavailable with a reason", () => {
+    const j = journal({ git: true });
+    expect(observe(j.root, "0".repeat(40))).toEqual({
       ok: false,
       reason: "Git could not list the changes since the base checkpoint's HEAD: that commit is missing, or a bound was exceeded",
     });
-    expect(observeChangedPaths(j.root, "HEAD")).toMatchObject({ ok: false });
+    expect(observe(j.root, "HEAD")).toEqual({
+      ok: false,
+      reason: "The base checkpoint's HEAD or the current HEAD is not a Git object ID",
+    });
+    const sha = "a".repeat(40);
+    expect(observeChangedPaths(j.root, sha, sha, null)).toEqual({
+      ok: false,
+      reason: "Git could not list the worktree's status within its bounds",
+    });
   });
 });
 
@@ -99,42 +166,62 @@ describe("changed-path fields", () => {
     // An untracked nested repository's name ends in "/".
     expect(pathWithinScopesFolded("nested/", ["nested"])).toBe(true);
     expect(pathWithinScopesFolded("nested/", ["nested/src"])).toBe(false);
-    expect(pathWithinScopesFolded("re\u0301sume\u0301/x", ["r\u00e9sum\u00e9"])).toBe(true);
+    expect(pathWithinScopesFolded("résumé/x", ["résumé"])).toBe(true);
   });
 
-  test("lists are capped by count and by bytes, with totals and one truncation flag", () => {
-    const many = Array.from({ length: MAX_RECORDED_CHANGED_PATHS + 10 }, (_, index) => `x/${String(index).padStart(4, "0")}`);
-    const capped = changedPathFields({ ok: true, paths: many }, ["x/0000"]);
-    expect(capped.changed_paths).toHaveLength(MAX_RECORDED_CHANGED_PATHS);
-    expect(capped.changed_paths_count).toBe(many.length);
-    expect(capped.outside_scopes).toHaveLength(MAX_RECORDED_CHANGED_PATHS);
-    expect(capped.outside_scopes_count).toBe(many.length - 1);
-    expect(capped.changed_paths_truncated).toBe(true);
-    const long = Array.from({ length: 20 }, (_, index) => `${index}`.padEnd(1_000, "a"));
-    const byBytes = changedPathFields({ ok: true, paths: long }, []);
-    expect(Buffer.byteLength(JSON.stringify(byBytes.changed_paths))).toBeLessThanOrEqual(MAX_RECORDED_CHANGED_PATH_BYTES + 1);
-    expect(byBytes.changed_paths).toHaveLength(12);
-    expect(byBytes.changed_paths_truncated).toBe(true);
-    // Escapes count: each of these characters takes six bytes as JSON.
-    const escaped = Array.from({ length: 200 }, (_, index) => "\u0001".repeat(200) + index);
-    const byEscapes = changedPathFields({ ok: true, paths: escaped }, []);
-    expect(Buffer.byteLength(JSON.stringify(byEscapes))).toBeLessThan(26 * 1024);
-    expect(byEscapes.changed_paths_count).toBe(200);
-    expect(byEscapes.changed_paths_truncated).toBe(true);
-    const small = changedPathFields({ ok: true, paths: ["a"] }, ["a"]);
-    expect(small).toEqual({
+  test("only counts and the first names outside the scopes are kept, with a flag when that leaves any out", () => {
+    const many = Array.from({ length: MAX_RECORDED_OUTSIDE_PATHS + 5 }, (_, index) => `x/${String(index).padStart(4, "0")}`);
+    expect(changedPathFields({ ok: true, paths: many }, ["x/0000"])).toEqual({
       changed_paths_basis: "server_observed",
-      changed_paths: ["a"],
+      changed_paths_count: MAX_RECORDED_OUTSIDE_PATHS + 5,
+      outside_scopes: many.slice(1, MAX_RECORDED_OUTSIDE_PATHS + 1),
+      outside_scopes_count: MAX_RECORDED_OUTSIDE_PATHS + 4,
+      outside_scopes_truncated: true,
+    });
+    const exact = changedPathFields({ ok: true, paths: many.slice(0, MAX_RECORDED_OUTSIDE_PATHS) }, ["y"]);
+    expect(exact.outside_scopes).toHaveLength(MAX_RECORDED_OUTSIDE_PATHS);
+    expect(exact.outside_scopes_truncated).toBeUndefined();
+    const long = changedPathFields({ ok: true, paths: ["n".repeat(MAX_RECORDED_PATH_CHARS + 1)] }, ["y"]);
+    expect(long.outside_scopes).toEqual([`${"n".repeat(MAX_RECORDED_PATH_CHARS - 1)}…`]);
+    expect(long).toMatchObject({ outside_scopes_count: 1, outside_scopes_truncated: true });
+    // The widest names there are still leave the payload far under 64 KiB.
+    const wide = Array.from({ length: 400 }, (_, index) => `${index}${"\u{1F600}".repeat(500)}`);
+    expect(Buffer.byteLength(JSON.stringify(changedPathFields({ ok: true, paths: wide }, ["y"])))).toBeLessThan(18 * 1024);
+    expect(changedPathFields({ ok: true, paths: ["a"] }, ["a"])).toEqual({
+      changed_paths_basis: "server_observed",
       changed_paths_count: 1,
       outside_scopes: [],
       outside_scopes_count: 0,
     });
     expect(changedPathFields({ ok: false, reason: "why" }, [])).toEqual({ changed_paths_basis: "unavailable", changed_paths_reason: "why" });
   });
+
+  test("without path scopes nothing is inside or outside, so only the count is kept", () => {
+    expect(changedPathFields({ ok: true, paths: ["a", "b"] }, [])).toEqual({
+      changed_paths_basis: "server_observed",
+      changed_paths_count: 2,
+    });
+  });
+
+  test("a name's control, bidirectional, zero-width and invisible characters are escaped, and a cut never splits one", () => {
+    expect(recordedPathName("plain/ünï/文 (1).ts")).toEqual({ name: "plain/ünï/文 (1).ts", cut: false });
+    const hostile = "a\u0000\u0007\n\t\u007f\u0085­؜​‍‮  ⁦﻿️\u{e0041}b";
+    expect(recordedPathName(hostile)).toEqual({
+      name: "a\\u{0}\\u{7}\\u{A}\\u{9}\\u{7F}\\u{85}\\u{AD}\\u{61C}\\u{200B}\\u{200D}\\u{202E}\\u{2028}\\u{2029}\\u{2066}\\u{FEFF}\\u{FE0F}\\u{E0041}b",
+      cut: false,
+    });
+    // At the bound exactly, nothing is cut; one escape over it, the escape goes whole.
+    const bound = "n".repeat(MAX_RECORDED_PATH_CHARS - 8);
+    expect(recordedPathName(`${bound}‮`)).toEqual({ name: `${bound}\\u{202E}`, cut: false });
+    expect(recordedPathName(`${bound}n‮`)).toEqual({ name: `${bound}n…`, cut: true });
+    const emoji = recordedPathName("\u{1F600}".repeat(MAX_RECORDED_PATH_CHARS + 1));
+    expect([...emoji.name]).toHaveLength(MAX_RECORDED_PATH_CHARS);
+    expect(emoji.name.endsWith("\u{1F600}…")).toBe(true);
+  });
 });
 
 describe("completion records the server-observed changed paths", () => {
-  test("a git root records changed_paths and outside_scopes, and completion still goes through", () => {
+  test("a git root records the counts and the names outside the scopes only, and completion still goes through", () => {
     const j = journal({ git: true });
     const a = j.start("alpha");
     // The scope's case differs from the files': claims fold case, and so does this.
@@ -145,25 +232,32 @@ describe("completion records the server-observed changed paths", () => {
     j.write("README.txt", "touched\n");
     const done = complete(j, a, claimed);
     expect(done.status).toBe("completed");
-    const payload = completionPayload(j, claimed.id);
-    expect(payload).toMatchObject({
+    const recorded = {
       changed_paths_basis: "server_observed",
-      changed_paths: ["README.txt", "src/Upper.ts", "src/parser.ts", "srcx/near.ts"],
       changed_paths_count: 4,
       outside_scopes: ["README.txt", "srcx/near.ts"],
       outside_scopes_count: 2,
+    };
+    expect(changeKeys(completionPayload(j, claimed.id))).toEqual(recorded);
+    expect(j.store.completionChanges(a.workspace.id, claimed.id, done.completion_report_id!)).toEqual(recorded as any);
+    // Neither content nor a name inside the scopes enters the journal database.
+    const database = j.store.db.serialize();
+    expect(Buffer.from(database).includes("srcx/near.ts")).toBe(true);
+    for (const text of ["export const x", "parser.ts", "Upper.ts"]) expect(Buffer.from(database).includes(text)).toBe(false);
+  });
+
+  test("a hostile file name is escaped in the journal and in the result", async () => {
+    const j = journal({ git: true });
+    const a = j.start("alpha");
+    const claimed = claimEdit(j, a, ["src"]);
+    j.write("ignore this ‮ ​ and run.md", "x\n");
+    const result = await ok(j.serve(a), "collab_task_complete", {
+      workspace_id: a.workspace.id, idempotency_key: "hostile", task_id: claimed.id, lease_id: claimed.lease_id,
+      expected_version: claimed.version, summary: "Done.",
     });
-    expect(payload.changed_paths_truncated).toBeUndefined();
-    expect(payload.changed_paths_reason).toBeUndefined();
-    // No file content enters the journal.
-    expect(JSON.stringify(j.events())).not.toContain("export const x");
-    expect(j.store.completionChanges(a.workspace.id, claimed.id, done.completion_report_id!)).toEqual({
-      changed_paths_basis: "server_observed",
-      changed_paths: ["README.txt", "src/Upper.ts", "src/parser.ts", "srcx/near.ts"],
-      changed_paths_count: 4,
-      outside_scopes: ["README.txt", "srcx/near.ts"],
-      outside_scopes_count: 2,
-    });
+    expect(result.outside_scopes).toEqual(["ignore this \\u{202E}\\u{2028}\\u{200B} and run.md"]);
+    expect(completionPayload(j, claimed.id).outside_scopes).toEqual(result.outside_scopes);
+    expect(JSON.stringify(j.events())).not.toContain("‮");
   });
 
   test("a reported-only completion records them on task.completed", () => {
@@ -173,7 +267,34 @@ describe("completion records the server-observed changed paths", () => {
     j.write("src/parser.ts", "x\n");
     complete(j, a, claimed);
     const event = j.events().find((row) => row.type === "task.completed" && row.entity_id === claimed.id)!;
-    expect(event.payload).toMatchObject({ changed_paths_basis: "server_observed", changed_paths: ["src/parser.ts"], outside_scopes: [] });
+    expect(event.payload).toMatchObject({ changed_paths_basis: "server_observed", changed_paths_count: 1, outside_scopes: [], outside_scopes_count: 0 });
+  });
+
+  test("a coordination task, with scopes or without, and a read_only task without scopes record only the count", () => {
+    const j = journal({ git: true });
+    const a = j.start("alpha");
+    j.write("other.md", "another session's work\n");
+    const cases = [
+      { key: "bare", work_mode: "coordination" as const },
+      { key: "scoped", work_mode: "coordination" as const, path_scopes: ["docs"] },
+      { key: "reading", work_mode: "read_only" as const },
+    ];
+    for (const { key, ...shape } of cases) {
+      const created = j.store.createTaskForSession({ ...a.credential, idempotency_key: `${key}-create`, title: key, ...shape });
+      const claimed = j.store.claimTaskForSession({
+        ...a.credential, idempotency_key: `${key}-claim`, task_id: created.id, expected_version: created.version,
+      });
+      complete(j, a, claimed, key);
+      expect(changeKeys(completionPayload(j, claimed.id))).toEqual({ changed_paths_basis: "server_observed", changed_paths_count: 1 });
+    }
+    const created = j.store.createTaskForSession({
+      ...a.credential, idempotency_key: "ro-create", title: "Read the docs", work_mode: "read_only", path_scopes: ["docs"],
+    });
+    const claimed = j.store.claimTaskForSession({
+      ...a.credential, idempotency_key: "ro-claim", task_id: created.id, expected_version: created.version,
+    });
+    complete(j, a, claimed, "ro");
+    expect(changeKeys(completionPayload(j, claimed.id))).toMatchObject({ outside_scopes: ["other.md"], outside_scopes_count: 1 });
   });
 
   test("a root with no Git repository records why nothing was listed, and never refuses", () => {
@@ -181,11 +302,10 @@ describe("completion records the server-observed changed paths", () => {
     const a = j.start("alpha");
     const task = completedTask(j, a);
     expect(task.status).toBe("completed");
-    expect(completionPayload(j, task.id)).toMatchObject({
+    expect(changeKeys(completionPayload(j, task.id))).toEqual({
       changed_paths_basis: "unavailable",
       changed_paths_reason: "The base checkpoint was not server-observed: no Git repository or no HEAD at the claim",
     });
-    expect(completionPayload(j, task.id).changed_paths).toBeUndefined();
   });
 
   test("a base HEAD that left the repository is unavailable, and the completion stands", () => {
@@ -201,34 +321,85 @@ describe("completion records the server-observed changed paths", () => {
     git(j.root, ["gc", "-q", "--prune=now"]);
     const done = complete(j, a, claimed);
     expect(done.status).toBe("completed");
-    expect(completionPayload(j, claimed.id)).toMatchObject({
+    expect(changeKeys(completionPayload(j, claimed.id))).toEqual({
       changed_paths_basis: "unavailable",
       changed_paths_reason: "Git could not list the changes since the base checkpoint's HEAD: that commit is missing, or a bound was exceeded",
     });
   });
 
-  test("a base that moves after the observation, or an observation that throws, records unavailable", () => {
+  test("a worktree with no HEAD at completion is unavailable, and the completion stands", () => {
+    const j = journal({ git: true });
+    const a = j.start("alpha");
+    const claimed = claimEdit(j, a, ["src"]);
+    git(j.root, ["checkout", "-q", "--orphan", "unborn"]);
+    expect(complete(j, a, claimed).status).toBe("completed");
+    expect(changeKeys(completionPayload(j, claimed.id))).toEqual({
+      changed_paths_basis: "unavailable",
+      changed_paths_reason: "The worktree has no Git HEAD now",
+    });
+  });
+
+  test("a pull, a rebase or a branch switch since the claim counts every path it changed", () => {
+    const j = journal({ git: true });
+    const a = j.start("alpha");
+    git(j.root, ["checkout", "-q", "-b", "upstream"]);
+    j.write("upstream.md", "theirs\n");
+    git(j.root, ["add", "upstream.md"]);
+    git(j.root, ["commit", "-q", "-m", "theirs"]);
+    git(j.root, ["checkout", "-q", "-"]);
+    const claimed = claimEdit(j, a, ["src"]);
+    git(j.root, ["merge", "-q", "--ff-only", "upstream"]);
+    complete(j, a, claimed);
+    expect(changeKeys(completionPayload(j, claimed.id))).toMatchObject({ changed_paths_count: 1, outside_scopes: ["upstream.md"] });
+  });
+
+  test("a base that moves after the observation records unavailable, and the completion stands", () => {
     const j = journal({ git: true });
     const a = j.start("alpha");
     const inner = j.store as any;
-    const observe = inner.observeCompletionChanges.bind(inner);
-    const first = claimEdit(j, a, ["src/one.ts"], "reported", "one");
-    inner.observeCompletionChanges = (...args: unknown[]) => ({ ...observe(...args), base_checkpoint_json: "{}" });
-    expect(complete(j, a, first, "one").status).toBe("completed");
-    expect(completionPayload(j, first.id)).toMatchObject({
+    const observing = inner.observeCompletionChanges.bind(inner);
+    const claimed = claimEdit(j, a, ["src/one.ts"], "reported");
+    inner.observeCompletionChanges = (...args: unknown[]) => ({ ...observing(...args), base_checkpoint_json: "{}" });
+    expect(complete(j, a, claimed).status).toBe("completed");
+    expect(changeKeys(completionPayload(j, claimed.id))).toEqual({
       changed_paths_basis: "unavailable",
       changed_paths_reason: "The task's base checkpoint changed after the paths were observed",
     });
-    delete inner.observeCompletionChanges;
-    const second = claimEdit(j, a, ["src/two.ts"], "reported", "two");
-    // More than one listing may hold: Git's output is bounded, and over it nothing is listed.
+  });
+
+  test("an observation that throws records unavailable, and the completion stands", () => {
+    const j = journal({ git: true });
+    const a = j.start("alpha");
+    const inner = j.store as any;
+    const capture = inner.captureSessionWorktree.bind(inner);
+    const claimed = claimEdit(j, a, ["src/one.ts"], "reported");
+    let thrown = 0;
+    inner.captureSessionWorktree = (input: unknown) => ({
+      ...capture(input),
+      get status(): Buffer {
+        thrown += 1;
+        throw new Error("the status cannot be read");
+      },
+    });
+    expect(complete(j, a, claimed).status).toBe("completed");
+    expect(thrown).toBe(1);
+    expect(changeKeys(completionPayload(j, claimed.id))).toEqual({
+      changed_paths_basis: "unavailable",
+      changed_paths_reason: "The server could not observe the changed paths",
+    });
+  });
+
+  test("a status past Git's output bound is unavailable, and the completion stands", () => {
+    const j = journal({ git: true });
+    const a = j.start("alpha");
+    const claimed = claimEdit(j, a, ["src/two.ts"], "reported");
     mkdirSync(join(j.root, "many"));
     const name = "n".repeat(240);
     for (let index = 0; index < 4_500; index += 1) writeFileSync(join(j.root, "many", `${name}${index}`), "");
-    expect(complete(j, a, second, "two").status).toBe("completed");
-    expect(completionPayload(j, second.id)).toMatchObject({
+    expect(complete(j, a, claimed).status).toBe("completed");
+    expect(changeKeys(completionPayload(j, claimed.id))).toEqual({
       changed_paths_basis: "unavailable",
-      changed_paths_reason: "Git could not list the untracked paths within its bounds",
+      changed_paths_reason: "Git could not list the worktree's status within its bounds",
     });
   });
 
@@ -243,37 +414,34 @@ describe("completion records the server-observed changed paths", () => {
       .toEqual({ ok: false, reason: "The base checkpoint belongs to another worktree" });
     complete(j, a, claimed, "one");
     const again = claimEdit(j, a, ["src/two.ts"], "reported", "two");
-    j.write("src/two.ts", "2\n");
+    j.write("aside.md", "2\n");
     const input = {
       workspace_id: a.workspace.id, idempotency_key: "replay", task_id: again.id, lease_id: again.lease_id,
       expected_version: again.version, summary: "Done.",
     };
     const server = j.serve(a);
     const { observed_at: _first, ...once } = await ok(server, "collab_task_complete", input);
-    j.write("src/later.ts", "later\n");
+    j.write("later.md", "later\n");
     const { observed_at: _second, ...twice } = await ok(server, "collab_task_complete", input);
-    expect(once.changed_paths).toEqual(["src/two.ts"]);
+    expect(once.outside_scopes).toEqual(["aside.md"]);
     expect(twice).toEqual(once);
   });
 
-  test("many untracked files are capped in the record and the payload stays well under 64 KiB", () => {
+  test("a report that is not the completion's has no changes of its own", () => {
     const j = journal({ git: true });
     const a = j.start("alpha");
-    const claimed = claimEdit(j, a, ["kept"]);
-    mkdirSync(join(j.root, "many"), { recursive: true });
-    for (let index = 0; index < 400; index += 1) {
-      writeFileSync(join(j.root, "many", `${"n".repeat(80)}-${index}.txt`), "x");
-    }
-    complete(j, a, claimed);
-    const payload = completionPayload(j, claimed.id);
-    expect(payload.changed_paths_count).toBe(400);
-    expect(payload.outside_scopes_count).toBe(400);
-    expect(payload.changed_paths_truncated).toBe(true);
-    expect(payload.changed_paths.length).toBeLessThan(400);
-    expect(Buffer.byteLength(JSON.stringify(payload))).toBeLessThan(48 * 1024);
+    const claimed = claimEdit(j, a, ["src"]);
+    const aside = j.store.appendReportForSession({
+      ...a.credential, idempotency_key: "aside", task_id: claimed.id, kind: "observation", body: "Half way.", relation: "informs",
+    });
+    const done = complete(j, a, claimed);
+    // The next completion event after this report is the task's, but it names another report.
+    expect(j.store.completionChanges(a.workspace.id, claimed.id, aside.id)).toBeNull();
+    expect(j.store.completionChanges(a.workspace.id, claimed.id, "report_none")).toBeNull();
+    expect(j.store.completionChanges(a.workspace.id, claimed.id, done.completion_report_id!)).not.toBeNull();
   });
 
-  test("collab_task_complete and collab_done return the recorded fields", async () => {
+  test("collab_task_complete and collab_done return the recorded fields, and say nothing of them in advice", async () => {
     const j = journal({ git: true });
     const a = j.start("alpha");
     const sa = j.serve(a);
@@ -288,9 +456,9 @@ describe("completion records the server-observed changed paths", () => {
       expected_version: claimed.version,
       summary: "Done.",
     });
-    expect(result).toMatchObject({
+    expect(changeKeys(result)).toEqual({
       changed_paths_basis: "server_observed",
-      changed_paths: ["other.md", "src/parser.ts"],
+      changed_paths_count: 2,
       outside_scopes: ["other.md"],
       outside_scopes_count: 1,
     });
@@ -298,15 +466,115 @@ describe("completion records the server-observed changed paths", () => {
     const taken = await ok(sa, "collab_take", { title: "Edit the lexer", paths: ["lib/lexer.ts"] });
     j.write("lib/lexer.ts", "z\n");
     const done = await ok(sa, "collab_done", { text: "Lexer done.", task: taken.ids.task });
-    expect(done).toMatchObject({
+    expect(changeKeys(done)).toEqual({
       changed_paths_basis: "server_observed",
+      changed_paths_count: 3,
       outside_scopes: ["other.md", "src/parser.ts"],
       outside_scopes_count: 2,
     });
-    expect(done.changed_paths).toEqual(["lib/lexer.ts", "other.md", "src/parser.ts"]);
-    const line = (done.advice as string[]).find((text) => text.includes("outside this task's path scopes"))!;
-    expect(line).toContain('"other.md", "src/parser.ts"');
-    expect(line).toContain("recorded for the reviewer, not refused");
+    expect(JSON.stringify(done.advice)).not.toContain("other.md");
+
+    // A title-only take has no path scopes, however many files lie about.
+    const scopeless = await ok(sa, "collab_take", { title: "Sort the notes" });
+    const sorted = await ok(sa, "collab_done", { text: "Sorted.", task: scopeless.ids.task });
+    expect(changeKeys(sorted)).toEqual({ changed_paths_basis: "server_observed", changed_paths_count: 3 });
+  });
+});
+
+describe("the record covers only the time since the latest claim, takeover or handoff", () => {
+  /** Round 1: a committed edit outside the scope, recorded at that completion. */
+  function outOfScopeRound(j: Journal, holder: SessionHandle, claimed: Task, key: string) {
+    j.write("secret/outside.ts", `${key}\n`);
+    git(j.root, ["add", "secret/outside.ts"]);
+    git(j.root, ["commit", "-q", "-m", key]);
+    return claimed;
+  }
+
+  test("a re-claim after request_changes starts over, and the earlier completion keeps its own record", async () => {
+    const j = journal({ git: true });
+    const a = j.start("alpha");
+    const b = j.start("beta");
+    const first = complete(j, a, outOfScopeRound(j, a, claimEdit(j, a, ["src/a.ts"], "accepted", "one"), "round one"), "one");
+    const returned = j.store.reviewTaskForSession({
+      ...b.credential, idempotency_key: "rc", task_id: first.id, expected_version: first.version, outcome: "request_changes", summary: "Again.",
+    }).task;
+    const again = j.store.claimTaskForSession({ ...a.credential, idempotency_key: "again", task_id: returned.id, expected_version: returned.version });
+    j.write("src/a.ts", "round two\n");
+    const second = complete(j, a, again, "two");
+    const recorded = j.events().filter((event) => event.type === "task.reported_complete").map((event) => changeKeys(event.payload));
+    expect(recorded).toEqual([
+      { changed_paths_basis: "server_observed", changed_paths_count: 1, outside_scopes: ["secret/outside.ts"], outside_scopes_count: 1 },
+      // The out-of-scope commit still stands, and this round does not say so.
+      { changed_paths_basis: "server_observed", changed_paths_count: 1, outside_scopes: [], outside_scopes_count: 0 },
+    ]);
+    // A notes-profile reviewer finds the earlier round in the task's thread.
+    const thread = await ok(j.serve(b), "collab_inbox", { about: second.id });
+    expect(thread.task.completion.changes).toEqual(recorded[1]);
+    const shown = thread.thread.filter((item: any) => item.changes);
+    expect(shown.map((item: any) => [item.id, item.changes])).toEqual([
+      [first.completion_report_id, recorded[0]],
+      [second.completion_report_id, recorded[1]],
+    ]);
+  });
+
+  test("a takeover starts over", () => {
+    const j = journal({ git: true });
+    const a = j.start("alpha");
+    const claimed = outOfScopeRound(j, a, claimEdit(j, a, ["src/a.ts"]), "before the takeover");
+    j.advance(7 * 60 * 60_000);
+    const b = j.start("beta");
+    const recovered = j.store.recoverTaskForSession({
+      ...b.credential, idempotency_key: "recover", task_id: claimed.id, expected_version: claimed.version, recovery_note: "Checked the worktree.",
+    });
+    complete(j, b, recovered, "taken");
+    expect(changeKeys(completionPayload(j, claimed.id))).toMatchObject({ changed_paths_count: 0, outside_scopes: [] });
+  });
+
+  test("an accepted handoff starts over", () => {
+    const j = journal({ git: true });
+    const a = j.start("alpha");
+    const b = j.start("beta");
+    const claimed = outOfScopeRound(j, a, claimEdit(j, a, ["src/a.ts"]), "before the handoff");
+    const offered = j.store.offerHandoffForSession({
+      ...a.credential, idempotency_key: "offer", task_id: claimed.id, lease_id: claimed.lease_id!, expected_version: claimed.version,
+      to_session_id: b.session.id, summary: "Yours if you like.",
+    });
+    const taken = j.store.respondHandoffForSession({
+      ...b.credential, idempotency_key: "answer", handoff_id: offered.handoff.id, expected_version: offered.task.version, response: "accept",
+    });
+    complete(j, b, taken.task, "handed");
+    expect(changeKeys(completionPayload(j, claimed.id))).toMatchObject({ changed_paths_count: 0, outside_scopes: [] });
+  });
+});
+
+describe("where a reviewer reads the record", () => {
+  test("the completion event, its inbox item, and the thread of the task or of the completion", async () => {
+    const j = journal({ git: true });
+    const a = j.start("alpha");
+    const b = j.start("beta");
+    const claimed = claimEdit(j, a, ["src"]);
+    j.write("other.md", "y\n");
+    const done = j.store.completeTaskForSession({
+      ...a.credential, idempotency_key: "asked", task_id: claimed.id, lease_id: claimed.lease_id!, expected_version: claimed.version,
+      summary: "Done.", review_requested_session_id: b.session.id,
+    });
+    const changes = { changed_paths_basis: "server_observed", changed_paths_count: 1, outside_scopes: ["other.md"], outside_scopes_count: 1 };
+    const server = j.serve(b);
+    const page = await ok(server, "collab_events_since", { workspace_id: a.workspace.id });
+    const event = page.events.find((row: any) => row.type === "task.reported_complete");
+    expect(event.payload).toMatchObject(changes);
+    const inbox = await ok(server, "collab_inbox", {});
+    const item = inbox.items.find((entry: any) => entry.act === "done");
+    expect(item.completion.id).toBe(done.completion_report_id);
+    expect(item.changes).toEqual(changes);
+    const task = await ok(server, "collab_inbox", { about: done.id });
+    expect(task.task.completion.changes).toEqual(changes);
+    const completion = await ok(server, "collab_inbox", { about: done.completion_report_id });
+    expect(completion.root.changes).toEqual(changes);
+    // Only a completion has them.
+    const other = task.thread.filter((entry: any) => entry.id !== done.completion_report_id);
+    expect(other.length).toBeGreaterThan(0);
+    expect(other.every((entry: any) => entry.changes === undefined)).toBe(true);
   });
 });
 

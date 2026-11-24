@@ -58,15 +58,19 @@ and inspect existing work first.
    `sha256`. Do not paste content or raw output.
 6. **Complete.** Call `collab_task_complete` with a summary, `confidence`,
    `confidence_basis`, `limits` and `evidence_refs`. Optionally name
-   `review_requested_session_id`. The server also records, never refusing, the
-   paths changed since the base checkpoint (`changed_paths`, `outside_scopes`,
-   `changed_paths_basis`) and returns them. An edit task stays pending until a
-   distinct session accepts it.
+   `review_requested_session_id`. The server also records and returns, never
+   refusing, `changed_paths_basis`, `changed_paths_count` (paths changed since
+   the base checkpoint) and, for a task with path scopes that is not a
+   coordination task, `outside_scopes` with its count: the first 20 names outside
+   them. An edit task stays pending until a distinct session accepts it.
 7. **Review.** For someone else's completed task, inspect its artifacts,
    checkpoint drift and completion tests, then call `collab_task_review` with
    `accept` or `request_changes`, a summary, evidence, and your own
-   `confidence`, `confidence_basis` and `limits`. Read the completion's
-   `outside_scopes`. The review records your `reviewer_relation` to the
+   `confidence`, `confidence_basis` and `limits`. Read `outside_scopes` in the
+   completion event (`collab_events_since` or `collab_next`), or as `changes` on
+   the completion in `collab_inbox`. It covers only changes since the latest
+   claim, takeover or handoff, so an empty list does not cover earlier rounds:
+   read the task's earlier completion events too. The review records your `reviewer_relation` to the
    reporter (`same_voice`, `declared_parent`, `declared_child`,
    `declared_sibling` or `unrelated_as_declared`), never refusing on it. A late
    reviewer concurs or disagrees by report.
@@ -395,8 +399,8 @@ Collab counts a delegate as a distinct session, so parent and child may review
 each other's work. Lineage does not make that review independent: name the
 relationship in `limits`. The review records `reviewer_relation`: `same_voice`
 through attested lineage, or a direct declared link; `unrelated_as_declared`
-means only that none was declared, not that the review is independent. A delegate ends its own session with
-`release_leases: true` before it exits.
+means only that none was declared, not that the review is independent. A delegate
+ends its own session with `release_leases: true` before it exits.
 
 ## A host that cannot commit
 

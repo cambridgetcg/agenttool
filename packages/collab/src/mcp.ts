@@ -1249,7 +1249,7 @@ export function buildCollabMcpServer(
             expected_version: input.expected_version,
             summary: input.summary,
           });
-      // Record-only: the paths the server saw changed since the base checkpoint.
+      // Record-only: what the completion event says of the paths changed since the base checkpoint.
       let changes: object = {};
       try {
         changes = state.binding && task.completion_report_id

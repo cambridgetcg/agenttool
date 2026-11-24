@@ -96,30 +96,28 @@ export function normaliseEvents(rows: EventRow[], placeholders = new Placeholder
 
 /**
  * Optional payload fields this build writes and the golden revision does not,
- * by event type. Each is present only when set, and older builds page over
- * it as over any key they do not read, so the golden comparison drops exactly
- * these from this build's rows; the harness checks they are written here and
- * never by the base.
- * - Completion events: the changed paths the server observed (record-only).
+ * by event type. Older builds page over each as over any key they do not
+ * read, so the golden comparison drops exactly these from this build's rows;
+ * the harness checks they are written here and never by the base.
+ * - Completion events: counts of the changed paths the server observed, and
+ *   the names outside the task's path scopes (record-only).
  * - Review events: the reviewer's relation to the reporter (record-only).
  */
 export const LATER_OPTIONAL_PAYLOAD_KEYS: Readonly<Record<string, readonly string[]>> = {
   "task.reported_complete": [
     "changed_paths_basis",
-    "changed_paths",
     "changed_paths_count",
     "outside_scopes",
     "outside_scopes_count",
-    "changed_paths_truncated",
+    "outside_scopes_truncated",
     "changed_paths_reason",
   ],
   "task.completed": [
     "changed_paths_basis",
-    "changed_paths",
     "changed_paths_count",
     "outside_scopes",
     "outside_scopes_count",
-    "changed_paths_truncated",
+    "outside_scopes_truncated",
     "changed_paths_reason",
   ],
   "task.accepted": ["reviewer_relation"],

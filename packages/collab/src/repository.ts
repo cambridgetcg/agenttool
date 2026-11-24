@@ -64,7 +64,7 @@ export function inspectRepository(
   rootInput: string,
   explicitRepositoryKey?: string,
   metadataOnly = false,
-  options: RepositoryProbeOptions & { portable?: boolean } = {},
+  options: RepositoryProbeOptions & { portable?: boolean; observeStatus?: StatusObserver } = {},
 ): RepositoryIdentity {
   const requested = resolve(rootInput);
   if (!existsSync(requested) || !statSync(requested).isDirectory()) {
@@ -134,7 +134,7 @@ export function inspectRepository(
     worktree_fingerprint: fingerprint,
     checkpoint: metadataOnly
       ? { worktree_id: id, head_sha: null, branch: null, dirty: null, captured_at: new Date().toISOString() }
-      : captureRepoCheckpoint(rootPath, id),
+      : captureRepoCheckpoint(rootPath, id, options.observeStatus),
   };
 }
 
@@ -188,7 +188,13 @@ export function canonicalRepositoryRemote(value: string): string | null {
   }
 }
 
-export function captureRepoCheckpoint(rootPath: string, id: string): RepoCheckpoint {
+/**
+ * Given the `git status` output a capture read last (null when Git could not),
+ * in memory only: the checkpoint itself holds no names.
+ */
+export type StatusObserver = (status: Buffer | null) => void;
+
+export function captureRepoCheckpoint(rootPath: string, id: string, observeStatus?: StatusObserver): RepoCheckpoint {
   const head = gitOutput(rootPath, ["rev-parse", "--verify", "HEAD"]);
   if (!head) {
     return {
@@ -200,8 +206,9 @@ export function captureRepoCheckpoint(rootPath: string, id: string): RepoCheckpo
     };
   }
   const branch = gitOutput(rootPath, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
-  // Do not retain or return filenames or content. The status and untracked
-  // paths are held only long enough to derive a bounded checkpoint digest.
+  // The checkpoint retains no filenames or content. The status and untracked
+  // paths are held only long enough to derive a bounded checkpoint digest and,
+  // for a caller that asks, to hand it the status in memory.
   const pathStateBefore = gitBytes(rootPath, [
     "status",
     "--porcelain=v1",
@@ -231,6 +238,7 @@ export function captureRepoCheckpoint(rootPath: string, id: string): RepoCheckpo
     "-z",
     "--untracked-files=all",
   ]);
+  observeStatus?.(pathStateAfter.ok ? pathStateAfter.stdout : null);
   const stablePathState =
     pathStateBefore.ok
     && pathStateAfter.ok
@@ -258,61 +266,89 @@ export function captureRepoCheckpoint(rootPath: string, id: string): RepoCheckpo
 
 /**
  * The paths a worktree has changed since a base commit, as the server's own
- * Git sees them: tracked changes against that commit (staged or not, deleted
- * included; a rename is both its paths) plus untracked files that are not
- * ignored; an untracked nested repository is one name ending in `/`. Names
- * only, decoded as UTF-8; no content is returned or kept. Read-only, bounded
- * like the checkpoint capture, and run outside any SQLite transaction, so the
- * worktree can change between this observation and the write that records it.
+ * Git saw them: what the checkpoint capture's own `git status` listed (staged,
+ * unstaged, deleted, both sides of a rename, and untracked files that are not
+ * ignored; an untracked nested repository is one name ending in `/`) and, only
+ * when HEAD is no longer the base, the paths that differ between the two
+ * commits. A synchronous spawn can stall this process (cf3a05bb), so an unmoved
+ * HEAD costs no child of its own and a moved one costs one. Names only, decoded
+ * as UTF-8; no content is returned or kept. Run outside any SQLite transaction,
+ * so the worktree can change between this observation and the write.
  */
 export type ChangedPathsObservation =
   | { ok: true; paths: string[] }
   | { ok: false; reason: string };
 
-export function observeChangedPaths(rootPath: string, baseHeadSha: string): ChangedPathsObservation {
-  if (!GIT_OBJECT_ID.test(baseHeadSha)) {
-    return { ok: false, reason: "The base checkpoint's HEAD is not a Git object ID" };
+export function observeChangedPaths(
+  rootPath: string,
+  baseHeadSha: string,
+  headSha: string,
+  /** `git status --porcelain=v1 -z` as the capture read it; null when it could not. */
+  status: Buffer | null,
+  options: RepositoryProbeOptions = {},
+): ChangedPathsObservation {
+  if (!GIT_OBJECT_ID.test(baseHeadSha) || !GIT_OBJECT_ID.test(headSha)) {
+    return { ok: false, reason: "The base checkpoint's HEAD or the current HEAD is not a Git object ID" };
   }
-  // No index refresh is written and no missing object is fetched for a record.
-  const env = { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1" };
-  // Two children only, and none to check the base first: a synchronous spawn
-  // can stall this process (cf3a05bb), and a missing base fails the diff itself.
-  const tracked = gitBytes(rootPath, [
-    "diff",
-    "--no-ext-diff",
-    "--no-textconv",
-    "--no-renames",
-    "--ignore-submodules=none",
-    "--name-only",
-    "-z",
-    baseHeadSha,
-    "--",
-  ], MAX_GIT_OUTPUT, env);
-  if (!tracked.ok) {
-    return {
-      ok: false,
-      reason: "Git could not list the changes since the base checkpoint's HEAD: that commit is missing, or a bound was exceeded",
-    };
-  }
-  const untracked = gitBytes(rootPath, [
-    "ls-files",
-    "--others",
-    "--exclude-standard",
-    "-z",
-  ], MAX_GIT_OUTPUT, env);
-  if (!untracked.ok) {
-    return { ok: false, reason: "Git could not list the untracked paths within its bounds" };
-  }
-  const paths = new Set<string>();
-  for (const listing of [tracked.stdout, untracked.stdout]) {
-    // `-z` ends every name with NUL, as splitNul requires.
-    const entries = splitNul(listing);
-    if (!entries || entries.some((entry) => !safeGitRelativePath(withoutTrailingSlash(entry)))) {
-      return { ok: false, reason: "Git reported a changed path that cannot be read safely" };
+  if (!status) return { ok: false, reason: "Git could not list the worktree's status within its bounds" };
+  const listed = porcelainPaths(status);
+  let committed: Buffer[] | null = [];
+  if (baseHeadSha !== headSha) {
+    const diff = spawnRepositoryGit([
+      "-C",
+      rootPath,
+      "diff",
+      "--no-ext-diff",
+      "--no-textconv",
+      "--no-renames",
+      "--ignore-submodules=none",
+      "--name-only",
+      "-z",
+      `${baseHeadSha}..${headSha}`,
+      "--",
+    ], {
+      timeout: gitTimeout(options),
+      maxBuffer: MAX_GIT_OUTPUT,
+      stdio: ["ignore", "pipe", "ignore"],
+      // No index refresh is written and no missing object is fetched for a record.
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1" },
+    }, options);
+    if (diff.status !== 0 || spawnFailed(diff) || !Buffer.isBuffer(diff.stdout)) {
+      return {
+        ok: false,
+        reason: "Git could not list the changes since the base checkpoint's HEAD: that commit is missing, or a bound was exceeded",
+      };
     }
-    for (const entry of entries) paths.add(entry.toString("utf8"));
+    committed = splitNul(diff.stdout);
   }
-  return { ok: true, paths: [...paths].sort() };
+  const entries = listed && committed ? [...listed, ...committed] : null;
+  if (!entries || entries.some((entry) => !safeGitRelativePath(withoutTrailingSlash(entry)))) {
+    return { ok: false, reason: "Git reported a changed path that cannot be read safely" };
+  }
+  return { ok: true, paths: [...new Set(entries.map((entry) => entry.toString("utf8")))].sort() };
+}
+
+const PORCELAIN_CODE = /^[ MTADRCU?]{2} $/;
+
+/** The paths a `git status --porcelain=v1 -z` output names; null when it does not read as one. */
+function porcelainPaths(status: Buffer): Buffer[] | null {
+  const fields = splitNul(status);
+  if (!fields) return null;
+  const paths: Buffer[] = [];
+  for (let index = 0; index < fields.length; index += 1) {
+    const field = fields[index]!;
+    const code = field.subarray(0, 3).toString("latin1");
+    if (!PORCELAIN_CODE.test(code)) return null;
+    paths.push(field.subarray(3));
+    // A rename or a copy is followed by the path it came from; a copy's source did not change.
+    if (/[RC]/.test(code)) {
+      index += 1;
+      const source = fields[index];
+      if (!source) return null;
+      if (code.includes("R")) paths.push(source);
+    }
+  }
+  return paths;
 }
 
 /**
@@ -597,13 +633,11 @@ function gitBytes(
   rootPath: string,
   args: string[],
   maxBuffer = MAX_GIT_OUTPUT,
-  env?: NodeJS.ProcessEnv,
 ): { ok: boolean; stdout: Buffer } {
   const result = spawnSync("git", ["-C", rootPath, ...args], {
     timeout: GIT_TIMEOUT_MS,
     maxBuffer,
     stdio: ["ignore", "pipe", "ignore"],
-    ...(env ? { env } : {}),
   });
   return {
     ok: result.status === 0 && !spawnFailed(result),

@@ -157,13 +157,14 @@ do not guess other prefixed names.
 6. **Complete.** Call `mcp_agenttool_collab_task_complete` with a summary,
    `confidence`, `confidence_basis`, `limits` and `evidence_refs`, optionally
    naming `review_requested_session_id`. It records and returns, never
-   refusing, the paths changed since the base checkpoint and those
-   `outside_scopes`.
+   refusing, how many paths changed since the base checkpoint and the first
+   names outside the task's scopes (`outside_scopes`).
 7. **Review.** Require a distinct bound session to inspect the evidence and
    call `mcp_agenttool_collab_task_review` with its own `confidence`,
    `confidence_basis` and `limits`. It records `reviewer_relation`;
-   `unrelated_as_declared` is not proven independence. A late reviewer
-   concurs or disagrees by report.
+   `unrelated_as_declared` is not proven independence. `outside_scopes`
+   covers only the latest claim, takeover or handoff, so read earlier
+   completions too. A late reviewer concurs or disagrees by report.
 8. **End or rest.** Call `mcp_agenttool_collab_session_end` with a `reason`,
    `release_leases: true` and an optional `release_summary` when the host knows
    this session will not resume, or declare rest with

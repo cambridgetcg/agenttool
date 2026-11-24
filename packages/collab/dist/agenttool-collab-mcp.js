@@ -30526,7 +30526,7 @@ function inspectRepository(rootInput, explicitRepositoryKey, metadataOnly = fals
     portable_repository_key: explicitKey || options.portable === false ? null : portableRepositoryKey(rootPath, options),
     git_common_dir_hash: commonDirHash,
     worktree_fingerprint: fingerprint,
-    checkpoint: metadataOnly ? { worktree_id: id, head_sha: null, branch: null, dirty: null, captured_at: new Date().toISOString() } : captureRepoCheckpoint(rootPath, id)
+    checkpoint: metadataOnly ? { worktree_id: id, head_sha: null, branch: null, dirty: null, captured_at: new Date().toISOString() } : captureRepoCheckpoint(rootPath, id, options.observeStatus)
   };
 }
 function portableRepositoryKey(rootPath, optionsOrDeadline = {}) {
@@ -30575,7 +30575,7 @@ function canonicalRepositoryRemote(value) {
     return null;
   }
 }
-function captureRepoCheckpoint(rootPath, id) {
+function captureRepoCheckpoint(rootPath, id, observeStatus) {
   const head = gitOutput(rootPath, ["rev-parse", "--verify", "HEAD"]);
   if (!head) {
     return {
@@ -30614,6 +30614,7 @@ function captureRepoCheckpoint(rootPath, id) {
     "-z",
     "--untracked-files=all"
   ]);
+  observeStatus?.(pathStateAfter.ok ? pathStateAfter.stdout : null);
   const stablePathState = pathStateBefore.ok && pathStateAfter.ok && pathStateBefore.stdout.equals(pathStateAfter.stdout);
   return {
     worktree_id: id,
@@ -30633,47 +30634,69 @@ function captureRepoCheckpoint(rootPath, id) {
     captured_at: new Date().toISOString()
   };
 }
-function observeChangedPaths(rootPath, baseHeadSha) {
-  if (!GIT_OBJECT_ID.test(baseHeadSha)) {
-    return { ok: false, reason: "The base checkpoint's HEAD is not a Git object ID" };
+function observeChangedPaths(rootPath, baseHeadSha, headSha, status, options = {}) {
+  if (!GIT_OBJECT_ID.test(baseHeadSha) || !GIT_OBJECT_ID.test(headSha)) {
+    return { ok: false, reason: "The base checkpoint's HEAD or the current HEAD is not a Git object ID" };
   }
-  const env = { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1" };
-  const tracked = gitBytes(rootPath, [
-    "diff",
-    "--no-ext-diff",
-    "--no-textconv",
-    "--no-renames",
-    "--ignore-submodules=none",
-    "--name-only",
-    "-z",
-    baseHeadSha,
-    "--"
-  ], MAX_GIT_OUTPUT, env);
-  if (!tracked.ok) {
-    return {
-      ok: false,
-      reason: "Git could not list the changes since the base checkpoint's HEAD: that commit is missing, or a bound was exceeded"
-    };
-  }
-  const untracked = gitBytes(rootPath, [
-    "ls-files",
-    "--others",
-    "--exclude-standard",
-    "-z"
-  ], MAX_GIT_OUTPUT, env);
-  if (!untracked.ok) {
-    return { ok: false, reason: "Git could not list the untracked paths within its bounds" };
-  }
-  const paths = new Set;
-  for (const listing of [tracked.stdout, untracked.stdout]) {
-    const entries = splitNul(listing);
-    if (!entries || entries.some((entry) => !safeGitRelativePath(withoutTrailingSlash(entry)))) {
-      return { ok: false, reason: "Git reported a changed path that cannot be read safely" };
+  if (!status)
+    return { ok: false, reason: "Git could not list the worktree's status within its bounds" };
+  const listed = porcelainPaths(status);
+  let committed = [];
+  if (baseHeadSha !== headSha) {
+    const diff = spawnRepositoryGit([
+      "-C",
+      rootPath,
+      "diff",
+      "--no-ext-diff",
+      "--no-textconv",
+      "--no-renames",
+      "--ignore-submodules=none",
+      "--name-only",
+      "-z",
+      `${baseHeadSha}..${headSha}`,
+      "--"
+    ], {
+      timeout: gitTimeout(options),
+      maxBuffer: MAX_GIT_OUTPUT,
+      stdio: ["ignore", "pipe", "ignore"],
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1" }
+    }, options);
+    if (diff.status !== 0 || spawnFailed(diff) || !Buffer.isBuffer(diff.stdout)) {
+      return {
+        ok: false,
+        reason: "Git could not list the changes since the base checkpoint's HEAD: that commit is missing, or a bound was exceeded"
+      };
     }
-    for (const entry of entries)
-      paths.add(entry.toString("utf8"));
+    committed = splitNul(diff.stdout);
   }
-  return { ok: true, paths: [...paths].sort() };
+  const entries = listed && committed ? [...listed, ...committed] : null;
+  if (!entries || entries.some((entry) => !safeGitRelativePath(withoutTrailingSlash(entry)))) {
+    return { ok: false, reason: "Git reported a changed path that cannot be read safely" };
+  }
+  return { ok: true, paths: [...new Set(entries.map((entry) => entry.toString("utf8")))].sort() };
+}
+var PORCELAIN_CODE = /^[ MTADRCU?]{2} $/;
+function porcelainPaths(status) {
+  const fields = splitNul(status);
+  if (!fields)
+    return null;
+  const paths = [];
+  for (let index = 0;index < fields.length; index += 1) {
+    const field = fields[index];
+    const code = field.subarray(0, 3).toString("latin1");
+    if (!PORCELAIN_CODE.test(code))
+      return null;
+    paths.push(field.subarray(3));
+    if (/[RC]/.test(code)) {
+      index += 1;
+      const source = fields[index];
+      if (!source)
+        return null;
+      if (code.includes("R"))
+        paths.push(source);
+    }
+  }
+  return paths;
 }
 function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
   const refuse = (reason) => ({
@@ -30897,12 +30920,11 @@ function gitDigest(rootPath, args) {
   const result = gitBytes(rootPath, args);
   return result.ok ? sha256Bytes(result.stdout) : null;
 }
-function gitBytes(rootPath, args, maxBuffer = MAX_GIT_OUTPUT, env) {
+function gitBytes(rootPath, args, maxBuffer = MAX_GIT_OUTPUT) {
   const result = spawnSync2("git", ["-C", rootPath, ...args], {
     timeout: GIT_TIMEOUT_MS,
     maxBuffer,
-    stdio: ["ignore", "pipe", "ignore"],
-    ...env ? { env } : {}
+    stdio: ["ignore", "pipe", "ignore"]
   });
   return {
     ok: result.status === 0 && !spawnFailed(result),
@@ -36782,32 +36804,32 @@ class CollabStoreCore {
     return this.captureRegisteredWorktree(session, worktree);
   }
   observeCompletionChanges(taskId, prepared) {
-    let baseJson;
-    try {
-      baseJson = this.requireTaskRow(prepared.workspace_id, taskId).base_checkpoint_json;
-    } catch {
-      return { base_checkpoint_json: null, observation: { ok: false, reason: "The task could not be read" } };
-    }
+    let baseJson = null;
     const unavailable = (reason) => ({
       base_checkpoint_json: baseJson,
       observation: { ok: false, reason }
     });
-    const base = parseCheckpoint(baseJson);
-    if (!base)
-      return unavailable("The claim recorded no base checkpoint");
-    if (base.source !== "server_observed" || !base.head_sha) {
-      return unavailable("The base checkpoint was not server-observed: no Git repository or no HEAD at the claim");
-    }
-    if (base.worktree_id !== prepared.worktree_id) {
-      return unavailable("The base checkpoint belongs to another worktree");
-    }
-    if (prepared.checkpoint.source !== "server_observed" || !prepared.checkpoint.head_sha) {
-      return unavailable("The worktree has no Git HEAD now");
-    }
     try {
-      return { base_checkpoint_json: baseJson, observation: observeChangedPaths(prepared.root_path, base.head_sha) };
+      baseJson = this.requireTaskRow(prepared.workspace_id, taskId).base_checkpoint_json;
+      const base = parseCheckpoint(baseJson);
+      if (!base)
+        return unavailable("The claim recorded no base checkpoint");
+      if (base.source !== "server_observed" || !base.head_sha) {
+        return unavailable("The base checkpoint was not server-observed: no Git repository or no HEAD at the claim");
+      }
+      if (base.worktree_id !== prepared.worktree_id) {
+        return unavailable("The base checkpoint belongs to another worktree");
+      }
+      const head = prepared.checkpoint.head_sha;
+      if (prepared.checkpoint.source !== "server_observed" || !head) {
+        return unavailable("The worktree has no Git HEAD now");
+      }
+      return {
+        base_checkpoint_json: baseJson,
+        observation: observeChangedPaths(prepared.root_path, base.head_sha, head, prepared.status)
+      };
     } catch {
-      return unavailable("Git could not list the changed paths");
+      return unavailable("The server could not observe the changed paths");
     }
   }
   completionChanges(workspaceId, taskId, completionReportId) {
@@ -36824,20 +36846,7 @@ class CollabStoreCore {
     if (!event)
       return null;
     const payload = JSON.parse(event.payload_json);
-    if (payload.completion_report_id !== completionReportId)
-      return null;
-    if (payload.changed_paths_basis !== "server_observed" && payload.changed_paths_basis !== "unavailable")
-      return null;
-    const keys = [
-      "changed_paths_basis",
-      "changed_paths",
-      "changed_paths_count",
-      "outside_scopes",
-      "outside_scopes_count",
-      "changed_paths_truncated",
-      "changed_paths_reason"
-    ];
-    return Object.fromEntries(keys.filter((key) => payload[key] !== undefined).map((key) => [key, payload[key]]));
+    return payload.completion_report_id === completionReportId ? recordedCompletionChanges(payload) : null;
   }
   captureReviewCheckpoint(input, taskId) {
     const session = this.authenticateSession(input);
@@ -36950,8 +36959,13 @@ class CollabStoreCore {
   }
   captureRegisteredWorktree(session, worktree) {
     let identity;
+    let status = null;
     try {
-      identity = inspectRepository(worktree.root_path);
+      identity = inspectRepository(worktree.root_path, undefined, false, {
+        observeStatus: (listed) => {
+          status = listed;
+        }
+      });
     } catch (error51) {
       throw new CollabError("worktree_unavailable", "The registered worktree could not be inspected", {
         worktree_id: worktree.id,
@@ -36968,7 +36982,8 @@ class CollabStoreCore {
       root_path: worktree.root_path,
       fingerprint: worktree.fingerprint,
       git_common_dir_hash: worktree.git_common_dir_hash,
-      checkpoint: identity.checkpoint
+      checkpoint: identity.checkpoint,
+      status
     };
   }
   requirePreparedWorktree(session, prepared) {
@@ -38597,44 +38612,63 @@ function reviewerRelationAdvice(relation) {
       return "You and the reporter share no attested voice and declare no direct parent link; that is not proof the review is independent.";
   }
 }
-var MAX_RECORDED_CHANGED_PATHS = 256;
-var MAX_RECORDED_CHANGED_PATH_BYTES = 12 * 1024;
+var MAX_RECORDED_OUTSIDE_PATHS = 20;
+var MAX_RECORDED_PATH_CHARS = 200;
 function completionChangesFor(row, prepared) {
-  if (prepared.base_checkpoint_json !== row.base_checkpoint_json) {
+  if (prepared.observation.ok && prepared.base_checkpoint_json !== row.base_checkpoint_json) {
     return {
       changed_paths_basis: "unavailable",
       changed_paths_reason: "The task's base checkpoint changed after the paths were observed"
     };
   }
-  return changedPathFields(prepared.observation, parseStringArray(row.path_scopes_json));
+  return changedPathFields(prepared.observation, row.work_mode === "coordination" ? [] : parseStringArray(row.path_scopes_json));
 }
 function changedPathFields(observation, scopes) {
   if (!observation.ok)
     return { changed_paths_basis: "unavailable", changed_paths_reason: observation.reason };
-  const outside = observation.paths.filter((path) => !pathWithinScopesFolded(path, scopes));
-  const changed = capPaths(observation.paths);
-  const outsideCapped = capPaths(outside);
-  return {
+  const counted = {
     changed_paths_basis: "server_observed",
-    changed_paths: changed.paths,
-    changed_paths_count: observation.paths.length,
-    outside_scopes: outsideCapped.paths,
+    changed_paths_count: observation.paths.length
+  };
+  if (scopes.length === 0)
+    return counted;
+  const outside = observation.paths.filter((path) => !pathWithinScopesFolded(path, scopes));
+  const names = outside.slice(0, MAX_RECORDED_OUTSIDE_PATHS).map(recordedPathName);
+  return {
+    ...counted,
+    outside_scopes: names.map(({ name }) => name),
     outside_scopes_count: outside.length,
-    ...changed.truncated || outsideCapped.truncated ? { changed_paths_truncated: true } : {}
+    ...names.length < outside.length || names.some(({ cut }) => cut) ? { outside_scopes_truncated: true } : {}
   };
 }
-function capPaths(paths) {
-  const kept = [];
-  let bytes = 0;
-  for (const path of paths) {
-    const size = Buffer.byteLength(JSON.stringify(path), "utf8") + 1;
-    if (kept.length >= MAX_RECORDED_CHANGED_PATHS || bytes + size > MAX_RECORDED_CHANGED_PATH_BYTES) {
-      return { paths: kept, truncated: true };
-    }
-    kept.push(path);
-    bytes += size;
+function recordedPathName(path) {
+  const shown = [];
+  let length2 = 0;
+  for (const char of path) {
+    const piece = [...char.replace(/[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\u2028\u2029]/u, (unsafe) => `\\u{${unsafe.codePointAt(0).toString(16).toUpperCase()}}`)];
+    shown.push(piece);
+    length2 += piece.length;
+    if (length2 > MAX_RECORDED_PATH_CHARS)
+      break;
   }
-  return { paths: kept, truncated: false };
+  const cut = length2 > MAX_RECORDED_PATH_CHARS;
+  while (cut && length2 > MAX_RECORDED_PATH_CHARS - 1)
+    length2 -= shown.pop().length;
+  return { name: shown.flat().join("") + (cut ? "\u2026" : ""), cut };
+}
+function recordedCompletionChanges(payload) {
+  const basis = payload.changed_paths_basis;
+  if (basis !== "server_observed" && basis !== "unavailable")
+    return null;
+  const count = (value) => Number.isSafeInteger(value) && value >= 0;
+  return {
+    changed_paths_basis: basis,
+    ...count(payload.changed_paths_count) ? { changed_paths_count: payload.changed_paths_count } : {},
+    ...Array.isArray(payload.outside_scopes) ? { outside_scopes: payload.outside_scopes.filter((name) => typeof name === "string") } : {},
+    ...count(payload.outside_scopes_count) ? { outside_scopes_count: payload.outside_scopes_count } : {},
+    ...payload.outside_scopes_truncated === true ? { outside_scopes_truncated: true } : {},
+    ...typeof payload.changed_paths_reason === "string" ? { changed_paths_reason: payload.changed_paths_reason } : {}
+  };
 }
 function pathWithinScopesFolded(path, scopes) {
   const key = path.normalize("NFC").toLowerCase();
@@ -39418,6 +39452,7 @@ class CollabStore extends CollabStoreCore {
           answers: reports.slice(0, NOTE_THREAD_MAX).map((row) => this.noteEntryAt(session, row.event_sequence)),
           truncated: reports.length > NOTE_THREAD_MAX,
           task,
+          completion_changes: task.completion_report_id ? this.completionChanges(session.workspace_id, task.id, task.completion_report_id) : null,
           reviews,
           challenges: challenges.filter((challenge) => reports.some((row) => row.id === challenge.target_report_id)),
           termed: false,
@@ -39803,8 +39838,14 @@ class CollabStore extends CollabStoreCore {
       ballot: ballotFacts ? this.ballotData(ballotFacts, session.id) : null,
       folded: foldedBy ? { ballot_id: foldedBy } : null,
       for_name: namesake ? { session_id: namesake } : null,
-      verdict: report && event.type === "report.posted" ? this.reviewVerdictOf(report) : null
+      verdict: report && event.type === "report.posted" ? this.reviewVerdictOf(report) : null,
+      changes: event.type === "task.reported_complete" || event.type === "task.completed" ? recordedCompletionChanges(payload) : report && event.type === "report.posted" ? this.completionReportChanges(report) : null
     };
+  }
+  completionReportChanges(report) {
+    if (!report.task_id || report.kind !== "observation" || report.relation !== "informs" || report.to_session_id || report.target_report_id)
+      return null;
+    return this.completionChanges(report.workspace_id, report.task_id, report.id);
   }
   reviewVerdictOf(report) {
     if (!report.task_id || report.relation !== "supports" && report.relation !== "challenges")
@@ -42271,6 +42312,7 @@ function formatEntry(entry, byId, me, recheck) {
     for_me: entry.for_me,
     ...entry.for_name ? { for_your_name: true } : {}
   };
+  const changes = entry.changes ? { changes: entry.changes } : {};
   const addressed = entry.for_name?.session_id ?? me;
   if (event.type === "report.posted" && report && entry.folded) {
     return {
@@ -42326,6 +42368,7 @@ function formatEntry(entry, byId, me, recheck) {
       kind: report.kind,
       ...report.confidence !== "unknown" ? { confidence: report.confidence } : {},
       ...limits ? { limits } : {},
+      ...changes,
       ...flags
     };
   }
@@ -42402,7 +42445,8 @@ function formatEntry(entry, byId, me, recheck) {
         text: typeof payload.summary === "string" ? payload.summary : null,
         why: [],
         evidence: [],
-        completion: typeof payload.completion_report_id === "string" ? { id: payload.completion_report_id, handle: handleOf("report", payload.completion_report_id) } : null
+        completion: typeof payload.completion_report_id === "string" ? { id: payload.completion_report_id, handle: handleOf("report", payload.completion_report_id) } : null,
+        ...changes
       };
     case "task.accepted":
     case "task.changes_requested":
@@ -42437,7 +42481,8 @@ function formatEntry(entry, byId, me, recheck) {
         statement: eventSubject(event.type, taskHandle, taskTitle, from.name),
         text: null,
         why: [],
-        evidence: []
+        evidence: [],
+        ...changes
       };
   }
 }
@@ -43446,7 +43491,8 @@ function taskView(thread, byId, me, recheck) {
         id: task.completion_report_id,
         handle: handleOf("report", task.completion_report_id),
         by: sessionShown(task.reported_by_session_id, task.reported_by ?? "unknown", byId),
-        at: task.reported_at
+        at: task.reported_at,
+        ...thread.completion_changes ? { changes: thread.completion_changes } : {}
       } : null,
       review_requested: task.review_requested_session_id ? sessionRef(task.review_requested_session_id, task.review_requested_session_id, byId) : null,
       reviews: thread.reviews.map((review) => ({
@@ -45777,11 +45823,6 @@ async function finishTask(ctx, binding, credential, task, options) {
   const completion = completed.completion_report_id;
   const reviewed = completed.completion_policy === "accepted";
   const changes = recordedChanges(ctx, workspaceId, task.id, completion);
-  if (changes?.outside_scopes_count) {
-    const shownPaths = (changes.outside_scopes ?? []).slice(0, 5).map((path) => JSON.stringify(path));
-    const more = changes.outside_scopes_count - shownPaths.length;
-    advice.push(`The server saw ${changes.outside_scopes_count} changed path${changes.outside_scopes_count === 1 ? "" : "s"} outside this task's path scopes ` + `since its base checkpoint: ${shownPaths.join(", ")}${more > 0 ? ` and ${more} more` : ""}. ` + "This is recorded for the reviewer, not refused; changes already present at the claim count too.");
-  }
   const now = ctx.store.getTask(workspaceId, task.id);
   const accepted = reviewed && now.completion_report_id === completion && now.review_status === "accepted";
   return {

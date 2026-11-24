@@ -325,6 +325,8 @@ interface PreparedWorktreeCheckpoint {
   fingerprint: string;
   git_common_dir_hash: string | null;
   checkpoint: RepoCheckpoint;
+  /** The `git status` the capture read, for a completion's changed paths; never stored. */
+  status: Buffer | null;
 }
 
 interface PreparedCompletionChanges {
@@ -3491,7 +3493,8 @@ export class CollabStoreCore {
             ...(reviewRequestedSessionId
               ? { review_requested_session_id: reviewRequestedSessionId }
               : {}),
-            // Optional fields, record-only: what the worktree changed since the base.
+            // Optional fields, record-only: counts of what the worktree changed
+            // since the base, and the names outside the task's path scopes.
             ...changes,
           },
           session.id,
@@ -6606,45 +6609,46 @@ export class CollabStoreCore {
   /**
    * The paths the completing worktree changed since the task's base
    * checkpoint, observed before the write transaction. It never refuses: any
-   * gap becomes an `unavailable` basis with a reason. The transaction checks
-   * that the base it read is still the task's base.
+   * gap, and anything that throws, becomes an `unavailable` basis with a
+   * reason. The transaction checks that the base read here is still the task's.
    */
   private observeCompletionChanges(
     taskId: string,
     prepared: PreparedWorktreeCheckpoint,
   ): PreparedCompletionChanges {
-    let baseJson: string | null;
-    try {
-      baseJson = this.requireTaskRow(prepared.workspace_id, taskId).base_checkpoint_json;
-    } catch {
-      return { base_checkpoint_json: null, observation: { ok: false, reason: "The task could not be read" } };
-    }
+    let baseJson: string | null = null;
     const unavailable = (reason: string): PreparedCompletionChanges => ({
       base_checkpoint_json: baseJson,
       observation: { ok: false, reason },
     });
-    const base = parseCheckpoint(baseJson);
-    if (!base) return unavailable("The claim recorded no base checkpoint");
-    if (base.source !== "server_observed" || !base.head_sha) {
-      return unavailable("The base checkpoint was not server-observed: no Git repository or no HEAD at the claim");
-    }
-    if (base.worktree_id !== prepared.worktree_id) {
-      return unavailable("The base checkpoint belongs to another worktree");
-    }
-    if (prepared.checkpoint.source !== "server_observed" || !prepared.checkpoint.head_sha) {
-      return unavailable("The worktree has no Git HEAD now");
-    }
     try {
-      return { base_checkpoint_json: baseJson, observation: observeChangedPaths(prepared.root_path, base.head_sha) };
+      baseJson = this.requireTaskRow(prepared.workspace_id, taskId).base_checkpoint_json;
+      const base = parseCheckpoint(baseJson);
+      if (!base) return unavailable("The claim recorded no base checkpoint");
+      if (base.source !== "server_observed" || !base.head_sha) {
+        return unavailable("The base checkpoint was not server-observed: no Git repository or no HEAD at the claim");
+      }
+      if (base.worktree_id !== prepared.worktree_id) {
+        return unavailable("The base checkpoint belongs to another worktree");
+      }
+      const head = prepared.checkpoint.head_sha;
+      if (prepared.checkpoint.source !== "server_observed" || !head) {
+        return unavailable("The worktree has no Git HEAD now");
+      }
+      return {
+        base_checkpoint_json: baseJson,
+        observation: observeChangedPaths(prepared.root_path, base.head_sha, head, prepared.status),
+      };
     } catch {
-      return unavailable("Git could not list the changed paths");
+      return unavailable("The server could not observe the changed paths");
     }
   }
 
   /**
    * What a completion recorded about its changed paths, read from the
    * completion event of `completionReportId`; null when that completion
-   * recorded none (an older build wrote it, or it is not this task's).
+   * recorded none (an older build wrote it), or no completion of this task
+   * has that report.
    */
   completionChanges(workspaceId: string, taskId: string, completionReportId: string): CompletionChanges | null {
     const completion = this.db.query(`SELECT event_sequence FROM reports WHERE id = ? AND workspace_id = ?`)
@@ -6660,19 +6664,7 @@ export class CollabStoreCore {
     `).get(workspaceId, completion.event_sequence, taskId) as { payload_json: string } | null;
     if (!event) return null;
     const payload = JSON.parse(event.payload_json) as Record<string, unknown>;
-    if (payload.completion_report_id !== completionReportId) return null;
-    if (payload.changed_paths_basis !== "server_observed" && payload.changed_paths_basis !== "unavailable") return null;
-    const keys = [
-      "changed_paths_basis",
-      "changed_paths",
-      "changed_paths_count",
-      "outside_scopes",
-      "outside_scopes_count",
-      "changed_paths_truncated",
-      "changed_paths_reason",
-    ] as const;
-    return Object.fromEntries(keys.filter((key) => payload[key] !== undefined)
-      .map((key) => [key, payload[key]])) as unknown as CompletionChanges;
+    return payload.completion_report_id === completionReportId ? recordedCompletionChanges(payload) : null;
   }
 
   private captureReviewCheckpoint(
@@ -6822,8 +6814,11 @@ export class CollabStoreCore {
     worktree: WorktreeRow,
   ): PreparedWorktreeCheckpoint {
     let identity: RepositoryIdentity;
+    let status: Buffer | null = null;
     try {
-      identity = inspectRepository(worktree.root_path);
+      identity = inspectRepository(worktree.root_path, undefined, false, {
+        observeStatus: (listed) => { status = listed; },
+      });
     } catch (error) {
       throw new CollabError(
         "worktree_unavailable",
@@ -6854,6 +6849,7 @@ export class CollabStoreCore {
       fingerprint: worktree.fingerprint,
       git_common_dir_hash: worktree.git_common_dir_hash,
       checkpoint: identity.checkpoint,
+      status,
     };
   }
 
@@ -9402,51 +9398,82 @@ export function reviewerRelationAdvice(relation: ReviewerRelation): string {
 }
 
 /**
- * The most paths each recorded list holds, and the bytes it may take as JSON:
- * escapes included, so a name full of control characters cannot outgrow it.
- * Two lists at most 24 KiB together leave the payload well under 64 KiB.
+ * The most outside_scopes names a completion records, and the most characters
+ * each may take, escapes and the ellipsis of a cut name included. The journal
+ * is permanent and every reader sees it, so it never holds the whole list.
  */
-export const MAX_RECORDED_CHANGED_PATHS = 256;
-export const MAX_RECORDED_CHANGED_PATH_BYTES = 12 * 1024;
+export const MAX_RECORDED_OUTSIDE_PATHS = 20;
+export const MAX_RECORDED_PATH_CHARS = 200;
 
 /** The completion event's optional changed-path fields. */
 function completionChangesFor(row: TaskRow, prepared: PreparedCompletionChanges): CompletionChanges {
-  if (prepared.base_checkpoint_json !== row.base_checkpoint_json) {
+  if (prepared.observation.ok && prepared.base_checkpoint_json !== row.base_checkpoint_json) {
     return {
       changed_paths_basis: "unavailable",
       changed_paths_reason: "The task's base checkpoint changed after the paths were observed",
     };
   }
-  return changedPathFields(prepared.observation, parseStringArray(row.path_scopes_json));
+  // A coordination task's work is not bounded by paths, whether or not it names some.
+  return changedPathFields(
+    prepared.observation,
+    row.work_mode === "coordination" ? [] : parseStringArray(row.path_scopes_json),
+  );
 }
 
+/** Without path scopes nothing is inside or outside, so outside_scopes and its count are left out. */
 export function changedPathFields(observation: ChangedPathsObservation, scopes: string[]): CompletionChanges {
   if (!observation.ok) return { changed_paths_basis: "unavailable", changed_paths_reason: observation.reason };
-  const outside = observation.paths.filter((path) => !pathWithinScopesFolded(path, scopes));
-  const changed = capPaths(observation.paths);
-  const outsideCapped = capPaths(outside);
-  return {
-    changed_paths_basis: "server_observed",
-    changed_paths: changed.paths,
+  const counted = {
+    changed_paths_basis: "server_observed" as const,
     changed_paths_count: observation.paths.length,
-    outside_scopes: outsideCapped.paths,
+  };
+  if (scopes.length === 0) return counted;
+  const outside = observation.paths.filter((path) => !pathWithinScopesFolded(path, scopes));
+  const names = outside.slice(0, MAX_RECORDED_OUTSIDE_PATHS).map(recordedPathName);
+  return {
+    ...counted,
+    outside_scopes: names.map(({ name }) => name),
     outside_scopes_count: outside.length,
-    ...(changed.truncated || outsideCapped.truncated ? { changed_paths_truncated: true as const } : {}),
+    ...(names.length < outside.length || names.some(({ cut }) => cut) ? { outside_scopes_truncated: true as const } : {}),
   };
 }
 
-function capPaths(paths: string[]): { paths: string[]; truncated: boolean } {
-  const kept: string[] = [];
-  let bytes = 0;
-  for (const path of paths) {
-    const size = Buffer.byteLength(JSON.stringify(path), "utf8") + 1;
-    if (kept.length >= MAX_RECORDED_CHANGED_PATHS || bytes + size > MAX_RECORDED_CHANGED_PATH_BYTES) {
-      return { paths: kept, truncated: true };
-    }
-    kept.push(path);
-    bytes += size;
+/**
+ * A path as the journal holds it. A file name is the worktree's text, not the
+ * server's: control, line-breaking, bidirectional, zero-width and other
+ * invisible characters become `\u{…}`, so a name cannot hide or reorder what
+ * a reader sees, and a long name is cut between whole characters and escapes.
+ */
+export function recordedPathName(path: string): { name: string; cut: boolean } {
+  const shown: string[][] = [];
+  let length = 0;
+  for (const char of path) {
+    const piece = [...char.replace(/[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\u2028\u2029]/u, (unsafe) =>
+      `\\u{${unsafe.codePointAt(0)!.toString(16).toUpperCase()}}`)];
+    shown.push(piece);
+    length += piece.length;
+    if (length > MAX_RECORDED_PATH_CHARS) break;
   }
-  return { paths: kept, truncated: false };
+  const cut = length > MAX_RECORDED_PATH_CHARS;
+  while (cut && length > MAX_RECORDED_PATH_CHARS - 1) length -= shown.pop()!.length;
+  return { name: shown.flat().join("") + (cut ? "…" : ""), cut };
+}
+
+/** The changed-path fields a completion event's payload carries; null when it carries none. */
+export function recordedCompletionChanges(payload: Record<string, unknown>): CompletionChanges | null {
+  const basis = payload.changed_paths_basis;
+  if (basis !== "server_observed" && basis !== "unavailable") return null;
+  const count = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
+  return {
+    changed_paths_basis: basis,
+    ...(count(payload.changed_paths_count) ? { changed_paths_count: payload.changed_paths_count } : {}),
+    ...(Array.isArray(payload.outside_scopes)
+      ? { outside_scopes: payload.outside_scopes.filter((name): name is string => typeof name === "string") }
+      : {}),
+    ...(count(payload.outside_scopes_count) ? { outside_scopes_count: payload.outside_scopes_count } : {}),
+    ...(payload.outside_scopes_truncated === true ? { outside_scopes_truncated: true as const } : {}),
+    ...(typeof payload.changed_paths_reason === "string" ? { changed_paths_reason: payload.changed_paths_reason } : {}),
+  };
 }
 
 /**

@@ -328,10 +328,11 @@ carries the next step.
    the bytes written.
 6. **Complete.** `collab_task_complete` with a summary, `confidence`,
    `confidence_basis`, `limits`, and `evidence_refs`, optionally naming
-   `review_requested_session_id`. The server records the result checkpoint and
-   the paths changed since the base checkpoint (see
-   [Changed paths and reviewer relation](#changed-paths-and-reviewer-relation)). An
-   edit task remains `reported_complete` until a distinct session accepts it.
+   `review_requested_session_id`. The server records the result checkpoint, how
+   many paths changed since the base checkpoint, and the names of those outside
+   the task's path scopes (see
+   [Changed paths and reviewer relation](#changed-paths-and-reviewer-relation)).
+   An edit task remains `reported_complete` until a distinct session accepts it.
 7. **Review.** Another session inspects the evidence and calls
    `collab_task_review` with `accept` or `request_changes`, a summary, and its
    own `confidence`, `confidence_basis`, and `limits`. The review records the
@@ -370,29 +371,56 @@ Both are record-only: neither ever refuses a completion or a review.
 
 At completion, when the claim's base checkpoint was server-observed in the same
 worktree, the server's own Git lists the paths changed since that base `HEAD`:
-tracked changes (`git diff --name-only <base>`, staged or not, deletions
-included, a rename as both its paths) and untracked files that are not ignored.
-An untracked nested repository is one name ending in `/`. It records names only,
-decoded as UTF-8, never content; every reader of the journal sees those names,
-so keep a name that should stay private ignored by Git. The completion event
-(`task.reported_complete`, or `task.completed` for a `reported` policy) carries
-optional fields, and `collab_task_complete` and `collab_done` return them:
+what differs from `HEAD` now (staged or not, deletions included, a rename as both
+its paths), untracked files that are not ignored, and, when `HEAD` has moved, the
+paths that differ between the two commits. An untracked nested repository is one
+name ending in `/`. Nothing but names is read into the list, and the list itself
+is not kept. The completion event (`task.reported_complete`, or `task.completed`
+for a `reported` policy) carries optional fields, and `collab_task_complete` and
+`collab_done` return the same ones:
 
 - `changed_paths_basis`: `server_observed`, or `unavailable` with a short
-  `changed_paths_reason` (no Git repository or `HEAD` at the claim, a base from
-  another worktree, a base commit no longer in the repository, Git failing or out
-  of its bounds).
-- `changed_paths` and `outside_scopes`, sorted, with `changed_paths_count` and
-  `outside_scopes_count`. `outside_scopes` are the changed paths within no path
-  scope, by the claims' segment-aware, case-folded rule. Each list holds at most
-  256 paths and 12 KiB as JSON; `changed_paths_truncated: true` says one was
-  capped, and the counts stay whole.
+  `changed_paths_reason`: no base checkpoint; no Git repository or `HEAD` at the
+  claim; a base from another worktree; no `HEAD` now; a `HEAD` that is not a Git
+  object ID; a base commit no longer in the repository; Git failing or out of its
+  time or output bounds; a path that cannot be read safely; an observation that
+  failed; or a base that changed after the paths were observed.
+- `changed_paths_count`: how many paths changed. Their names are not recorded.
+- `outside_scopes` and `outside_scopes_count`: the changed paths within no path
+  scope, by the claims' segment-aware, case-folded rule, and how many there are.
+  At most the first 20 names in sorted order are recorded, each at most 200
+  characters, with control, bidirectional, zero-width and other invisible
+  characters escaped as `\u{…}`; `outside_scopes_truncated: true` says a name was
+  left out or cut short. A coordination task and a task without path scopes carry
+  neither field: nothing there is inside or outside.
 
-The listing is relative to the base `HEAD`, so changes already present at the
-claim count too, and the observation runs outside the write transaction, so the
-worktree can change between it and the record. It says what the worktree
-changed, not who changed it: another session's edits in the same worktree are
-listed too.
+Every reader of the journal sees the names in `outside_scopes`, permanently, so
+keep a name that should stay private ignored by Git.
+
+The fields cover only changes since the latest claim, takeover or accepted
+handoff, because each of those sets a new base. An empty `outside_scopes` says
+nothing about an earlier round: an out-of-scope commit from before a re-claim still
+stands and is not in the new list, so a reviewer must also read the task's earlier
+completion events and, after a takeover or handoff, what was done before it. Read
+the fields in the completion event through `collab_events_since` or `collab_next`
+(the `full` tools profile). In the `notes` profile, `collab_inbox` shows them as
+`changes` on the completion's item, and `collab_inbox {about: <task>}` on the
+current completion and on each earlier one in the thread.
+
+Changes are relative to the base `HEAD`, so uncommitted changes already present at
+the claim count too, as does everything a pull, rebase or branch switch brought in
+since. A commit later undone by another commit does not; one undone only in the
+worktree does. The fields say what the worktree changed, not who changed it: another
+session's edits in the same worktree count too. The observation runs outside the
+write transaction, so the worktree can change between it and the record. Whether a
+submodule's own changes are seen while they are uncommitted follows Git's
+`ignoreSubmodules` settings.
+
+The cost: while `HEAD` is the base, the paths come from the `git status` the result
+checkpoint already runs, and no further Git child is started. Once `HEAD` has moved,
+one synchronous `git diff --name-only` runs per completion, for at most five seconds
+and 1 MiB of output. A synchronous child can stall the process on a Bun with the
+missed-exit fault (seen on 1.3.5), as the checkpoint's own children can.
 
 A review records `reviewer_relation` on its `task.accepted` or
 `task.changes_requested` event and returns it: `same_voice` (one consent voice
@@ -401,8 +429,9 @@ declared parent), `declared_child`, `declared_sibling` (both declare the same
 parent), or `unrelated_as_declared`. The declared relations read
 `parent_session_id`, direct links only, which nothing attests.
 `unrelated_as_declared` means only that no such direct link was declared (a
-declared grandparent is not read): it is not proven independence. `collab_note` adds one plain line to its advice, such as "a
-same-voice review is not independent".
+declared grandparent is not read): it is not proven independence. `collab_note`
+adds one plain line to its advice, such as "a same-voice review is not
+independent".
 
 ### Requesting and giving review
 
@@ -864,11 +893,11 @@ flag, capture time, and hashes of the Git index plus the tracked binary diff
 and status-path stream. It also hashes the contents and executable bit of
 non-ignored untracked regular files, plus non-ignored untracked symlink
 targets. A checkpoint journals only aggregate digests; filenames, targets, file
-contents, and diff bytes are not in it. A completion event does name the paths
-its worktree changed (see
-[Changed paths and reviewer relation](#changed-paths-and-reviewer-relation)). A task may also require an exact base SHA
-before claim. Use these fields to notice worktree drift between claim,
-completion, and review.
+contents, and diff bytes are not in it. A completion event does name some of the
+paths changed outside the task's path scopes (see
+[Changed paths and reviewer relation](#changed-paths-and-reviewer-relation)). A
+task may also require an exact base SHA before claim. Use these fields to notice
+worktree drift between claim, completion, and review.
 
 A checkpoint is not a commit signature, merge-base analysis, task-scoped diff,
 test result, clean-tree guarantee, attribution proof, or lock. The state digest
@@ -1321,6 +1350,9 @@ Keep credentials, secrets, prompts, transcripts, chain-of-thought or private
 reasoning, raw tool output, sensitive source bodies, and third-party personal
 data out of the journal. A local path or Git branch name may itself be
 sensitive; attach only references that every intended journal reader may see.
+A completion records some names itself: at most 20 changed paths outside the task's
+path scopes (see
+[Changed paths and reviewer relation](#changed-paths-and-reviewer-relation)).
 
 All processes running as an OS user that can read the selected database share
 its contents. A session credential file limits cooperative attribution to its
