@@ -258,6 +258,29 @@ describe("portable repository routing", () => {
     expect(clock.calls.filter(args => args[1] === root).length).toBe(1);
   });
 
+  test("a writer during a cut-off clone survey does not lock the new clone out", () => {
+    remote(root);
+    store.openWorkspace({ root_path: root, actor: "first" });
+    const second = join(directory, "second");
+    git(directory, "init", "--initial-branch=main", second);
+    git(second, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "--allow-empty", "-m", "second root");
+    remote(second, "https://example.invalid/owner/second.git");
+    store.openWorkspace({ root_path: second, actor: "second" });
+    preUpgrade();
+    const other = clone("written-clone");
+    // The first probe spends the whole budget, so the survey stops with a registration left
+    // unread, and another process commits while that probe runs.
+    const clock = discoveryClock(() => {
+      fixtureDb(db => db.exec("UPDATE worktrees SET last_seen_at = '2026-01-01T00:00:00.000Z'"));
+      return 5000;
+    });
+    reopen(clock);
+    const opened = store.startSession({ root_path: other, actor: "arrives" });
+    expect(opened.workspace.root_path).toBe(other);
+    expect(clock.now()).toBe(250);
+    expect(clock.calls.length).toBe(1);
+  });
+
   test("an exhausted successorGit deadline does not start the history command", () => {
     remote(root);
     const clock = discoveryClock(() => 1, 2);
