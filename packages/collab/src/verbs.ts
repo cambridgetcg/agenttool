@@ -1656,6 +1656,9 @@ export function formatEntry(
         // the target and the cite event it also points at are in re and observed.
         evidence = markedEvidence(parsed.evidence, entry, recheck);
         limits = parsed.limits ?? report.limits;
+        // A scope the note wrote (Purpose:, Extent:) is not in its body, so it is shown beside it.
+        if (parsed.purpose) flags.purpose = parsed.purpose;
+        if (parsed.extent) flags.extent = parsed.extent;
         if (parsed.via) flags.via = parsed.via;
         if (parsed.act !== act) flags.act_mismatch = { stored: act, written: parsed.act };
       }

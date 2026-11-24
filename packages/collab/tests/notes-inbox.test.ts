@@ -187,6 +187,39 @@ describe("collab_inbox addressing", () => {
     expect(read.next).toEqual({ tool: "collab_inbox", input: { about: items[0]!.id } });
     void a;
   });
+
+  test("a note's Purpose: and Extent: lines reach the item and the thread, and are absent when unwritten", async () => {
+    const j = journal();
+    const parent = j.start("parent");
+    const child = j.start("child");
+    const sp = j.serve(parent);
+    const sc = j.serve(child);
+    const brief = await ok(sp, "collab_note", {
+      text: "note: Take the parser work\n\nRead the lexer first.\n\nPurpose: make the parser accept trailing commas\n" +
+        "Extent: edits under src/parser/ only\n  no push, publish or deploy\nLimits: I did not check the docs.",
+      to: child.session.id,
+    });
+    const plain = await ok(sp, "collab_note", { text: "A plain note with no scope.", to: child.session.id });
+    const read = await ok(sc, "collab_inbox", { limit: 50 });
+    const item = (read.items as Array<Record<string, any>>).find((entry) => entry.id === brief.ids.report)!;
+    expect(item).toMatchObject({
+      statement: "Take the parser work",
+      text: "Read the lexer first.",
+      purpose: "make the parser accept trailing commas",
+      extent: "edits under src/parser/ only\nno push, publish or deploy",
+      limits: "I did not check the docs.",
+    });
+    const bare = (read.items as Array<Record<string, any>>).find((entry) => entry.id === plain.ids.report)!;
+    expect(Object.hasOwn(bare, "purpose")).toBe(false);
+    expect(Object.hasOwn(bare, "extent")).toBe(false);
+    // The thread shows the same scope on its root.
+    const thread = await ok(sc, "collab_inbox", { about: brief.ids.report });
+    expect(thread.root).toMatchObject({ purpose: item.purpose, extent: item.extent });
+    // A look-back shows it too.
+    const back = await ok(sc, "collab_inbox", { since: 0, include: "all", limit: 50 });
+    const again = (back.items as Array<Record<string, any>>).find((entry) => entry.id === brief.ids.report)!;
+    expect(again).toMatchObject({ purpose: item.purpose, extent: item.extent });
+  });
 });
 
 describe("the read mark", () => {

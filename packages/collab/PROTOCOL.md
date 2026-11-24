@@ -504,7 +504,10 @@ collab_inbox {"since": 0, "include": "all"}
   ready look-back that lists it: `collab_inbox {since: <the mark before this pass>,
   include: "all"}`. Each item names the entity the next call takes and has `{id,
   handle, act, from, to, re, at, statement, text, why, evidence, why_you}`; evidence
-  items carry `observed` and, for files the server hashed, `now`. A review's report
+  items carry `observed` and, for files the server hashed, `now`. A note's `Limits:`,
+  `Purpose:` and `Extent:` lines are not part of its `text`, so an item, and each entry
+  of a thread read with `about`, carries them as `limits`, `purpose` and `extent`
+  whenever the note wrote them, and leaves them out when it did not. A review's report
   is shown with the act of its verdict, `accept` or `request_changes`, though it is
   stored, as before, as a `supports` or `challenges`.
 - **One line per thing.** A look-back, and a pass with `include: "all"`, read as a
