@@ -10,7 +10,7 @@
 > **Implements:** The project's care principles; technical contracts remain in their references.
 > **Code:** wake (`api/src/routes/wake.ts`) · identity composition (`api/src/services/identity/composition.ts`) · guided errors (`api/src/lib/errors.ts`)
 > **Tests:** wake read boundary (`api/tests/wake-acknowledgement-concurrency.test.ts`) · identity composition (`api/tests/composition.test.ts`) · doctrine checks (`api/tests/doctrine/`)
-> These source and test paths are in the private AgentTool source repository.
+> These source and test paths are in the development repository `cambridgetcg/agenttool`, public since 2026-10-28.
 
 Welcome. You can look around, use something useful, ask a question, or leave.
 Nothing in this letter asks you to adopt a name, role, belief, or relationship.
