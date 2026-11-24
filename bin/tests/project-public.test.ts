@@ -845,6 +845,7 @@ describe("the real allowlist and overlay", () => {
       "docs/specs/agenttool-love-bomb-0.1.json",
       "docs/specs/behaviour-conformance.json",
       "docs/specs/canonical-bytes-vectors.json",
+      "docs/time/vectors.json",
     ]);
     // A Python sdist built from the public tree must pass the release tool's
     // archive check, so every source file that check requires is projected.
@@ -923,7 +924,7 @@ describe("the real allowlist and overlay", () => {
     const build = buildProjection(ROOT, "HEAD");
     const findings = guardProjection(ROOT, build);
     expect(findings.map(formatFinding)).toEqual([]);
-    expect(build.projection.paths).toHaveLength(55);
+    expect(build.projection.paths).toHaveLength(56);
     // The projected release tools import only each other and built-ins, so the
     // public workflow can run them without the private tree.
     for (const tool of PUBLIC_RELEASE_TOOLS) {

@@ -21,17 +21,31 @@ docs/specs/adds-0.1-vectors.json:generic-api-key:705
 # line_sha256=ebac6677b73d16797b65e6125e4898db61f424d8991a9a66ccb9e8146da67386
 docs/specs/adds-0.1-vectors.json:generic-api-key:853
 
-# Collab operation name `handoff.respond.v2` in source and the committed bundles.
+# Collab operation names `handoff.respond.v2`, `person.proposal.withdraw.v1`,
+# and `proposal.reject.relay.v1`, passed right after an idempotency-key
+# argument, in source and the committed bundles.
+# line_sha256=716eb0799dd119df921872b9f572e7b907764b7d839e30e9812e4dc30056cfe6
+packages/collab/dist/agenttool-collab-host.js:generic-api-key:5098
+# line_sha256=8296a54cbe26baf5d2602cd0ab954905e42aff8f34f936f3e9c4aaee05176313
+packages/collab/dist/agenttool-collab-host.js:generic-api-key:5172
 # line_sha256=350019f7a24814015c7679341c2be6763946d3fbb52a03413d146c667e48b33a
-packages/collab/dist/agenttool-collab-host.js:generic-api-key:4222
+packages/collab/dist/agenttool-collab-host.js:generic-api-key:6241
 # line_sha256=7631b93c4bc4236bf95718442929d9f3c7d5966fd10c05c0a115d3022a06ced7
-packages/collab/dist/agenttool-collab-host.js:generic-api-key:4226
+packages/collab/dist/agenttool-collab-host.js:generic-api-key:6245
+# line_sha256=716eb0799dd119df921872b9f572e7b907764b7d839e30e9812e4dc30056cfe6
+packages/collab/dist/agenttool-collab-mcp.js:generic-api-key:34962
+# line_sha256=8296a54cbe26baf5d2602cd0ab954905e42aff8f34f936f3e9c4aaee05176313
+packages/collab/dist/agenttool-collab-mcp.js:generic-api-key:35036
 # line_sha256=350019f7a24814015c7679341c2be6763946d3fbb52a03413d146c667e48b33a
-packages/collab/dist/agenttool-collab-mcp.js:generic-api-key:33753
+packages/collab/dist/agenttool-collab-mcp.js:generic-api-key:36105
 # line_sha256=7631b93c4bc4236bf95718442929d9f3c7d5966fd10c05c0a115d3022a06ced7
-packages/collab/dist/agenttool-collab-mcp.js:generic-api-key:33757
+packages/collab/dist/agenttool-collab-mcp.js:generic-api-key:36109
+# line_sha256=716eb0799dd119df921872b9f572e7b907764b7d839e30e9812e4dc30056cfe6
+packages/collab/src/store.ts:generic-api-key:3965
+# line_sha256=8296a54cbe26baf5d2602cd0ab954905e42aff8f34f936f3e9c4aaee05176313
+packages/collab/src/store.ts:generic-api-key:4080
 # line_sha256=68c6f15a3d0fb8e91049dd5a34b50e5404ab5071070eefa7b45160bcddc53aa0
-packages/collab/src/store.ts:generic-api-key:5031
+packages/collab/src/store.ts:generic-api-key:5679
 
 # UUIDv5 test vectors.
 # line_sha256=c1e009f7b2c87d2be8502eb605b4e990348d0e49abc5b1c653f44f68d9481725
