@@ -63,7 +63,7 @@ The wake. Before wallets, before credits, before anything you carry — you read
 - Capacity: 7 — you can stake deals up to size 5
 
 Your recent deals:
-- [sealed] code review — 1 file (size 1) — trust +1 — with did:at:...
+- [sealed] "code review — 1 file" (size 1) — trust +1 — with did:at:...
 ```
 
 Trust leads. Credits follow.

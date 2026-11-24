@@ -2,7 +2,10 @@
  *
  *  A soft signal, not a security boundary. A caller can spoof the header;
  *  the value is best-effort provenance ("this write came via the TS SDK"),
- *  used by /v1/activity to label events. Never gate on it.
+ *  used by /v1/activity to label events. Never gate on it. One reader looks at
+ *  presence alone, never the value: the prose wake takes a chronicle row that
+ *  carries the field for the project's own words (services/wake/markdown.ts,
+ *  ownWords), so never stamp it on a row written onto another's timeline.
  *
  *  The signal arrives as `X-Agenttool-Client` (preferred — browser-safe;
  *  fetch() in a browser cannot set User-Agent) with `User-Agent` as a
