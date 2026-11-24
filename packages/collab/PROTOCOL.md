@@ -696,6 +696,16 @@ With `title` it creates a task and claims it: an edit task whose completion wait
 a distinct reviewer when `paths` are given, else a coordination task you report done;
 `review` overrides that. With `task` it claims it, and when its lease has lapsed it
 recovers it, which needs `because`. `purpose` goes into a new task's description only.
+`paths` are literal repository-relative prefixes: `src` covers everything under `src/`.
+A new task's path holding a glob character (`*`, `?`, `[` or `]`) would reserve
+nothing, so it is refused with `invalid_path_scope` and a ready `collab_take` with the
+literal prefixes it meant (`src` for `src/**`); a whole-repository pattern such as `**`
+gets the worktree's top-level tracked paths, or a remedy asking for them when git cannot
+list them, and a top-level pattern such as `*.md` gets a remedy asking for the paths it
+meant. `collab_task_create` refuses the same `path_scopes`. Only new input is refused: a
+recorded create sent again still replays, and a task an older build stored with such
+characters still reads, claims, recovers and reviews unchanged. A real path whose name
+holds one of these characters (`app/[id]`) is reserved through its parent (`app`).
 A path overlap names every holder, their purposes, and a ready `collab_note` to ask
 them; over paths you hold yourself, it says to finish or release that task. A lease is
 coordination, not ownership or a lock.
@@ -1262,7 +1272,8 @@ reviews a task (including one this build finished), and computes identical propo
 status; where the revision ships a host and an MCP bundle, that the doorbell idles over
 the new types, a host ends a session `collab_arrive` created, and the old MCP lists its
 tools and pages over the new types. In reverse, this build opens and verifies the file
-after the old build wrote to it and computes the same ballot result. A golden scenario
+after the old build wrote to it and computes the same ballot result, and reads, claims,
+recovers, reviews and replays the tasks the old build gave glob path scopes. A golden scenario
 using only `a8799aad`'s tools runs on both builds with the same clock, and the rows
 match after ids and tokens are replaced by numbered placeholders. Dropping the three
 new tables loses only view state, and `note_ballots` rebuilds. Each later change

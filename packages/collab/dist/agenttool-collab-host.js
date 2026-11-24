@@ -4294,6 +4294,7 @@ class CollabStoreCore {
       path_scopes: normalizePathScopes(input.path_scopes ?? [])
     };
     return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.create", normalized, () => {
+      refuseGlobPathScopes(normalized.path_scopes);
       this.requireWorkspace(input.workspace_id);
       const id = normalized.id ?? `task_${randomUUID()}`;
       if (normalized.dependencies.includes(id)) {
@@ -4346,6 +4347,7 @@ class CollabStoreCore {
     }
     const request = { ...normalized, completion_policy: completionPolicy };
     return this.mutateAsSession(input, normalized.idempotency_key, "task.create.v2", request, (session) => {
+      refuseGlobPathScopes(normalized.path_scopes);
       const id = normalized.id ?? `task_${randomUUID()}`;
       if (normalized.dependencies.includes(id)) {
         throw new CollabError("invalid_dependency", "A task cannot depend on itself", {
@@ -8157,6 +8159,40 @@ function normalizePathScopes(scopes) {
     return clean;
   });
   return uniqueSorted(normalized);
+}
+var PATH_SCOPE_GLOB = /[*?[\]]/;
+function globPathScopeRefusal(scopes, options = {}) {
+  const scope = scopes.find((item) => PATH_SCOPE_GLOB.test(item));
+  if (scope === undefined)
+    return null;
+  const unlisted = scopes.some((item) => PATH_SCOPE_GLOB.test(item) && literalPathPrefix(item) === "" && !/^\*+(\/|$)/.test(item));
+  const prefixes = scopes.map((item) => PATH_SCOPE_GLOB.test(item) ? literalPathPrefix(item) : item);
+  const wholeRepository = prefixes.includes("") && !unlisted;
+  let literal = null;
+  if (!unlisted) {
+    try {
+      const top = wholeRepository ? options.top_level?.() ?? [] : [];
+      if (!wholeRepository || top.length > 0 && !top.some((item) => PATH_SCOPE_GLOB.test(item))) {
+        const all = normalizePathScopes([...top, ...prefixes.filter((item) => item !== "")]);
+        literal = all.filter((item) => !all.some((other) => item.startsWith(`${other}/`)));
+      }
+    } catch {}
+  }
+  const say = literal ? `Send the literal scopes ${JSON.stringify(literal)} instead.` : wholeRepository ? 'For the whole repository, list its top-level paths, such as ["src", "tests", "README.md"]; the root itself cannot be reserved.' : 'List the literal paths the pattern meant, such as ["README.md", "src"].';
+  return new CollabError("invalid_path_scope", `Path scope '${scope}' holds a glob character (*, ?, [ or ]). Scopes are literal repository-relative prefixes: ` + "'src' reserves everything under src/, and 'src/**' would reserve nothing", {
+    scope,
+    ...literal ? { literal_path_scopes: literal } : {},
+    remedy: literal && options.ready ? options.ready(literal) : { say: `${say} Nothing was written.` }
+  });
+}
+function literalPathPrefix(scope) {
+  const segments = scope.split("/");
+  return segments.slice(0, segments.findIndex((segment) => PATH_SCOPE_GLOB.test(segment))).join("/");
+}
+function refuseGlobPathScopes(scopes) {
+  const refusal = globPathScopeRefusal(scopes);
+  if (refusal)
+    throw refusal;
 }
 function normalizeDependencies(dependencies) {
   if (!Array.isArray(dependencies) || dependencies.length > MAX_DEPENDENCIES) {

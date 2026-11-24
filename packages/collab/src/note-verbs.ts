@@ -31,12 +31,13 @@ import {
   type NoteReason,
 } from "./note.js";
 import { CONSENT_RULE_V2, type CollabReport, type ProposalStatus, type SessionRest, type Task } from "./protocol.js";
-import { gitCommitExists, hashWorktreeFile, MAX_CITED_FILE_BYTES } from "./repository.js";
+import { gitCommitExists, hashWorktreeFile, MAX_CITED_FILE_BYTES, topLevelTrackedPaths } from "./repository.js";
 import { removeSessionCredentialFile } from "./session-file.js";
 import {
   NOTE_DECISION_OUTCOMES,
   NOTE_DEFAULT_DECISION_EXTENT,
   NOTE_NOTHING_AUTHORISED,
+  globPathScopeRefusal,
   normalizePathScopes,
   type NoteAppendReceipt,
   type NoteDecisionOutcome,
@@ -2242,6 +2243,14 @@ async function takeNew(
     stillCurrent: (latestKey) => leaseStillCurrent(ctx, credential, workspaceId, latestKey),
   }, async (plan) => {
     const created = await stepOnce(ctx, credential, plan.step(1), () => {
+      const glob = globPathScopeRefusal(paths, {
+        ready: (literal) => ({
+          tool: "collab_take",
+          input: { ...retryInput, paths: literal, ...(ctx.slot_key ? { binding_key: ctx.slot_key } : {}) },
+        }),
+        top_level: () => topLevelTrackedPaths(binding.handle.worktree.root_path),
+      });
+      if (glob) throw glob;
       if (paths.length > 0) {
         const conflicts = ctx.store.notePathConflicts(workspaceId, paths, { work_mode: workMode });
         if (conflicts.length > 0) throw pathConflictRefusal(ctx, workspaceId, conflicts, null);

@@ -18,7 +18,8 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { canonicalJson } from "../src/canonical.js";
-import type { CollabEvent, EventCursor } from "../src/protocol.js";
+import { SESSION_STALE_AFTER_MS, type CollabEvent, type EventCursor } from "../src/protocol.js";
+import { buildCollabMcpServer } from "../src/mcp.js";
 import { CollabStore } from "../src/store-notes.js";
 import {
   COLLAB_NOTES_EVENT_TYPES,
@@ -726,6 +727,16 @@ interface Inspected {
   } | null;
   task: { task_id: string; status: string; review_status: string | null } | null;
   reviewed_new: { task_id: string; status: string; review_status: string | null } | null;
+  glob_tasks: {
+    /** The old build's own session, in this test's temporary journal only. */
+    implementer: { session_id: string; session_token: string; generation: number };
+    legacy_task_id: string;
+    open_task_id: string;
+    open_path_scopes: string[];
+    next_task_id: string;
+    held_task_id: string;
+    held_path_scopes: string[];
+  } | null;
   written: Array<{ id: string; body: string }>;
   errors: Record<string, string>;
 }
@@ -1068,6 +1079,111 @@ for (const revision of revisions) {
       }
       // Older writes change no view this build computes from the journal.
       expect(computeViews(databasePath, manifest, status_at)).toEqual(views);
+    }, TEST_TIMEOUT_MS);
+
+    test("this build reads, claims, recovers and reviews tasks an older build gave glob scopes", async () => {
+      await hostDone();
+      if (revision.ships.mcp) await settle(mcpPaged());
+      const result = await inspected();
+      const { manifest } = await fixture();
+      expect(result.errors).toEqual({});
+      const glob = result.glob_tasks!;
+      expect(glob.open_path_scopes).toEqual(["**"]);
+      expect(glob.held_path_scopes).toEqual(["compat/*.txt", "compat/[ab]?.md"]);
+      // A copy of its own, so the views the readback test computes stay the old build's.
+      const databasePath = copyJournal(join(directory, "journal"), join(directory, "glob-journal"));
+      // Past the stale point, so the old build's claim needs recovery here.
+      const at = new Date(Date.now() + SESSION_STALE_AFTER_MS + 60_000);
+      const store = new CollabStore(databasePath, { now: () => new Date(at) });
+      const refusal = (operation: () => unknown) => {
+        try {
+          operation();
+          return null;
+        } catch (error) {
+          return (error as { code?: string }).code ?? String(error);
+        }
+      };
+      try {
+        const workspace = manifest.workspace_id;
+        expect(store.getTask(workspace, glob.open_task_id).path_scopes).toEqual(["**"]);
+        expect(store.listTasks(workspace).map((task) => task.id)).toEqual(expect.arrayContaining([glob.open_task_id, glob.held_task_id]));
+        const held = store.getTask(workspace, glob.held_task_id);
+        expect(held.path_scopes).toEqual(glob.held_path_scopes);
+        expect(held.effective_status).toBe("recovery_required");
+        const worker = store.startSession({ root_path: manifest.root_path, actor: "glob-scope-worker" });
+        const reviewer = store.startSession({ root_path: manifest.root_path, actor: "glob-scope-reviewer" });
+        const recovered = store.recoverTaskForSession({
+          ...worker.credential,
+          idempotency_key: "glob-recover",
+          task_id: held.id,
+          expected_version: held.version,
+          recovery_note: "The older build's claim lapsed; taken over.",
+          action: "takeover",
+        });
+        expect(recovered.path_scopes).toEqual(glob.held_path_scopes);
+        expect(recovered.assignee_session_id).toBe(worker.session.id);
+        const open = store.getTask(workspace, glob.open_task_id);
+        const claimed = store.claimTaskForSession({
+          ...worker.credential,
+          idempotency_key: "glob-claim",
+          task_id: open.id,
+          expected_version: open.version,
+        });
+        const reported = store.completeTaskForSession({
+          ...worker.credential,
+          idempotency_key: "glob-complete",
+          task_id: claimed.id,
+          lease_id: claimed.lease_id!,
+          expected_version: claimed.version,
+          summary: "Done under a scope an older build stored.",
+        });
+        // The note verbs read the stored scope too: the conflict it makes is
+        // named as a conflict, never as a refused pattern.
+        const server = buildCollabMcpServer(store, {
+          environment: {},
+          resumed_session: { handle: reviewer, credential_file: join(directory, "glob-reviewer.json") },
+        });
+        const take = async () => (await (server as any)._registeredTools.collab_take.handler({ task: glob.next_task_id }, {})).structuredContent;
+        expect(await take()).toMatchObject({ code: "path_scope_conflict" });
+        const reviewed = store.reviewTaskForSession({
+          ...reviewer.credential,
+          idempotency_key: "glob-review",
+          task_id: reported.id,
+          expected_version: reported.version,
+          outcome: "accept",
+          summary: "Accepted under the stored scope.",
+        });
+        expect(reviewed.task).toMatchObject({ status: "completed", review_status: "accepted", path_scopes: ["**"] });
+        expect(await take()).toMatchObject({ task: { id: glob.next_task_id, state: "claimed", paths: ["**"] } });
+        // A retry of a create the old build recorded is not new input: it replays.
+        const head = store.getWorkspace(workspace)!.event_head_sequence;
+        expect(store.createTaskForSession({
+          ...glob.implementer,
+          idempotency_key: "old-build-glob-open",
+          title: "Old build whole-repository pattern",
+          work_mode: "edit",
+          completion_policy: "accepted",
+          path_scopes: ["**"],
+        }).id).toBe(glob.open_task_id);
+        expect(store.createTask({
+          workspace_id: workspace,
+          actor: "old-build-legacy",
+          idempotency_key: "old-build-glob-legacy",
+          title: "Old build legacy pattern",
+          path_scopes: ["legacy/**"],
+        }).id).toBe(glob.legacy_task_id);
+        // New input with the same characters is refused, and writes nothing.
+        expect(refusal(() => store.createTaskForSession({
+          ...worker.credential,
+          idempotency_key: "glob-new",
+          title: "A new pattern scope",
+          path_scopes: ["compat/*.txt"],
+        }))).toBe("invalid_path_scope");
+        expect(store.getWorkspace(workspace)!.event_head_sequence).toBe(head);
+        expect(Object.values(verifyAll(store)).every(Boolean)).toBe(true);
+      } finally {
+        store.close();
+      }
     }, TEST_TIMEOUT_MS);
   });
 }

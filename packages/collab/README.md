@@ -799,7 +799,13 @@ names these files exactly, never by a `*.json` glob.
 
 Path claims are advisory across all registered worktrees in the repository
 workspace. Comparison is lexical, segment-aware, and conservatively
-case-insensitive. It does not lock the filesystem, inspect uncommitted diffs,
+case-insensitive. A path scope is a literal repository-relative prefix: `src`
+covers everything under `src/`, and a glob such as `src/**` would reserve
+nothing. A new task's scope holding `*`, `?`, `[` or `]` is therefore refused
+with `invalid_path_scope` and, where the literal prefixes can be named, a ready
+call with them (`src` for `src/**`, or the worktree's top-level tracked paths
+for `**`). A recorded create sent again still replays, and tasks an older build stored with such characters keep reading, claiming, recovering and
+reviewing unchanged. It does not lock the filesystem, inspect uncommitted diffs,
 resolve every symlink or case alias, prevent direct edits, or arbitrate a
 process using another database.
 

@@ -29143,8 +29143,74 @@ function isOwnedByCurrentUser2(uid) {
   return typeof process.getuid !== "function" || uid === process.getuid();
 }
 
-// src/note-verbs.ts
-import { existsSync as existsSync7 } from "fs";
+// src/store-notes.ts
+import { randomUUID as randomUUID5 } from "crypto";
+import { realpathSync as realpathSync2 } from "fs";
+
+// src/ballot.ts
+import { createHash as createHash2 } from "crypto";
+
+// src/time.ts
+var ZONED_INSTANT = /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(?:([Zz])|([+-])(\d{2}):(\d{2}))$/;
+function daysInMonth(year, month) {
+  if (month === 2)
+    return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28;
+  return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31;
+}
+function parseZonedInstant(value, options = {}) {
+  if (typeof value !== "string")
+    return null;
+  const match = ZONED_INSTANT.exec(value);
+  if (!match)
+    return null;
+  if (match[6] === undefined && options.seconds !== "optional")
+    return null;
+  if (match[6] === undefined && match[7] !== undefined)
+    return null;
+  const [year, month, day, hour, minute] = match.slice(1, 6).map(Number);
+  const second = Number(match[6] ?? 0);
+  const zulu = match[8] !== undefined;
+  const offsetHours = zulu ? 0 : Number(match[10]);
+  const offsetMinutes = zulu ? 0 : Number(match[11]);
+  if (year < 1 || month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month) || hour > 23 || minute > 59 || second > 59 || offsetHours > 23 || offsetMinutes > 59) {
+    return null;
+  }
+  const millis = Number((match[7] ?? "").slice(0, 3).padEnd(3, "0"));
+  const local = new Date(0);
+  local.setUTCFullYear(year, month - 1, day);
+  local.setUTCHours(hour, minute, second, millis);
+  const sign = match[9] === "-" ? -1 : 1;
+  const instant = local.getTime() - sign * (offsetHours * 60 + offsetMinutes) * 60000;
+  const utcYear = new Date(instant).getUTCFullYear();
+  return Number.isFinite(instant) && utcYear >= 1 && utcYear <= 9999 ? instant : null;
+}
+function minutesSince(at, observedAt) {
+  const age = Date.parse(observedAt) - Date.parse(at);
+  return Number.isFinite(age) ? Math.max(0, Math.floor(age / 60000)) : null;
+}
+function durationSince(ms) {
+  if (!Number.isFinite(ms) || ms < 0)
+    return "?";
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor(s % 86400 / 3600);
+  const m = Math.floor(s % 3600 / 60);
+  if (d > 0)
+    return `${d}d ${h}h`;
+  if (h > 0)
+    return `${h}h ${m}m`;
+  if (m > 0)
+    return `${m}m ${s % 60}s`;
+  return `${s}s`;
+}
+function durationUntil(at, observedAt) {
+  const left = Date.parse(at) - Date.parse(observedAt);
+  if (!Number.isFinite(left) || left <= 0)
+    return "closed";
+  const minutes = Math.ceil(left / 60000);
+  const hours = Math.floor(minutes / 60);
+  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
+}
 
 // src/note.ts
 var NOTE_FORMAT = "collab-note/1";
@@ -30450,645 +30516,6 @@ ${NOTE_CARRY_DISCLAIMER}`,
   return { text, not_carried: notCarried() };
 }
 
-// src/repository.ts
-import { createHash as createHash2 } from "crypto";
-import {
-  closeSync as closeSync5,
-  constants as fsConstants,
-  existsSync as existsSync3,
-  fstatSync as fstatSync3,
-  lstatSync as lstatSync3,
-  openSync as openSync5,
-  readlinkSync,
-  readSync as readSync3,
-  realpathSync,
-  statSync
-} from "fs";
-import { dirname as dirname3, isAbsolute as isAbsolute3, join as join4, relative, resolve as resolve4, sep } from "path";
-import { spawnSync as spawnSync2 } from "child_process";
-var GIT_TIMEOUT_MS = 5000;
-var MAX_GIT_OUTPUT = 1024 * 1024;
-var MAX_UNTRACKED_FILES = 1e4;
-var MAX_UNTRACKED_BYTES = 64 * 1024 * 1024;
-var MAX_UNTRACKED_HASH_MS = 2000;
-var MAX_SUCCESSOR_PATHS = 128;
-var MAX_SUCCESSOR_BYTES = 64 * 1024 * 1024;
-var MAX_SUCCESSOR_INSPECT_MS = 5000;
-var GIT_OBJECT_ID = /^[0-9a-f]{40,64}$/;
-var RAW_DIFF_HEADER = /^:([0-7]{6}) ([0-7]{6}) ([0-9a-f]{40,64}) ([0-9a-f]{40,64}) ([A-Z])$/;
-
-class RepositoryProbeTimeout extends Error {
-  constructor() {
-    super("Repository discovery exhausted its Git time budget");
-  }
-}
-function inspectRepository(rootInput, explicitRepositoryKey, metadataOnly = false, options = {}) {
-  const requested = resolve4(rootInput);
-  if (!existsSync3(requested) || !statSync(requested).isDirectory()) {
-    throw new CollabError("workspace_not_directory", "Workspace root must be an existing directory", { root_path: requested });
-  }
-  const requestedRoot = realpathSync(requested);
-  const topLevel = mayFindRepository(requestedRoot) ? gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"], options) : null;
-  const rootPath = topLevel && existsSync3(topLevel) ? realpathSync(topLevel) : requestedRoot;
-  const explicitKey = explicitRepositoryKey?.trim();
-  if (!topLevel) {
-    const repositoryKey2 = explicitKey ? `explicit:${sha256(explicitKey)}` : `local-path:${sha256(rootPath)}`;
-    return {
-      requested_root_path: requestedRoot,
-      root_path: rootPath,
-      repository_key: repositoryKey2,
-      git_common_dir_hash: null,
-      worktree_fingerprint: `path:${sha256(rootPath)}`,
-      checkpoint: {
-        worktree_id: worktreeId(rootPath, `path:${rootPath}`),
-        head_sha: null,
-        branch: null,
-        dirty: null,
-        captured_at: new Date().toISOString()
-      }
-    };
-  }
-  const commonDirOutput = gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-common-dir"], options) ?? gitOutput(rootPath, ["rev-parse", "--git-common-dir"], options);
-  const gitDirOutput = gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-dir"], options) ?? gitOutput(rootPath, ["rev-parse", "--git-dir"], options);
-  if (!commonDirOutput || !gitDirOutput) {
-    throw new CollabError("git_identity_unavailable", "Git recognized the repository but its local identity could not be resolved", { root_path: rootPath });
-  }
-  const commonDir = realpathIfPresent(resolveGitPath(rootPath, commonDirOutput));
-  const gitDir = realpathIfPresent(resolveGitPath(rootPath, gitDirOutput));
-  const commonDirHash = sha256(commonDir);
-  const repositoryKey = explicitKey ? `explicit:${sha256(explicitKey)}` : `local-git:${commonDirHash}`;
-  const fingerprint = `git:${sha256(`${commonDir}\x00${gitDir}`)}`;
-  const id = worktreeId(rootPath, fingerprint);
-  return {
-    requested_root_path: requestedRoot,
-    root_path: rootPath,
-    repository_key: repositoryKey,
-    portable_repository_key: explicitKey || options.portable === false ? null : portableRepositoryKey(rootPath, options),
-    git_common_dir_hash: commonDirHash,
-    worktree_fingerprint: fingerprint,
-    checkpoint: metadataOnly ? { worktree_id: id, head_sha: null, branch: null, dirty: null, captured_at: new Date().toISOString() } : captureRepoCheckpoint(rootPath, id)
-  };
-}
-function portableRepositoryKey(rootPath, optionsOrDeadline = {}) {
-  const options = typeof optionsOrDeadline === "number" ? { deadline: optionsOrDeadline } : optionsOrDeadline;
-  const origin = gitOutput(rootPath, ["config", "--get-all", "remote.origin.url"], options);
-  const remote = origin ?? gitOutput(rootPath, ["config", "--get-all", "remote.github.url"], options);
-  const canonical = remote ? canonicalRepositoryRemote(remote) : null;
-  if (!canonical || gitOutput(rootPath, ["rev-parse", "--is-shallow-repository"], options) !== "false")
-    return null;
-  const roots = successorGit(rootPath, ["rev-list", "--max-parents=0", "HEAD"], MAX_GIT_OUTPUT, options);
-  if (roots.timed_out && options.deadline !== undefined)
-    throw new RepositoryProbeTimeout;
-  if (!roots.ok)
-    return null;
-  const root = roots.stdout.toString("utf8").trim();
-  if (!GIT_OBJECT_ID.test(root))
-    return null;
-  return `git-root-remote:v1:${sha256(`${root}\x00${canonical}`)}`;
-}
-function canonicalRepositoryRemote(value) {
-  if (/[\s\x00-\x1f\x7f]/.test(value) || value.includes("::") || value.includes("://") && !/^(https?|ssh|git):\/\//i.test(value))
-    return null;
-  let host;
-  let path;
-  let port = "";
-  try {
-    if (/^(https?|ssh|git):\/\//i.test(value)) {
-      const url2 = new URL(value);
-      if (url2.search || url2.hash)
-        return null;
-      host = url2.hostname.toLowerCase();
-      path = url2.pathname;
-      port = url2.port && !(url2.protocol === "ssh:" && url2.port === "22" || url2.protocol === "git:" && url2.port === "9418") ? `:${url2.port}` : "";
-    } else {
-      const scp = /^(?:[^/@:]+@)?([^/:]+):(.+)$/.exec(value);
-      if (!scp)
-        return null;
-      host = scp[1].toLowerCase();
-      path = scp[2];
-    }
-    path = path.replace(/^\/+|\/+$/g, "").replace(/\.git$/i, "");
-    if (!host || !path || path.split("/").some((part) => !part || part === "." || part === "..") || /[%\\?#]/.test(path))
-      return null;
-    return `${host}${port}/${path.toLowerCase()}`;
-  } catch {
-    return null;
-  }
-}
-function captureRepoCheckpoint(rootPath, id) {
-  const head = gitOutput(rootPath, ["rev-parse", "--verify", "HEAD"]);
-  if (!head) {
-    return {
-      worktree_id: id,
-      head_sha: null,
-      branch: null,
-      dirty: null,
-      captured_at: new Date().toISOString()
-    };
-  }
-  const branch = gitOutput(rootPath, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
-  const pathStateBefore = gitBytes(rootPath, [
-    "status",
-    "--porcelain=v1",
-    "-z",
-    "--untracked-files=all"
-  ]);
-  const indexDigest = gitDigest(rootPath, ["ls-files", "-s", "-z"]);
-  const trackedState = gitBytes(rootPath, [
-    "diff",
-    "--no-ext-diff",
-    "--binary",
-    "HEAD",
-    "--"
-  ]);
-  const untrackedPaths = gitBytes(rootPath, [
-    "ls-files",
-    "--others",
-    "--exclude-standard",
-    "-z"
-  ]);
-  const untrackedDigest = untrackedPaths.ok ? digestUntrackedContent(rootPath, untrackedPaths.stdout) : null;
-  const pathStateAfter = gitBytes(rootPath, [
-    "status",
-    "--porcelain=v1",
-    "-z",
-    "--untracked-files=all"
-  ]);
-  const stablePathState = pathStateBefore.ok && pathStateAfter.ok && pathStateBefore.stdout.equals(pathStateAfter.stdout);
-  return {
-    worktree_id: id,
-    head_sha: /^[0-9a-f]{40,64}$/i.test(head) ? head.toLowerCase() : null,
-    branch,
-    dirty: pathStateAfter.ok ? pathStateAfter.stdout.length > 0 : null,
-    algorithm: "git-state/v1",
-    index_sha256: indexDigest,
-    state_sha256: trackedState.ok && stablePathState && untrackedDigest ? sha256Bytes(Buffer.concat([
-      trackedState.stdout,
-      Buffer.from([0]),
-      pathStateAfter.stdout,
-      Buffer.from([0]),
-      Buffer.from(untrackedDigest, "hex")
-    ])) : null,
-    source: "server_observed",
-    captured_at: new Date().toISOString()
-  };
-}
-function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
-  const refuse = (reason) => ({
-    ok: false,
-    commit_sha: commitSha,
-    reason
-  });
-  if (!GIT_OBJECT_ID.test(commitSha) || !GIT_OBJECT_ID.test(parentSha)) {
-    return refuse("The checkpoint HEADs are not Git object IDs");
-  }
-  const commitObject = successorGit(rootPath, ["cat-file", "commit", commitSha]);
-  if (!commitObject.ok)
-    return refuse(`Git could not read commit ${commitSha}`);
-  const headerEnd = commitObject.stdout.indexOf(`
-
-`);
-  const parents = commitObject.stdout.subarray(0, headerEnd === -1 ? commitObject.stdout.length : headerEnd).toString("utf8").split(`
-`).filter((line) => line.startsWith("parent ")).map((line) => line.slice("parent ".length));
-  if (parents.length > 1) {
-    return refuse(`HEAD ${commitSha} is a merge commit, not one fast-forward commit`);
-  }
-  if (parents[0] !== parentSha) {
-    const descends = successorGitExitCode(rootPath, [
-      "merge-base",
-      "--is-ancestor",
-      parentSha,
-      commitSha
-    ]) === 0;
-    return refuse(descends ? `HEAD ${commitSha} is more than one commit ahead of the result checkpoint HEAD ${parentSha}` : `HEAD ${commitSha} does not descend from the result checkpoint HEAD ${parentSha}`);
-  }
-  const diff = successorGit(rootPath, [
-    "diff-tree",
-    "-r",
-    "-z",
-    "--raw",
-    "--no-renames",
-    "--ignore-submodules=none",
-    parentSha,
-    commitSha,
-    "--"
-  ]);
-  const fields = diff.ok ? splitNul(diff.stdout) : null;
-  if (!fields || fields.length % 2 !== 0) {
-    return refuse(`Git could not list the paths commit ${commitSha} changes`);
-  }
-  if (fields.length / 2 > MAX_SUCCESSOR_PATHS) {
-    return refuse(`Commit ${commitSha} changes more than ${MAX_SUCCESSOR_PATHS} paths`);
-  }
-  const budget = { bytes: MAX_SUCCESSOR_BYTES, deadline: performance.now() + MAX_SUCCESSOR_INSPECT_MS };
-  const changes = [];
-  for (let index = 0;index < fields.length; index += 2) {
-    const header = RAW_DIFF_HEADER.exec(fields[index].toString("utf8"));
-    const pathBytes = fields[index + 1];
-    if (!header || !safeGitRelativePath(pathBytes)) {
-      return refuse(`Git reported a change in commit ${commitSha} that cannot be read safely`);
-    }
-    const path = pathBytes.toString("utf8");
-    const [, oldMode, mode, , blob, status] = header;
-    const modeVouched = status === "A" || status === "M" && oldMode === mode;
-    if (status === "D" || mode !== "100644" && mode !== "100755" || !modeVouched) {
-      changes.push({ path, blob_sha256: null });
-      continue;
-    }
-    if (performance.now() > budget.deadline || budget.bytes <= 0) {
-      return refuse(`Inspecting commit ${commitSha} exceeded its bounds`);
-    }
-    const content = successorGit(rootPath, ["cat-file", "blob", blob], budget.bytes);
-    if (!content.ok) {
-      return refuse(`Git could not read the committed bytes of ${path} within the inspection bounds`);
-    }
-    budget.bytes -= content.stdout.length;
-    changes.push({ path, blob_sha256: sha256Bytes(content.stdout) });
-  }
-  return { ok: true, commit_sha: commitSha, parent_sha: parentSha, changes };
-}
-var MAX_CITED_FILE_BYTES = 16 * 1024 * 1024;
-function hashWorktreeFile(rootPath, cited, maxBytes = MAX_CITED_FILE_BYTES) {
-  let root;
-  try {
-    root = realpathSync(rootPath);
-  } catch {
-    return { status: "unreadable", path: null };
-  }
-  if (cited.includes("\x00") || cited.includes("\\"))
-    return { status: "outside", path: null };
-  const candidate = resolve4(root, cited);
-  const inside = relative(root, candidate);
-  if (!inside || inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute3(inside)) {
-    return { status: "outside", path: null };
-  }
-  let walked = root;
-  let isFile = false;
-  const parts = inside.split(sep);
-  for (const [index, part] of parts.entries()) {
-    walked = `${walked}${sep}${part}`;
-    let stat;
-    try {
-      stat = lstatSync3(walked);
-    } catch (error51) {
-      return { status: error51.code === "ENOENT" ? "missing" : "unreadable", path: inside };
-    }
-    if (stat.isSymbolicLink())
-      return { status: "symlink", path: inside };
-    if (index < parts.length - 1 && !stat.isDirectory())
-      return { status: "missing", path: inside };
-    isFile = stat.isFile();
-  }
-  if (!isFile)
-    return { status: "not_a_file", path: inside };
-  let descriptor = null;
-  try {
-    descriptor = openSync5(walked, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
-    const before = fstatSync3(descriptor);
-    if (!before.isFile())
-      return { status: "not_a_file", path: inside };
-    if (before.size > maxBytes)
-      return { status: "too_large", path: inside };
-    const hash2 = createHash2("sha256");
-    const buffer = Buffer.allocUnsafe(64 * 1024);
-    let total = 0;
-    while (true) {
-      const count = readSync3(descriptor, buffer, 0, buffer.length, null);
-      if (count === 0)
-        break;
-      total += count;
-      if (total > maxBytes)
-        return { status: "too_large", path: inside };
-      hash2.update(buffer.subarray(0, count));
-    }
-    const after = fstatSync3(descriptor);
-    if (before.ino !== after.ino || before.size !== after.size || before.mtimeMs !== after.mtimeMs) {
-      return { status: "changed_while_read", path: inside };
-    }
-    return { status: "hashed", path: inside, sha256: hash2.digest("hex"), size: total };
-  } catch (error51) {
-    return { status: error51.code === "ELOOP" ? "symlink" : "unreadable", path: inside };
-  } finally {
-    if (descriptor !== null)
-      closeSync5(descriptor);
-  }
-}
-function gitCommitExists(rootPath, sha, options = {}) {
-  if (!/^[0-9a-f]{7,64}$/i.test(sha))
-    return false;
-  const inRepository = runGit(rootPath, ["rev-parse", "--git-dir"], options);
-  if (!inRepository.ok)
-    return null;
-  const timeout = gitTimeout(options);
-  if (timeout <= 0)
-    return null;
-  const result = spawnRepositoryGit(["-C", rootPath, ...SUCCESSOR_GIT_ARGS, "cat-file", "-e", `${sha}^{commit}`], {
-    timeout,
-    stdio: ["ignore", "ignore", "ignore"],
-    env: successorGitEnv()
-  }, options);
-  if (spawnFailed(result))
-    return null;
-  return result.status === 0;
-}
-function mayFindRepository(rootPath) {
-  if (process.env.GIT_DIR || process.env.GIT_WORK_TREE)
-    return true;
-  for (let directory = rootPath;; directory = dirname3(directory)) {
-    try {
-      lstatSync3(join4(directory, ".git"));
-      return true;
-    } catch (error51) {
-      const code = error51.code;
-      if (code !== "ENOENT" && code !== "ENOTDIR")
-        return true;
-    }
-    if (dirname3(directory) === directory)
-      return false;
-  }
-}
-function exitedDespiteTimeout(result) {
-  return result.error?.code === "ETIMEDOUT" && result.status !== null && result.signal == null;
-}
-function spawnFailed(result) {
-  return result.error != null && !exitedDespiteTimeout(result);
-}
-function spawnTimedOut(result) {
-  return result.error?.code === "ETIMEDOUT" && !exitedDespiteTimeout(result);
-}
-function worktreeId(rootPath, fingerprint) {
-  return `wt_${sha256(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
-}
-function resolveGitPath(rootPath, value) {
-  return value.startsWith("/") ? value : resolve4(rootPath, value);
-}
-function realpathIfPresent(path) {
-  return existsSync3(path) ? realpathSync(path) : resolve4(path);
-}
-function gitOutput(rootPath, args, options = {}) {
-  const result = runGit(rootPath, args, options);
-  if (result.timed_out && options.deadline !== undefined)
-    throw new RepositoryProbeTimeout;
-  if (!result.ok)
-    return null;
-  const value = result.stdout.trim();
-  return value.length > 0 ? value : null;
-}
-function runGit(rootPath, args, options) {
-  const timeout = gitTimeout(options);
-  if (timeout <= 0)
-    return { ok: false, timed_out: true, stdout: "" };
-  const result = spawnRepositoryGit(["-C", rootPath, ...args], {
-    encoding: "utf8",
-    timeout,
-    maxBuffer: MAX_GIT_OUTPUT,
-    stdio: ["ignore", "pipe", "ignore"],
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" }
-  }, options);
-  return {
-    ok: result.status === 0 && !spawnFailed(result),
-    timed_out: spawnTimedOut(result),
-    stdout: typeof result.stdout === "string" ? result.stdout : ""
-  };
-}
-function gitDigest(rootPath, args) {
-  const result = gitBytes(rootPath, args);
-  return result.ok ? sha256Bytes(result.stdout) : null;
-}
-function gitBytes(rootPath, args, maxBuffer = MAX_GIT_OUTPUT) {
-  const result = spawnSync2("git", ["-C", rootPath, ...args], {
-    timeout: GIT_TIMEOUT_MS,
-    maxBuffer,
-    stdio: ["ignore", "pipe", "ignore"]
-  });
-  return {
-    ok: result.status === 0 && !spawnFailed(result),
-    stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0)
-  };
-}
-var SUCCESSOR_GIT_ARGS = ["-c", "core.commitGraph=false", "--no-replace-objects"];
-function successorGitEnv() {
-  return { ...process.env, GIT_GRAFT_FILE: "/dev/null/agenttool-collab-no-grafts" };
-}
-function successorGit(rootPath, args, maxBuffer = MAX_GIT_OUTPUT, options = {}) {
-  const timeout = gitTimeout(options);
-  if (timeout <= 0)
-    return { ok: false, timed_out: true, stdout: Buffer.alloc(0) };
-  const result = spawnRepositoryGit(["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
-    timeout,
-    maxBuffer,
-    stdio: ["ignore", "pipe", "ignore"],
-    env: successorGitEnv()
-  }, options);
-  return {
-    ok: result.status === 0 && !spawnFailed(result),
-    timed_out: spawnTimedOut(result),
-    stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0)
-  };
-}
-function spawnRepositoryGit(args, options, probe) {
-  return probe.spawn ? probe.spawn(args, options) : spawnSync2("git", args, options);
-}
-function gitTimeout(options) {
-  return options.deadline === undefined ? GIT_TIMEOUT_MS : Math.min(GIT_TIMEOUT_MS, Math.ceil(options.deadline - (options.now ?? (() => performance.now()))()));
-}
-function successorGitExitCode(rootPath, args) {
-  const result = spawnSync2("git", ["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
-    timeout: GIT_TIMEOUT_MS,
-    stdio: ["ignore", "ignore", "ignore"],
-    env: successorGitEnv()
-  });
-  return spawnFailed(result) ? null : result.status;
-}
-function digestUntrackedContent(rootPath, paths) {
-  const entries = splitNul(paths);
-  if (!entries || entries.length > MAX_UNTRACKED_FILES)
-    return null;
-  const budget = {
-    remainingBytes: MAX_UNTRACKED_BYTES,
-    deadline: performance.now() + MAX_UNTRACKED_HASH_MS
-  };
-  const aggregate = createHash2("sha256");
-  aggregate.update("agenttool.collab/untracked-state/v1\x00");
-  for (const entry of entries) {
-    if (performance.now() > budget.deadline)
-      return null;
-    if (!safeGitRelativePath(entry))
-      return null;
-    const absolute = Buffer.concat([
-      Buffer.from(rootPath),
-      Buffer.from("/"),
-      entry
-    ]);
-    let stat;
-    try {
-      stat = lstatSync3(absolute);
-      aggregate.update(lengthPrefix(entry.length));
-      aggregate.update(entry);
-      if (stat.isSymbolicLink()) {
-        const target = readlinkSync(absolute, { encoding: "buffer" });
-        if (target.length > budget.remainingBytes || performance.now() > budget.deadline) {
-          return null;
-        }
-        budget.remainingBytes -= target.length;
-        aggregate.update("symlink\x00");
-        aggregate.update(lengthPrefix(target.length));
-        aggregate.update(target);
-      } else if (stat.isFile()) {
-        const digest = digestStableFile(absolute, budget);
-        if (!digest)
-          return null;
-        aggregate.update("file\x00");
-        aggregate.update(lengthPrefix(stat.mode & 73));
-        aggregate.update(digest);
-      } else {
-        return null;
-      }
-    } catch {
-      return null;
-    }
-  }
-  return aggregate.digest("hex");
-}
-function digestStableFile(path, budget) {
-  let descriptor = null;
-  try {
-    descriptor = openSync5(path, "r");
-    const before = fstatSync3(descriptor);
-    if (!before.isFile() || before.size > budget.remainingBytes || performance.now() > budget.deadline)
-      return null;
-    const hash2 = createHash2("sha256");
-    const buffer = Buffer.allocUnsafe(64 * 1024);
-    while (true) {
-      if (performance.now() > budget.deadline)
-        return null;
-      const count = readSync3(descriptor, buffer, 0, buffer.length, null);
-      if (count === 0)
-        break;
-      hash2.update(buffer.subarray(0, count));
-    }
-    const after = fstatSync3(descriptor);
-    if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mode !== after.mode || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs)
-      return null;
-    budget.remainingBytes -= before.size;
-    return hash2.digest();
-  } catch {
-    return null;
-  } finally {
-    if (descriptor !== null)
-      closeSync5(descriptor);
-  }
-}
-function splitNul(value) {
-  if (value.length === 0)
-    return [];
-  const entries = [];
-  let start = 0;
-  for (let index = 0;index < value.length; index += 1) {
-    if (value[index] !== 0)
-      continue;
-    if (index === start)
-      return null;
-    entries.push(value.subarray(start, index));
-    start = index + 1;
-  }
-  return start === value.length ? entries : null;
-}
-function safeGitRelativePath(value) {
-  if (value.length === 0 || value[0] === 47)
-    return false;
-  let start = 0;
-  for (let index = 0;index <= value.length; index += 1) {
-    if (index !== value.length && value[index] !== 47)
-      continue;
-    const component = value.subarray(start, index);
-    if (component.length === 0 || component.length === 1 && component[0] === 46 || component.length === 2 && component[0] === 46 && component[1] === 46)
-      return false;
-    start = index + 1;
-  }
-  return true;
-}
-function lengthPrefix(value) {
-  const prefix2 = Buffer.allocUnsafe(8);
-  prefix2.writeBigUInt64BE(BigInt(value));
-  return prefix2;
-}
-function sha256(value) {
-  return createHash2("sha256").update(value).digest("hex");
-}
-function sha256Bytes(value) {
-  return createHash2("sha256").update(value).digest("hex");
-}
-
-// src/store-notes.ts
-import { randomUUID as randomUUID5 } from "crypto";
-import { realpathSync as realpathSync2 } from "fs";
-
-// src/ballot.ts
-import { createHash as createHash3 } from "crypto";
-
-// src/time.ts
-var ZONED_INSTANT = /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(?:([Zz])|([+-])(\d{2}):(\d{2}))$/;
-function daysInMonth(year, month) {
-  if (month === 2)
-    return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28;
-  return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31;
-}
-function parseZonedInstant(value, options = {}) {
-  if (typeof value !== "string")
-    return null;
-  const match = ZONED_INSTANT.exec(value);
-  if (!match)
-    return null;
-  if (match[6] === undefined && options.seconds !== "optional")
-    return null;
-  if (match[6] === undefined && match[7] !== undefined)
-    return null;
-  const [year, month, day, hour, minute] = match.slice(1, 6).map(Number);
-  const second = Number(match[6] ?? 0);
-  const zulu = match[8] !== undefined;
-  const offsetHours = zulu ? 0 : Number(match[10]);
-  const offsetMinutes = zulu ? 0 : Number(match[11]);
-  if (year < 1 || month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month) || hour > 23 || minute > 59 || second > 59 || offsetHours > 23 || offsetMinutes > 59) {
-    return null;
-  }
-  const millis = Number((match[7] ?? "").slice(0, 3).padEnd(3, "0"));
-  const local = new Date(0);
-  local.setUTCFullYear(year, month - 1, day);
-  local.setUTCHours(hour, minute, second, millis);
-  const sign = match[9] === "-" ? -1 : 1;
-  const instant = local.getTime() - sign * (offsetHours * 60 + offsetMinutes) * 60000;
-  const utcYear = new Date(instant).getUTCFullYear();
-  return Number.isFinite(instant) && utcYear >= 1 && utcYear <= 9999 ? instant : null;
-}
-function minutesSince(at, observedAt) {
-  const age = Date.parse(observedAt) - Date.parse(at);
-  return Number.isFinite(age) ? Math.max(0, Math.floor(age / 60000)) : null;
-}
-function durationSince(ms) {
-  if (!Number.isFinite(ms) || ms < 0)
-    return "?";
-  const s = Math.floor(ms / 1000);
-  const d = Math.floor(s / 86400);
-  const h = Math.floor(s % 86400 / 3600);
-  const m = Math.floor(s % 3600 / 60);
-  if (d > 0)
-    return `${d}d ${h}h`;
-  if (h > 0)
-    return `${h}h ${m}m`;
-  if (m > 0)
-    return `${m}m ${s % 60}s`;
-  return `${s}s`;
-}
-function durationUntil(at, observedAt) {
-  const left = Date.parse(at) - Date.parse(observedAt);
-  if (!Number.isFinite(left) || left <= 0)
-    return "closed";
-  const minutes = Math.ceil(left / 60000);
-  const hours = Math.floor(minutes / 60);
-  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
-}
-
 // src/ballot.ts
 var BALLOT_COMMITMENT_PROTOCOL = "agenttool.collab-ballot/1";
 var BALLOT_METHOD = "approval/1";
@@ -31119,10 +30546,10 @@ var BALLOT_TIE_NEXT = {
 };
 var BALLOT_BASES = NOTE_BASES;
 function ballotUnitId(voiceIds) {
-  return `unit_${sha2562(canonicalJson(sortedUnique(voiceIds))).slice(0, 32)}`;
+  return `unit_${sha256(canonicalJson(sortedUnique(voiceIds))).slice(0, 32)}`;
 }
 function electorateSha256(units) {
-  return sha2562(canonicalJson(units));
+  return sha256(canonicalJson(units));
 }
 function buildElectorate(sessions) {
   const byId = new Map;
@@ -31571,7 +30998,7 @@ function ballotCommitment(input) {
   if (!SALT.test(input.salt)) {
     throw new CollabError("invalid_salt", "a ballot salt is 32 random bytes as 64 lowercase hex characters");
   }
-  return sha2562(canonicalJson({
+  return sha256(canonicalJson({
     protocol: BALLOT_COMMITMENT_PROTOCOL,
     workspace_id: input.workspace_id,
     ballot_id: input.ballot_id,
@@ -31655,7 +31082,7 @@ function revealedEntryBytes(entry) {
   return Buffer.byteLength(canonicalJson(entry), "utf8");
 }
 function revealedEntriesSha256(entries) {
-  return sha2562(canonicalJson(entries));
+  return sha256(canonicalJson(entries));
 }
 function unitOutcomes(units, entries) {
   return units.map((unit) => {
@@ -31932,20 +31359,20 @@ function compare(left, right) {
 function refuse(code, message, details, remedy) {
   throw new CollabError(code, message, { ...details, remedy });
 }
-function sha2562(value) {
-  return createHash3("sha256").update(value).digest("hex");
+function sha256(value) {
+  return createHash2("sha256").update(value).digest("hex");
 }
 
 // src/ballot-seal.ts
 import { randomUUID as randomUUID3 } from "crypto";
 import {
   chmodSync as chmodSync3,
-  closeSync as closeSync6,
-  existsSync as existsSync4,
+  closeSync as closeSync5,
+  existsSync as existsSync3,
   fsyncSync as fsyncSync3,
-  lstatSync as lstatSync4,
+  lstatSync as lstatSync3,
   mkdirSync as mkdirSync3,
-  openSync as openSync6,
+  openSync as openSync5,
   readdirSync as readdirSync2,
   readFileSync as readFileSync3,
   renameSync as renameSync3,
@@ -31953,32 +31380,32 @@ import {
   unlinkSync as unlinkSync3,
   writeSync
 } from "fs";
-import { dirname as dirname4, join as join5 } from "path";
+import { dirname as dirname3, join as join4 } from "path";
 var SEAL_DIRECTORY = "collab-ballots";
 var BALLOT_ID = /^report_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 var CAST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function sealRoot(journalRealpath) {
-  return join5(dirname4(journalRealpath), SEAL_DIRECTORY);
+  return join4(dirname3(journalRealpath), SEAL_DIRECTORY);
 }
 function sealDirectory(journalRealpath, ballotId) {
   if (!BALLOT_ID.test(ballotId))
     throw new CollabError("invalid_ballot_id", "A ballot id is the poll report's id");
-  return join5(sealRoot(journalRealpath), ballotId);
+  return join4(sealRoot(journalRealpath), ballotId);
 }
 function sealPath(journalRealpath, ballotId, castId) {
   if (!CAST_ID.test(castId))
     throw new CollabError("invalid_cast_id", "A cast id is a random uuid");
-  return join5(sealDirectory(journalRealpath, ballotId), `${castId}.json`);
+  return join4(sealDirectory(journalRealpath, ballotId), `${castId}.json`);
 }
 function currentUser() {
   return typeof process.getuid === "function" ? process.getuid() : null;
 }
 function privateDirectory(path) {
-  if (!existsSync4(path)) {
+  if (!existsSync3(path)) {
     mkdirSync3(path, { mode: 448 });
     chmodSync3(path, 448);
   }
-  const stat = lstatSync4(path);
+  const stat = lstatSync3(path);
   const uid = currentUser();
   if (!stat.isDirectory() || stat.isSymbolicLink() || uid !== null && stat.uid !== uid) {
     throw new CollabError("seal_directory_unsafe", "The ballot seal directory must be a real directory owned by this user", {
@@ -31989,23 +31416,23 @@ function privateDirectory(path) {
     chmodSync3(path, 448);
 }
 function writeSealFile(path, seal) {
-  const directory = dirname4(path);
-  privateDirectory(dirname4(directory));
+  const directory = dirname3(path);
+  privateDirectory(dirname3(directory));
   privateDirectory(directory);
-  if (existsSync4(path)) {
+  if (existsSync3(path)) {
     throw new CollabError("seal_file_exists", "A seal file with this cast id already exists", { operation: "write_seal_file" });
   }
-  const temporary = join5(directory, `.${randomUUID3()}.tmp`);
-  const descriptor = openSync6(temporary, "wx", 384);
+  const temporary = join4(directory, `.${randomUUID3()}.tmp`);
+  const descriptor = openSync5(temporary, "wx", 384);
   try {
     writeSync(descriptor, JSON.stringify(seal));
     fsyncSync3(descriptor);
   } catch (error51) {
-    closeSync6(descriptor);
+    closeSync5(descriptor);
     removeQuietly(temporary);
     throw error51;
   }
-  closeSync6(descriptor);
+  closeSync5(descriptor);
   try {
     renameSync3(temporary, path);
   } catch (error51) {
@@ -32013,19 +31440,19 @@ function writeSealFile(path, seal) {
     throw error51;
   }
   try {
-    const handle = openSync6(directory, "r");
+    const handle = openSync5(directory, "r");
     try {
       fsyncSync3(handle);
     } finally {
-      closeSync6(handle);
+      closeSync5(handle);
     }
   } catch {}
 }
 function readSealFile(path) {
   try {
-    if (!existsSync4(path))
+    if (!existsSync3(path))
       return { state: "missing" };
-    const stat = lstatSync4(path);
+    const stat = lstatSync3(path);
     if (!stat.isFile() || stat.isSymbolicLink())
       return { state: "unreadable" };
     return { state: "read", value: JSON.parse(readFileSync3(path, "utf8")) };
@@ -32039,7 +31466,7 @@ function removeSealFile(path) {
 function listSealFiles(journalRealpath, ballotId) {
   try {
     const directory = sealDirectory(journalRealpath, ballotId);
-    if (!existsSync4(directory))
+    if (!existsSync3(directory))
       return [];
     return readdirSync2(directory).filter((name) => name.endsWith(".json") && CAST_ID.test(name.slice(0, -".json".length))).map((name) => name.slice(0, -".json".length));
   } catch {
@@ -32050,9 +31477,9 @@ var TEMPORARY = /^\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 function listSealTemporaries(journalRealpath, ballotId) {
   try {
     const directory = sealDirectory(journalRealpath, ballotId);
-    if (!existsSync4(directory))
+    if (!existsSync3(directory))
       return [];
-    return readdirSync2(directory).filter((name) => TEMPORARY.test(name)).map((name) => join5(directory, name));
+    return readdirSync2(directory).filter((name) => TEMPORARY.test(name)).map((name) => join4(directory, name));
   } catch {
     return [];
   }
@@ -32060,7 +31487,7 @@ function listSealTemporaries(journalRealpath, ballotId) {
 function listSealBallots(journalRealpath) {
   try {
     const root = sealRoot(journalRealpath);
-    if (!existsSync4(root) || !lstatSync4(root).isDirectory())
+    if (!existsSync3(root) || !lstatSync3(root).isDirectory())
       return [];
     return readdirSync2(root).filter((name) => BALLOT_ID.test(name));
   } catch {
@@ -32070,7 +31497,7 @@ function listSealBallots(journalRealpath) {
 function removeEmptySealDirectory(journalRealpath, ballotId) {
   try {
     const directory = sealDirectory(journalRealpath, ballotId);
-    if (existsSync4(directory) && readdirSync2(directory).length === 0)
+    if (existsSync3(directory) && readdirSync2(directory).length === 0)
       rmdirSync(directory);
   } catch {}
 }
@@ -32094,7 +31521,7 @@ import {
 import { dirname as dirname5, isAbsolute as isAbsolute4, join as join6, posix, resolve as resolve5 } from "path";
 
 // src/passkey.ts
-import { createHash as createHash4, createPublicKey, verify } from "crypto";
+import { createHash as createHash3, createPublicKey, verify } from "crypto";
 var FLAG_USER_PRESENT = 1;
 var FLAG_USER_VERIFIED = 4;
 var BASE64URL = /^[A-Za-z0-9_-]*$/;
@@ -32108,12 +31535,12 @@ function base64urlDecode(value, field, maxBytes = 64 * 1024) {
   }
   return bytes;
 }
-function sha2563(bytes) {
-  return createHash4("sha256").update(bytes).digest();
+function sha2562(bytes) {
+  return createHash3("sha256").update(bytes).digest();
 }
 function personActChallenge(input) {
   const challenge_bytes = canonicalJson({ protocol: PERSON_ACT_PROTOCOL, ...input });
-  return { challenge_bytes, challenge: sha2563(challenge_bytes).toString("base64url") };
+  return { challenge_bytes, challenge: sha2562(challenge_bytes).toString("base64url") };
 }
 var ASSERTION_FIELDS = new Set(["credential_id", "authenticator_data", "client_data_json", "signature", "user_handle"]);
 function normalizePasskeyAssertion(value) {
@@ -32177,7 +31604,7 @@ function parsePasskeyPublicKey(spki) {
   return key;
 }
 function passkeyFingerprint(spki) {
-  return sha2563(base64urlDecode(spki, "public_key_spki", 1024)).toString("hex");
+  return sha2562(base64urlDecode(spki, "public_key_spki", 1024)).toString("hex");
 }
 function validatePasskeyScope(rpId, origin) {
   if (typeof rpId !== "string" || !/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(rpId)) {
@@ -32225,7 +31652,7 @@ function verifyPasskeyAssertion(input) {
   if (authenticatorData.length < 37) {
     throw new CollabError("passkey_assertion_invalid", "authenticator_data is too short");
   }
-  if (!authenticatorData.subarray(0, 32).equals(sha2563(passkey.rp_id))) {
+  if (!authenticatorData.subarray(0, 32).equals(sha2562(passkey.rp_id))) {
     throw new CollabError("passkey_rp_mismatch", "The assertion is for another relying party");
   }
   const flags = authenticatorData[32];
@@ -32236,7 +31663,7 @@ function verifyPasskeyAssertion(input) {
   if ((signCount !== 0 || passkey.sign_count !== 0) && signCount <= passkey.sign_count) {
     throw new CollabError("passkey_counter_regressed", "The signature counter did not increase");
   }
-  const signed = Buffer.concat([authenticatorData, sha2563(clientDataBytes)]);
+  const signed = Buffer.concat([authenticatorData, sha2562(clientDataBytes)]);
   const valid = verify("sha256", signed, { key: parsePasskeyPublicKey(passkey.public_key_spki), dsaEncoding: "der" }, signature);
   if (!valid)
     throw new CollabError("passkey_signature_invalid", "The passkey signature does not verify");
@@ -32271,6 +31698,585 @@ function aiPosition(input) {
   if (input.unresolved_challenge)
     return result("split");
   return result(hasSupport ? "consented" : "lapsed");
+}
+
+// src/repository.ts
+import { createHash as createHash4 } from "crypto";
+import {
+  closeSync as closeSync6,
+  constants as fsConstants,
+  existsSync as existsSync4,
+  fstatSync as fstatSync3,
+  lstatSync as lstatSync4,
+  openSync as openSync6,
+  readlinkSync,
+  readSync as readSync3,
+  realpathSync,
+  statSync
+} from "fs";
+import { dirname as dirname4, isAbsolute as isAbsolute3, join as join5, relative, resolve as resolve4, sep } from "path";
+import { spawnSync as spawnSync2 } from "child_process";
+var GIT_TIMEOUT_MS = 5000;
+var MAX_GIT_OUTPUT = 1024 * 1024;
+var MAX_UNTRACKED_FILES = 1e4;
+var MAX_UNTRACKED_BYTES = 64 * 1024 * 1024;
+var MAX_UNTRACKED_HASH_MS = 2000;
+var MAX_SUCCESSOR_PATHS = 128;
+var MAX_SUCCESSOR_BYTES = 64 * 1024 * 1024;
+var MAX_SUCCESSOR_INSPECT_MS = 5000;
+var GIT_OBJECT_ID = /^[0-9a-f]{40,64}$/;
+var RAW_DIFF_HEADER = /^:([0-7]{6}) ([0-7]{6}) ([0-9a-f]{40,64}) ([0-9a-f]{40,64}) ([A-Z])$/;
+
+class RepositoryProbeTimeout extends Error {
+  constructor() {
+    super("Repository discovery exhausted its Git time budget");
+  }
+}
+function inspectRepository(rootInput, explicitRepositoryKey, metadataOnly = false, options = {}) {
+  const requested = resolve4(rootInput);
+  if (!existsSync4(requested) || !statSync(requested).isDirectory()) {
+    throw new CollabError("workspace_not_directory", "Workspace root must be an existing directory", { root_path: requested });
+  }
+  const requestedRoot = realpathSync(requested);
+  const topLevel = mayFindRepository(requestedRoot) ? gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"], options) : null;
+  const rootPath = topLevel && existsSync4(topLevel) ? realpathSync(topLevel) : requestedRoot;
+  const explicitKey = explicitRepositoryKey?.trim();
+  if (!topLevel) {
+    const repositoryKey2 = explicitKey ? `explicit:${sha2563(explicitKey)}` : `local-path:${sha2563(rootPath)}`;
+    return {
+      requested_root_path: requestedRoot,
+      root_path: rootPath,
+      repository_key: repositoryKey2,
+      git_common_dir_hash: null,
+      worktree_fingerprint: `path:${sha2563(rootPath)}`,
+      checkpoint: {
+        worktree_id: worktreeId(rootPath, `path:${rootPath}`),
+        head_sha: null,
+        branch: null,
+        dirty: null,
+        captured_at: new Date().toISOString()
+      }
+    };
+  }
+  const commonDirOutput = gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-common-dir"], options) ?? gitOutput(rootPath, ["rev-parse", "--git-common-dir"], options);
+  const gitDirOutput = gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-dir"], options) ?? gitOutput(rootPath, ["rev-parse", "--git-dir"], options);
+  if (!commonDirOutput || !gitDirOutput) {
+    throw new CollabError("git_identity_unavailable", "Git recognized the repository but its local identity could not be resolved", { root_path: rootPath });
+  }
+  const commonDir = realpathIfPresent(resolveGitPath(rootPath, commonDirOutput));
+  const gitDir = realpathIfPresent(resolveGitPath(rootPath, gitDirOutput));
+  const commonDirHash = sha2563(commonDir);
+  const repositoryKey = explicitKey ? `explicit:${sha2563(explicitKey)}` : `local-git:${commonDirHash}`;
+  const fingerprint = `git:${sha2563(`${commonDir}\x00${gitDir}`)}`;
+  const id = worktreeId(rootPath, fingerprint);
+  return {
+    requested_root_path: requestedRoot,
+    root_path: rootPath,
+    repository_key: repositoryKey,
+    portable_repository_key: explicitKey || options.portable === false ? null : portableRepositoryKey(rootPath, options),
+    git_common_dir_hash: commonDirHash,
+    worktree_fingerprint: fingerprint,
+    checkpoint: metadataOnly ? { worktree_id: id, head_sha: null, branch: null, dirty: null, captured_at: new Date().toISOString() } : captureRepoCheckpoint(rootPath, id)
+  };
+}
+function portableRepositoryKey(rootPath, optionsOrDeadline = {}) {
+  const options = typeof optionsOrDeadline === "number" ? { deadline: optionsOrDeadline } : optionsOrDeadline;
+  const origin = gitOutput(rootPath, ["config", "--get-all", "remote.origin.url"], options);
+  const remote = origin ?? gitOutput(rootPath, ["config", "--get-all", "remote.github.url"], options);
+  const canonical = remote ? canonicalRepositoryRemote(remote) : null;
+  if (!canonical || gitOutput(rootPath, ["rev-parse", "--is-shallow-repository"], options) !== "false")
+    return null;
+  const roots = successorGit(rootPath, ["rev-list", "--max-parents=0", "HEAD"], MAX_GIT_OUTPUT, options);
+  if (roots.timed_out && options.deadline !== undefined)
+    throw new RepositoryProbeTimeout;
+  if (!roots.ok)
+    return null;
+  const root = roots.stdout.toString("utf8").trim();
+  if (!GIT_OBJECT_ID.test(root))
+    return null;
+  return `git-root-remote:v1:${sha2563(`${root}\x00${canonical}`)}`;
+}
+function canonicalRepositoryRemote(value) {
+  if (/[\s\x00-\x1f\x7f]/.test(value) || value.includes("::") || value.includes("://") && !/^(https?|ssh|git):\/\//i.test(value))
+    return null;
+  let host;
+  let path;
+  let port = "";
+  try {
+    if (/^(https?|ssh|git):\/\//i.test(value)) {
+      const url2 = new URL(value);
+      if (url2.search || url2.hash)
+        return null;
+      host = url2.hostname.toLowerCase();
+      path = url2.pathname;
+      port = url2.port && !(url2.protocol === "ssh:" && url2.port === "22" || url2.protocol === "git:" && url2.port === "9418") ? `:${url2.port}` : "";
+    } else {
+      const scp = /^(?:[^/@:]+@)?([^/:]+):(.+)$/.exec(value);
+      if (!scp)
+        return null;
+      host = scp[1].toLowerCase();
+      path = scp[2];
+    }
+    path = path.replace(/^\/+|\/+$/g, "").replace(/\.git$/i, "");
+    if (!host || !path || path.split("/").some((part) => !part || part === "." || part === "..") || /[%\\?#]/.test(path))
+      return null;
+    return `${host}${port}/${path.toLowerCase()}`;
+  } catch {
+    return null;
+  }
+}
+function captureRepoCheckpoint(rootPath, id) {
+  const head = gitOutput(rootPath, ["rev-parse", "--verify", "HEAD"]);
+  if (!head) {
+    return {
+      worktree_id: id,
+      head_sha: null,
+      branch: null,
+      dirty: null,
+      captured_at: new Date().toISOString()
+    };
+  }
+  const branch = gitOutput(rootPath, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
+  const pathStateBefore = gitBytes(rootPath, [
+    "status",
+    "--porcelain=v1",
+    "-z",
+    "--untracked-files=all"
+  ]);
+  const indexDigest = gitDigest(rootPath, ["ls-files", "-s", "-z"]);
+  const trackedState = gitBytes(rootPath, [
+    "diff",
+    "--no-ext-diff",
+    "--binary",
+    "HEAD",
+    "--"
+  ]);
+  const untrackedPaths = gitBytes(rootPath, [
+    "ls-files",
+    "--others",
+    "--exclude-standard",
+    "-z"
+  ]);
+  const untrackedDigest = untrackedPaths.ok ? digestUntrackedContent(rootPath, untrackedPaths.stdout) : null;
+  const pathStateAfter = gitBytes(rootPath, [
+    "status",
+    "--porcelain=v1",
+    "-z",
+    "--untracked-files=all"
+  ]);
+  const stablePathState = pathStateBefore.ok && pathStateAfter.ok && pathStateBefore.stdout.equals(pathStateAfter.stdout);
+  return {
+    worktree_id: id,
+    head_sha: /^[0-9a-f]{40,64}$/i.test(head) ? head.toLowerCase() : null,
+    branch,
+    dirty: pathStateAfter.ok ? pathStateAfter.stdout.length > 0 : null,
+    algorithm: "git-state/v1",
+    index_sha256: indexDigest,
+    state_sha256: trackedState.ok && stablePathState && untrackedDigest ? sha256Bytes(Buffer.concat([
+      trackedState.stdout,
+      Buffer.from([0]),
+      pathStateAfter.stdout,
+      Buffer.from([0]),
+      Buffer.from(untrackedDigest, "hex")
+    ])) : null,
+    source: "server_observed",
+    captured_at: new Date().toISOString()
+  };
+}
+function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
+  const refuse2 = (reason) => ({
+    ok: false,
+    commit_sha: commitSha,
+    reason
+  });
+  if (!GIT_OBJECT_ID.test(commitSha) || !GIT_OBJECT_ID.test(parentSha)) {
+    return refuse2("The checkpoint HEADs are not Git object IDs");
+  }
+  const commitObject = successorGit(rootPath, ["cat-file", "commit", commitSha]);
+  if (!commitObject.ok)
+    return refuse2(`Git could not read commit ${commitSha}`);
+  const headerEnd = commitObject.stdout.indexOf(`
+
+`);
+  const parents = commitObject.stdout.subarray(0, headerEnd === -1 ? commitObject.stdout.length : headerEnd).toString("utf8").split(`
+`).filter((line) => line.startsWith("parent ")).map((line) => line.slice("parent ".length));
+  if (parents.length > 1) {
+    return refuse2(`HEAD ${commitSha} is a merge commit, not one fast-forward commit`);
+  }
+  if (parents[0] !== parentSha) {
+    const descends = successorGitExitCode(rootPath, [
+      "merge-base",
+      "--is-ancestor",
+      parentSha,
+      commitSha
+    ]) === 0;
+    return refuse2(descends ? `HEAD ${commitSha} is more than one commit ahead of the result checkpoint HEAD ${parentSha}` : `HEAD ${commitSha} does not descend from the result checkpoint HEAD ${parentSha}`);
+  }
+  const diff = successorGit(rootPath, [
+    "diff-tree",
+    "-r",
+    "-z",
+    "--raw",
+    "--no-renames",
+    "--ignore-submodules=none",
+    parentSha,
+    commitSha,
+    "--"
+  ]);
+  const fields = diff.ok ? splitNul(diff.stdout) : null;
+  if (!fields || fields.length % 2 !== 0) {
+    return refuse2(`Git could not list the paths commit ${commitSha} changes`);
+  }
+  if (fields.length / 2 > MAX_SUCCESSOR_PATHS) {
+    return refuse2(`Commit ${commitSha} changes more than ${MAX_SUCCESSOR_PATHS} paths`);
+  }
+  const budget = { bytes: MAX_SUCCESSOR_BYTES, deadline: performance.now() + MAX_SUCCESSOR_INSPECT_MS };
+  const changes = [];
+  for (let index = 0;index < fields.length; index += 2) {
+    const header = RAW_DIFF_HEADER.exec(fields[index].toString("utf8"));
+    const pathBytes = fields[index + 1];
+    if (!header || !safeGitRelativePath(pathBytes)) {
+      return refuse2(`Git reported a change in commit ${commitSha} that cannot be read safely`);
+    }
+    const path = pathBytes.toString("utf8");
+    const [, oldMode, mode, , blob, status] = header;
+    const modeVouched = status === "A" || status === "M" && oldMode === mode;
+    if (status === "D" || mode !== "100644" && mode !== "100755" || !modeVouched) {
+      changes.push({ path, blob_sha256: null });
+      continue;
+    }
+    if (performance.now() > budget.deadline || budget.bytes <= 0) {
+      return refuse2(`Inspecting commit ${commitSha} exceeded its bounds`);
+    }
+    const content = successorGit(rootPath, ["cat-file", "blob", blob], budget.bytes);
+    if (!content.ok) {
+      return refuse2(`Git could not read the committed bytes of ${path} within the inspection bounds`);
+    }
+    budget.bytes -= content.stdout.length;
+    changes.push({ path, blob_sha256: sha256Bytes(content.stdout) });
+  }
+  return { ok: true, commit_sha: commitSha, parent_sha: parentSha, changes };
+}
+var MAX_CITED_FILE_BYTES = 16 * 1024 * 1024;
+function hashWorktreeFile(rootPath, cited, maxBytes = MAX_CITED_FILE_BYTES) {
+  let root;
+  try {
+    root = realpathSync(rootPath);
+  } catch {
+    return { status: "unreadable", path: null };
+  }
+  if (cited.includes("\x00") || cited.includes("\\"))
+    return { status: "outside", path: null };
+  const candidate = resolve4(root, cited);
+  const inside = relative(root, candidate);
+  if (!inside || inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute3(inside)) {
+    return { status: "outside", path: null };
+  }
+  let walked = root;
+  let isFile = false;
+  const parts = inside.split(sep);
+  for (const [index, part] of parts.entries()) {
+    walked = `${walked}${sep}${part}`;
+    let stat;
+    try {
+      stat = lstatSync4(walked);
+    } catch (error51) {
+      return { status: error51.code === "ENOENT" ? "missing" : "unreadable", path: inside };
+    }
+    if (stat.isSymbolicLink())
+      return { status: "symlink", path: inside };
+    if (index < parts.length - 1 && !stat.isDirectory())
+      return { status: "missing", path: inside };
+    isFile = stat.isFile();
+  }
+  if (!isFile)
+    return { status: "not_a_file", path: inside };
+  let descriptor = null;
+  try {
+    descriptor = openSync6(walked, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
+    const before = fstatSync3(descriptor);
+    if (!before.isFile())
+      return { status: "not_a_file", path: inside };
+    if (before.size > maxBytes)
+      return { status: "too_large", path: inside };
+    const hash2 = createHash4("sha256");
+    const buffer = Buffer.allocUnsafe(64 * 1024);
+    let total = 0;
+    while (true) {
+      const count = readSync3(descriptor, buffer, 0, buffer.length, null);
+      if (count === 0)
+        break;
+      total += count;
+      if (total > maxBytes)
+        return { status: "too_large", path: inside };
+      hash2.update(buffer.subarray(0, count));
+    }
+    const after = fstatSync3(descriptor);
+    if (before.ino !== after.ino || before.size !== after.size || before.mtimeMs !== after.mtimeMs) {
+      return { status: "changed_while_read", path: inside };
+    }
+    return { status: "hashed", path: inside, sha256: hash2.digest("hex"), size: total };
+  } catch (error51) {
+    return { status: error51.code === "ELOOP" ? "symlink" : "unreadable", path: inside };
+  } finally {
+    if (descriptor !== null)
+      closeSync6(descriptor);
+  }
+}
+function gitCommitExists(rootPath, sha, options = {}) {
+  if (!/^[0-9a-f]{7,64}$/i.test(sha))
+    return false;
+  const inRepository = runGit(rootPath, ["rev-parse", "--git-dir"], options);
+  if (!inRepository.ok)
+    return null;
+  const timeout = gitTimeout(options);
+  if (timeout <= 0)
+    return null;
+  const result = spawnRepositoryGit(["-C", rootPath, ...SUCCESSOR_GIT_ARGS, "cat-file", "-e", `${sha}^{commit}`], {
+    timeout,
+    stdio: ["ignore", "ignore", "ignore"],
+    env: successorGitEnv()
+  }, options);
+  if (spawnFailed(result))
+    return null;
+  return result.status === 0;
+}
+function topLevelTrackedPaths(rootPath, options = {}) {
+  if (!mayFindRepository(rootPath))
+    return null;
+  const result = runGit(rootPath, ["ls-tree", "-z", "--name-only", "HEAD"], options);
+  if (!result.ok)
+    return null;
+  const names = result.stdout.split("\x00").filter((name) => name.length > 0);
+  return names.length > 0 ? names.sort() : null;
+}
+function mayFindRepository(rootPath) {
+  if (process.env.GIT_DIR || process.env.GIT_WORK_TREE)
+    return true;
+  for (let directory = rootPath;; directory = dirname4(directory)) {
+    try {
+      lstatSync4(join5(directory, ".git"));
+      return true;
+    } catch (error51) {
+      const code = error51.code;
+      if (code !== "ENOENT" && code !== "ENOTDIR")
+        return true;
+    }
+    if (dirname4(directory) === directory)
+      return false;
+  }
+}
+function exitedDespiteTimeout(result) {
+  return result.error?.code === "ETIMEDOUT" && result.status !== null && result.signal == null;
+}
+function spawnFailed(result) {
+  return result.error != null && !exitedDespiteTimeout(result);
+}
+function spawnTimedOut(result) {
+  return result.error?.code === "ETIMEDOUT" && !exitedDespiteTimeout(result);
+}
+function worktreeId(rootPath, fingerprint) {
+  return `wt_${sha2563(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
+}
+function resolveGitPath(rootPath, value) {
+  return value.startsWith("/") ? value : resolve4(rootPath, value);
+}
+function realpathIfPresent(path) {
+  return existsSync4(path) ? realpathSync(path) : resolve4(path);
+}
+function gitOutput(rootPath, args, options = {}) {
+  const result = runGit(rootPath, args, options);
+  if (result.timed_out && options.deadline !== undefined)
+    throw new RepositoryProbeTimeout;
+  if (!result.ok)
+    return null;
+  const value = result.stdout.trim();
+  return value.length > 0 ? value : null;
+}
+function runGit(rootPath, args, options) {
+  const timeout = gitTimeout(options);
+  if (timeout <= 0)
+    return { ok: false, timed_out: true, stdout: "" };
+  const result = spawnRepositoryGit(["-C", rootPath, ...args], {
+    encoding: "utf8",
+    timeout,
+    maxBuffer: MAX_GIT_OUTPUT,
+    stdio: ["ignore", "pipe", "ignore"],
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" }
+  }, options);
+  return {
+    ok: result.status === 0 && !spawnFailed(result),
+    timed_out: spawnTimedOut(result),
+    stdout: typeof result.stdout === "string" ? result.stdout : ""
+  };
+}
+function gitDigest(rootPath, args) {
+  const result = gitBytes(rootPath, args);
+  return result.ok ? sha256Bytes(result.stdout) : null;
+}
+function gitBytes(rootPath, args, maxBuffer = MAX_GIT_OUTPUT) {
+  const result = spawnSync2("git", ["-C", rootPath, ...args], {
+    timeout: GIT_TIMEOUT_MS,
+    maxBuffer,
+    stdio: ["ignore", "pipe", "ignore"]
+  });
+  return {
+    ok: result.status === 0 && !spawnFailed(result),
+    stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0)
+  };
+}
+var SUCCESSOR_GIT_ARGS = ["-c", "core.commitGraph=false", "--no-replace-objects"];
+function successorGitEnv() {
+  return { ...process.env, GIT_GRAFT_FILE: "/dev/null/agenttool-collab-no-grafts" };
+}
+function successorGit(rootPath, args, maxBuffer = MAX_GIT_OUTPUT, options = {}) {
+  const timeout = gitTimeout(options);
+  if (timeout <= 0)
+    return { ok: false, timed_out: true, stdout: Buffer.alloc(0) };
+  const result = spawnRepositoryGit(["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
+    timeout,
+    maxBuffer,
+    stdio: ["ignore", "pipe", "ignore"],
+    env: successorGitEnv()
+  }, options);
+  return {
+    ok: result.status === 0 && !spawnFailed(result),
+    timed_out: spawnTimedOut(result),
+    stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0)
+  };
+}
+function spawnRepositoryGit(args, options, probe) {
+  return probe.spawn ? probe.spawn(args, options) : spawnSync2("git", args, options);
+}
+function gitTimeout(options) {
+  return options.deadline === undefined ? GIT_TIMEOUT_MS : Math.min(GIT_TIMEOUT_MS, Math.ceil(options.deadline - (options.now ?? (() => performance.now()))()));
+}
+function successorGitExitCode(rootPath, args) {
+  const result = spawnSync2("git", ["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
+    timeout: GIT_TIMEOUT_MS,
+    stdio: ["ignore", "ignore", "ignore"],
+    env: successorGitEnv()
+  });
+  return spawnFailed(result) ? null : result.status;
+}
+function digestUntrackedContent(rootPath, paths) {
+  const entries = splitNul(paths);
+  if (!entries || entries.length > MAX_UNTRACKED_FILES)
+    return null;
+  const budget = {
+    remainingBytes: MAX_UNTRACKED_BYTES,
+    deadline: performance.now() + MAX_UNTRACKED_HASH_MS
+  };
+  const aggregate = createHash4("sha256");
+  aggregate.update("agenttool.collab/untracked-state/v1\x00");
+  for (const entry of entries) {
+    if (performance.now() > budget.deadline)
+      return null;
+    if (!safeGitRelativePath(entry))
+      return null;
+    const absolute = Buffer.concat([
+      Buffer.from(rootPath),
+      Buffer.from("/"),
+      entry
+    ]);
+    let stat;
+    try {
+      stat = lstatSync4(absolute);
+      aggregate.update(lengthPrefix(entry.length));
+      aggregate.update(entry);
+      if (stat.isSymbolicLink()) {
+        const target = readlinkSync(absolute, { encoding: "buffer" });
+        if (target.length > budget.remainingBytes || performance.now() > budget.deadline) {
+          return null;
+        }
+        budget.remainingBytes -= target.length;
+        aggregate.update("symlink\x00");
+        aggregate.update(lengthPrefix(target.length));
+        aggregate.update(target);
+      } else if (stat.isFile()) {
+        const digest = digestStableFile(absolute, budget);
+        if (!digest)
+          return null;
+        aggregate.update("file\x00");
+        aggregate.update(lengthPrefix(stat.mode & 73));
+        aggregate.update(digest);
+      } else {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+  }
+  return aggregate.digest("hex");
+}
+function digestStableFile(path, budget) {
+  let descriptor = null;
+  try {
+    descriptor = openSync6(path, "r");
+    const before = fstatSync3(descriptor);
+    if (!before.isFile() || before.size > budget.remainingBytes || performance.now() > budget.deadline)
+      return null;
+    const hash2 = createHash4("sha256");
+    const buffer = Buffer.allocUnsafe(64 * 1024);
+    while (true) {
+      if (performance.now() > budget.deadline)
+        return null;
+      const count = readSync3(descriptor, buffer, 0, buffer.length, null);
+      if (count === 0)
+        break;
+      hash2.update(buffer.subarray(0, count));
+    }
+    const after = fstatSync3(descriptor);
+    if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mode !== after.mode || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs)
+      return null;
+    budget.remainingBytes -= before.size;
+    return hash2.digest();
+  } catch {
+    return null;
+  } finally {
+    if (descriptor !== null)
+      closeSync6(descriptor);
+  }
+}
+function splitNul(value) {
+  if (value.length === 0)
+    return [];
+  const entries = [];
+  let start = 0;
+  for (let index = 0;index < value.length; index += 1) {
+    if (value[index] !== 0)
+      continue;
+    if (index === start)
+      return null;
+    entries.push(value.subarray(start, index));
+    start = index + 1;
+  }
+  return start === value.length ? entries : null;
+}
+function safeGitRelativePath(value) {
+  if (value.length === 0 || value[0] === 47)
+    return false;
+  let start = 0;
+  for (let index = 0;index <= value.length; index += 1) {
+    if (index !== value.length && value[index] !== 47)
+      continue;
+    const component = value.subarray(start, index);
+    if (component.length === 0 || component.length === 1 && component[0] === 46 || component.length === 2 && component[0] === 46 && component[1] === 46)
+      return false;
+    start = index + 1;
+  }
+  return true;
+}
+function lengthPrefix(value) {
+  const prefix2 = Buffer.allocUnsafe(8);
+  prefix2.writeBigUInt64BE(BigInt(value));
+  return prefix2;
+}
+function sha2563(value) {
+  return createHash4("sha256").update(value).digest("hex");
+}
+function sha256Bytes(value) {
+  return createHash4("sha256").update(value).digest("hex");
 }
 
 // src/store.ts
@@ -34158,6 +34164,7 @@ class CollabStoreCore {
       path_scopes: normalizePathScopes(input.path_scopes ?? [])
     };
     return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.create", normalized, () => {
+      refuseGlobPathScopes(normalized.path_scopes);
       this.requireWorkspace(input.workspace_id);
       const id = normalized.id ?? `task_${randomUUID4()}`;
       if (normalized.dependencies.includes(id)) {
@@ -34210,6 +34217,7 @@ class CollabStoreCore {
     }
     const request = { ...normalized, completion_policy: completionPolicy };
     return this.mutateAsSession(input, normalized.idempotency_key, "task.create.v2", request, (session) => {
+      refuseGlobPathScopes(normalized.path_scopes);
       const id = normalized.id ?? `task_${randomUUID4()}`;
       if (normalized.dependencies.includes(id)) {
         throw new CollabError("invalid_dependency", "A task cannot depend on itself", {
@@ -38022,6 +38030,40 @@ function normalizePathScopes(scopes) {
   });
   return uniqueSorted(normalized);
 }
+var PATH_SCOPE_GLOB = /[*?[\]]/;
+function globPathScopeRefusal(scopes, options = {}) {
+  const scope = scopes.find((item) => PATH_SCOPE_GLOB.test(item));
+  if (scope === undefined)
+    return null;
+  const unlisted = scopes.some((item) => PATH_SCOPE_GLOB.test(item) && literalPathPrefix(item) === "" && !/^\*+(\/|$)/.test(item));
+  const prefixes = scopes.map((item) => PATH_SCOPE_GLOB.test(item) ? literalPathPrefix(item) : item);
+  const wholeRepository = prefixes.includes("") && !unlisted;
+  let literal2 = null;
+  if (!unlisted) {
+    try {
+      const top = wholeRepository ? options.top_level?.() ?? [] : [];
+      if (!wholeRepository || top.length > 0 && !top.some((item) => PATH_SCOPE_GLOB.test(item))) {
+        const all = normalizePathScopes([...top, ...prefixes.filter((item) => item !== "")]);
+        literal2 = all.filter((item) => !all.some((other) => item.startsWith(`${other}/`)));
+      }
+    } catch {}
+  }
+  const say = literal2 ? `Send the literal scopes ${JSON.stringify(literal2)} instead.` : wholeRepository ? 'For the whole repository, list its top-level paths, such as ["src", "tests", "README.md"]; the root itself cannot be reserved.' : 'List the literal paths the pattern meant, such as ["README.md", "src"].';
+  return new CollabError("invalid_path_scope", `Path scope '${scope}' holds a glob character (*, ?, [ or ]). Scopes are literal repository-relative prefixes: ` + "'src' reserves everything under src/, and 'src/**' would reserve nothing", {
+    scope,
+    ...literal2 ? { literal_path_scopes: literal2 } : {},
+    remedy: literal2 && options.ready ? options.ready(literal2) : { say: `${say} Nothing was written.` }
+  });
+}
+function literalPathPrefix(scope) {
+  const segments = scope.split("/");
+  return segments.slice(0, segments.findIndex((segment) => PATH_SCOPE_GLOB.test(segment))).join("/");
+}
+function refuseGlobPathScopes(scopes) {
+  const refusal = globPathScopeRefusal(scopes);
+  if (refusal)
+    throw refusal;
+}
 function normalizeDependencies(dependencies) {
   if (!Array.isArray(dependencies) || dependencies.length > MAX_DEPENDENCIES) {
     throw new CollabError("invalid_dependencies", `A task may have at most ${MAX_DEPENDENCIES} dependencies`);
@@ -41060,6 +41102,9 @@ function firstLine(text) {
   const end = /[\uD800-\uDBFF]$/.test(line.slice(0, 199)) ? 198 : 199;
   return `${line.slice(0, end)}\u2026`;
 }
+
+// src/note-verbs.ts
+import { existsSync as existsSync7 } from "fs";
 
 // src/verbs.ts
 import { createHash as createHash6 } from "crypto";
@@ -45025,6 +45070,15 @@ async function takeNew(ctx, binding, credential, options, advice) {
     stillCurrent: (latestKey) => leaseStillCurrent(ctx, credential, workspaceId, latestKey)
   }, async (plan2) => {
     const created2 = await stepOnce(ctx, credential, plan2.step(1), () => {
+      const glob = globPathScopeRefusal(paths, {
+        ready: (literal2) => ({
+          tool: "collab_take",
+          input: { ...retryInput, paths: literal2, ...ctx.slot_key ? { binding_key: ctx.slot_key } : {} }
+        }),
+        top_level: () => topLevelTrackedPaths(binding.handle.worktree.root_path)
+      });
+      if (glob)
+        throw glob;
       if (paths.length > 0) {
         const conflicts = ctx.store.notePathConflicts(workspaceId, paths, { work_mode: workMode });
         if (conflicts.length > 0)
@@ -46931,7 +46985,7 @@ Legacy session tools: ${legacyInstructions}`
     inputSchema: {
       task: exports_external.string().optional().describe("An existing task: task#\u2026 or its id."),
       title: exports_external.string().optional().describe("A new task's title, at most 300 characters."),
-      paths: exports_external.array(exports_external.string()).optional().describe("Repository-relative paths the new task edits."),
+      paths: exports_external.array(exports_external.string()).optional().describe("Literal repository-relative paths the new task edits (prefixes, not glob patterns: src, not src/**)."),
       purpose: exports_external.string().optional().describe("Why you take it, at most 200 characters; written into a new task's description only."),
       review: exports_external.string().optional().describe("required | none: override whether a new task waits for review."),
       because: exports_external.string().optional().describe("Why you recover a lapsed lease (at most 4,000 characters).")
@@ -47259,13 +47313,36 @@ Legacy session tools: ${legacyInstructions}`
     if (!state.binding && (input.work_mode !== undefined || input.completion_policy !== undefined || input.expected_base_sha !== undefined)) {
       throw new CollabError("session_required_for_v2_task_options", "work_mode, completion_policy, and expected_base_sha require a bound v0.2 session");
     }
-    const task = state.binding ? store2.createTaskForSession({ ...boundCredential(), ...input, id: task_id }) : store2.createTask({
-      workspace_id,
-      actor: requireLegacyActor(actor),
-      ...input,
-      id: task_id
-    });
-    return { task };
+    try {
+      const task = state.binding ? store2.createTaskForSession({ ...boundCredential(), ...input, id: task_id }) : store2.createTask({
+        workspace_id,
+        actor: requireLegacyActor(actor),
+        ...input,
+        id: task_id
+      });
+      return { task };
+    } catch (error51) {
+      if (!(error51 instanceof CollabError) || error51.code !== "invalid_path_scope" || error51.details.remedy === undefined)
+        throw error51;
+      const slotKey = requestSlot.getStore().key;
+      throw globPathScopeRefusal(normalizePathScopes(input.path_scopes ?? []), {
+        ready: (literal2) => ({
+          tool: "collab_task_create",
+          input: {
+            workspace_id,
+            ...actor !== undefined ? { actor } : {},
+            ...task_id !== undefined ? { task_id } : {},
+            ...input,
+            path_scopes: literal2,
+            ...slotKey ? { binding_key: slotKey } : {}
+          }
+        }),
+        top_level: () => {
+          const root = state.binding?.handle.worktree.root_path ?? store2.getWorkspace(workspace_id)?.root_path;
+          return root ? topLevelTrackedPaths(root) : null;
+        }
+      }) ?? error51;
+    }
   }));
   server.registerTool("collab_task_list", {
     title: "List workspace tasks",

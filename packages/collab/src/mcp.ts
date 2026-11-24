@@ -27,7 +27,8 @@ import {
   removeSessionCredentialFile,
   writeSessionCredentialFile,
 } from "./session-file.js";
-import { CollabStore } from "./store-notes.js";
+import { CollabStore, globPathScopeRefusal, normalizePathScopes } from "./store-notes.js";
+import { topLevelTrackedPaths } from "./repository.js";
 import { doneVerb, noteVerb, takeVerb } from "./note-verbs.js";
 import { proposeVerb } from "./propose-verb.js";
 import { pollVerb, voteVerb } from "./ballot-verbs.js";
@@ -471,7 +472,7 @@ export function buildCollabMcpServer(
       inputSchema: {
         task: z.string().optional().describe("An existing task: task#… or its id."),
         title: z.string().optional().describe("A new task's title, at most 300 characters."),
-        paths: z.array(z.string()).optional().describe("Repository-relative paths the new task edits."),
+        paths: z.array(z.string()).optional().describe("Literal repository-relative paths the new task edits (prefixes, not glob patterns: src, not src/**)."),
         purpose: z.string().optional().describe("Why you take it, at most 200 characters; written into a new task's description only."),
         review: z.string().optional().describe("required | none: override whether a new task waits for review."),
         because: z.string().optional().describe("Why you recover a lapsed lease (at most 4,000 characters)."),
@@ -1002,15 +1003,38 @@ export function buildCollabMcpServer(
           "work_mode, completion_policy, and expected_base_sha require a bound v0.2 session",
         );
       }
-      const task = state.binding
-        ? store.createTaskForSession({ ...boundCredential(), ...input, id: task_id })
-        : store.createTask({
-            workspace_id,
-            actor: requireLegacyActor(actor),
-            ...input,
-            id: task_id,
-          });
-      return { task };
+      try {
+        const task = state.binding
+          ? store.createTaskForSession({ ...boundCredential(), ...input, id: task_id })
+          : store.createTask({
+              workspace_id,
+              actor: requireLegacyActor(actor),
+              ...input,
+              id: task_id,
+            });
+        return { task };
+      } catch (error) {
+        if (!(error instanceof CollabError) || error.code !== "invalid_path_scope" || error.details.remedy === undefined) throw error;
+        // The store's glob refusal, again with a ready call for this tool.
+        const slotKey = requestSlot.getStore()!.key;
+        throw globPathScopeRefusal(normalizePathScopes(input.path_scopes ?? []), {
+          ready: (literal) => ({
+            tool: "collab_task_create",
+            input: {
+              workspace_id,
+              ...(actor !== undefined ? { actor } : {}),
+              ...(task_id !== undefined ? { task_id } : {}),
+              ...input,
+              path_scopes: literal,
+              ...(slotKey ? { binding_key: slotKey } : {}),
+            },
+          }),
+          top_level: () => {
+            const root = state.binding?.handle.worktree.root_path ?? store.getWorkspace(workspace_id)?.root_path;
+            return root ? topLevelTrackedPaths(root) : null;
+          },
+        }) ?? error;
+      }
     }),
   );
 

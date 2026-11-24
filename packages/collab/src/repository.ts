@@ -449,6 +449,19 @@ export function gitCommitExists(rootPath: string, sha: string, options: Reposito
 }
 
 /**
+ * The top-level paths git tracks at HEAD in this worktree, sorted, for the
+ * remedy that replaces a whole-repository glob scope; null when git could not
+ * answer (no repository, no commit yet, a timeout, git missing). Read-only.
+ */
+export function topLevelTrackedPaths(rootPath: string, options: RepositoryProbeOptions = {}): string[] | null {
+  if (!mayFindRepository(rootPath)) return null;
+  const result = runGit(rootPath, ["ls-tree", "-z", "--name-only", "HEAD"], options);
+  if (!result.ok) return null;
+  const names = result.stdout.split("\0").filter((name) => name.length > 0);
+  return names.length > 0 ? names.sort() : null;
+}
+
+/**
  * Whether git's discovery could find a repository from `rootPath`: GIT_DIR or
  * GIT_WORK_TREE is set, or some directory from `rootPath` up to the filesystem
  * root holds a `.git` entry (directory, file or link). It looks further than

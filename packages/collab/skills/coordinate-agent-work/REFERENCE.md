@@ -44,7 +44,10 @@ and inspect existing work first.
    that you have not yet read, by `collab_cursor_ack` or by `collab_inbox`.
 3. **Split and claim.** Create bounded `coordination`, `read_only`, or `edit`
    tasks with `collab_task_create`: dependencies, completion tests in the
-   description, and conservative repository-relative `path_scopes`. Inspect
+   description, and conservative repository-relative `path_scopes`. A scope is
+   a literal prefix (`src`, never `src/**`): a scope holding `*`, `?`, `[` or
+   `]` is refused with `invalid_path_scope`, and the remedy says what literal
+   prefixes to send instead. Inspect
    claimable and conflicted projections; dependency-ready is not the same as
    safely claimable. Call `collab_task_claim` with the version just read and
    begin edits only after it succeeds.
