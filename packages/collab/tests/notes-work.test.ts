@@ -708,6 +708,20 @@ describe("refused before anything is written, or not refused at all", () => {
     const open = j.store.listTasks(a.workspace.id).find((task) => task.title === "From elsewhere")!;
     expect(open).toMatchObject({ status: "open", expected_base_sha: elsewhere });
     expect(mismatch.recorded_steps).toEqual([{ step: 1, what: `task ${open.id}, created and open`, id: open.id }]);
+    // Once the worktree is at the base, the task can be taken by its id, as the remedy says, or by the same call.
+    git(j.root, ["commit", "-q", "--allow-empty", "-m", "moved on"]);
+    const moved = git(j.root, ["rev-parse", "HEAD"]);
+    const byId = await refused(sa, "collab_take", { title: "Taken by id", paths: ["src/d.ts"], base: head });
+    const bySameCall = await refused(sa, "collab_take", { title: "Taken by the same call", paths: ["src/e.ts"], base: head });
+    for (const refusal of [byId, bySameCall]) {
+      expect(refusal.code).toBe("expected_base_mismatch");
+      expect(refusal.message).toContain(`starts from ${head}, and your worktree's HEAD is ${moved}.`);
+    }
+    git(j.root, ["checkout", "-q", head]);
+    const resumed = await ok(sa, "collab_take", { task: byId.recorded_steps[0].id });
+    expect(resumed.task).toMatchObject({ id: byId.recorded_steps[0].id, state: "claimed", base: head });
+    const repeated = await ok(sa, "collab_take", { title: "Taken by the same call", paths: ["src/e.ts"], base: head });
+    expect(repeated.task).toMatchObject({ id: bySameCall.recorded_steps[0].id, state: "claimed", base: head });
     // Malformed: refused with a remedy before anything is written.
     for (const base of ["abc123", "g".repeat(40), "a".repeat(65)]) {
       const before = j.count();
