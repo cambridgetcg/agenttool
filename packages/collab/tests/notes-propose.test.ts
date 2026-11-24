@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { hostname } from "node:os";
 import { CollabError } from "../src/errors.js";
+import { waitForSessionEvents } from "../src/host.js";
 import { NOTE_FORMAT, parseNote } from "../src/note.js";
 import { proposalBytes, type ProposalContent } from "../src/proposal.js";
 import type { ProposalStatus, SessionHandle } from "../src/protocol.js";
@@ -414,6 +415,39 @@ describe("collab_note decide", () => {
     const inbox = await ok(sa, "collab_inbox", { limit: 50 });
     const item = inbox.items.find((entry: any) => entry.id === decided.ids.report);
     expect(item).toMatchObject({ act: "decide", re: { id, handle: handleOf("proposal", id) }, statement: "We keep trailing tabs." });
+  });
+
+  test("a rejection rings every session that decided on the proposal before it, as well as the author", async () => {
+    const { j, a, b, c, sb, sc, id } = await agreedProposal();
+    await ok(sb, "collab_note", { act: "decide", text: "We keep trailing tabs.", re: id });
+    const anchor = () => {
+      const workspace = j.store.getWorkspace(a.workspace.id)!;
+      return { epoch_id: workspace.epoch_id, sequence: workspace.event_head_sequence, hash: workspace.event_head_hash };
+    };
+    const waitAddressed = (handle: SessionHandle, after: ReturnType<typeof anchor>) => {
+      let now = 0;
+      return waitForSessionEvents(j.store, handle.credential, { after_anchor: after, wait_ms: 500, include_own: false, addressed: true },
+        { now: () => now, sleep: (ms) => { now += ms; } });
+    };
+    const before = anchor();
+    rejectAtTerminal(j, id, "Not this week.");
+    const rejection = j.store.eventsSince(a.workspace.id, 0, 500).events.filter((event) => event.type === "proposal.rejected").at(-1)!;
+    // The author and the decider are named; charlie supported but never decided.
+    expect([a, b, c].filter((handle) => j.store.eventAddressesSession(rejection, handle.session.id)).map((handle) => handle.session.actor))
+      .toEqual(["alpha", "bravo"]);
+    expect(waitAddressed(b, before).status).toBe("ready");
+    expect(waitAddressed(c, before)).toMatchObject({ status: "idle" });
+    // The decider reads it as an item for it, and as stop.
+    const inbox = await ok(sb, "collab_inbox", { limit: 50 });
+    expect(inbox.items.find((item: any) => item.act === "reject")).toMatchObject({ id, why_you: "person_act" });
+    expect(inbox.waiting_on_you[0]).toMatchObject({ what: "stop", due: "now" });
+    // A decision recorded after the rejection does not make the rejection its news.
+    await ok(sc, "collab_note", { act: "decide", outcome: "do_not_proceed", text: "We are not proceeding.", re: id });
+    expect(j.store.eventAddressesSession(rejection, c.session.id)).toBe(false);
+    // An agreement is still addressed only to the author.
+    const agreed = j.store.eventsSince(a.workspace.id, 0, 500).events.find((event) => event.type === "proposal.agreed")!;
+    expect([a, b, c].filter((handle) => j.store.eventAddressesSession(agreed, handle.session.id)).map((handle) => handle.session.actor))
+      .toEqual(["alpha"]);
   });
 
   test("refusals: not_agreed, agreement_withdrawn (relayed or authenticated) and proposal_retired, each a say, never a desk command", async () => {

@@ -6210,6 +6210,20 @@ export class CollabStoreCore {
     );
   }
 
+  /**
+   * Whether this session recorded a decision citing the proposal before the
+   * given sequence: a collab_note decide on it, or a decision record whose
+   * evidence names report:<proposal>, as waiting_on_you counts one. Routing only.
+   */
+  private decidedOnProposalBefore(workspaceId: string, proposalReportId: string, sessionId: string, beforeSequence: number): boolean {
+    return this.db.query(`
+      SELECT 1 FROM reports r, json_each(r.evidence_refs_json) ref
+      WHERE r.workspace_id = ? AND r.kind = 'decision' AND r.from_session_id = ?
+        AND r.event_sequence < ? AND ref.value = ?
+      LIMIT 1
+    `).get(workspaceId, sessionId, beforeSequence, `report:${proposalReportId}`) !== null;
+  }
+
   /** consent/v2: whether a set-aside's journaled challenger is this session's voice (routing only). */
   protected setAsideAddressesChallenger(challenger: unknown, sessionId: string): boolean {
     if (challenger === null || typeof challenger !== "object") return false;
@@ -6225,7 +6239,8 @@ export class CollabStoreCore {
    * or lost through no act of its own); a review requested of it, or a verdict
    * on its own completion; the recovery of its expired lease; and a proposal
    * or ballot event that names it (its author, a consulted voice, an elector,
-   * an objector whose challenge was set aside). This is the set
+   * an objector whose challenge was set aside, and for a rejection a session
+   * that had recorded a decision on the proposal). This is the set
    * `wait --addressed` rings for and collab_inbox reads to say why an item is
    * for you. It contains isAddressedTo's explicit set, which alone feeds
    * addressed_waiting, the tap and the wake. A review request and a verdict
@@ -6290,10 +6305,15 @@ export class CollabStoreCore {
         );
       }
       case "proposal.agreed":
-      case "proposal.rejected":
         // A person's act wakes whoever waits on it: the author, or for a desk
         // proposal every voice it consulted.
         return this.proposalAddressesSession(event.entity_id, sessionId);
+      case "proposal.rejected":
+        // As an agreement does, and every session that recorded a decision
+        // on the proposal before it, so a delegate working under that
+        // decision is rung for the stop rather than finding it on its next read.
+        return this.proposalAddressesSession(event.entity_id, sessionId)
+          || this.decidedOnProposalBefore(event.workspace_id, event.entity_id, sessionId, event.sequence);
       case "proposal.challenge_set_aside":
         // As an agreement does, and the challenger too: every session of its
         // voice, so the voice learns its objection was set aside when it

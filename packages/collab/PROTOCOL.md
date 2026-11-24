@@ -543,6 +543,9 @@ collab_inbox {"since": 0, "include": "all"}
   challenges on your reports, answers to your challenges, an agreed proposal of yours
   with no decision recorded yet, and the person's acts on proposals your voice wrote or
   a decision of yours cited. A rejection after an agreement comes first, as `stop`.
+  A rejection is addressed to every session that recorded a decision on the proposal
+  before it, as well as to the author (or a desk proposal's consulted voices), so a
+  decider's doorbell and `wait_seconds` end for it rather than leaving it to the next read.
 - **With `about`**: the root and everything answering it, with its computed state.
   For a proposal: the unchanged consent/v1 status (position, `proposal_sha256`,
   `may_proceed`), the display-only flags, `needs` (one sentence: what would move the
@@ -978,7 +981,7 @@ each standing challenge shows `voice_has_live_session`, and for one whose voice 
 the advice says the person can set it aside at the desk and gives the exact command, with
 `for_the_person.set_aside`; on a consent/v1 proposal today's advice stays. Wording that
 names a rule names the proposal's own. The `proposal.challenge_set_aside` event is
-addressed like a person's act (to the author, or for a desk proposal to every voice it
+addressed like an agreement (to the author, or for a desk proposal to every voice it
 consulted) and also to every session of the challenger's voice, with `why_you`
 `your_challenge_set_aside`, so a challenger whose session resumes, or a child it attests
 later, learns its objection was set aside and may challenge again. `collab_arrive` lists `consent/v2` among `surface.capabilities`.

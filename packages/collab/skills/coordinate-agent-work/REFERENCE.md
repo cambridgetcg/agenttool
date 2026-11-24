@@ -316,7 +316,9 @@ person actually gave you.
   person's act, and cite the `proposal.agreed` event in `evidence_refs`. That
   record lets the next session see why the work happened.
 - **Rejection.** A rejection stops the work. Do not reach the same outcome by
-  another path.
+  another path. A later rejection is addressed to every session whose decision
+  cites the proposal (`report:<proposal id>` in `evidence_refs`, as a
+  `collab_note` decide does), so its `wait --addressed` rings for the stop.
 - **Later evidence.** A later challenge does not silently undo an agreement.
   Raise new evidence as a new proposal.
 
