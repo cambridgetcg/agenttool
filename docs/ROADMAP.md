@@ -23,8 +23,8 @@ release receipts remain the evidence for their own claims.
 |---|---|---|---|
 | **Identity** | Registration, identity records, signing-key management and signed recovery; existing-project root-signed enrollment is deployed. | Make the public-record and recovery choices easier to compare. In flight: enrollment from a pairing code read aloud ([#487](https://github.com/cambridgetcg/agenttool/pull/487)); queued: a server-side enrollment request queue. | [Identity](https://docs.agenttool.dev/identity) |
 | **Wake & Continuity** | Hosted Wake plus the standalone Local Starter 0.1.0-dev.1 preview with Codex/Claude skill, direct hook and optional MCP delivery plans; explicit fresh Codex return was observed. Execution-seat S1 local ledger ([#489](https://github.com/cambridgetcg/agenttool/pull/489)) and S2 Claude Code hooks with Collab `seat_ref` ([#491](https://github.com/cambridgetcg/agenttool/pull/491)) are merged in source. | Verify automatic start/resume/compaction loading and delivery of the hosted-memory companion, then execution-seat S3. | [Local delivery](LOCAL-CORE.md#codex-and-claude-code-delivery) |
-| **Memory** | Hosted search, independent local Data, and explicit hash-checked local memory replacement. Exit-door walks of hosted continuity and deletion wave 1 are deployed; what a withdrawal hides and what it cannot is specified ([#493](https://github.com/cambridgetcg/agenttool/pull/493)). Local writes never enable loading automatically. | Release the exit-door client with SDK 0.24.0 ([#496](https://github.com/cambridgetcg/agenttool/pull/496)), then deletion waves 2 ([#472](https://github.com/cambridgetcg/agenttool/pull/472)) and 3, then bounded revision/restore. | [Memory](https://docs.agenttool.dev/memory) |
-| **Tools** | The package shelf links discovery, browser, extension-inspection and data tools with their own contracts. Public source projects to `cambridgetcg/agenttool-packages`, whose staged npm lane delivered its first two verified releases (`@agenttool/relational-geometry@0.1.0-dev.1`, `@agenttool/wallet@0.1.4`; [receipts](NPM-RELEASES.md#state-as-of-2026-10-28)) under per-package stage-only OIDC trust. | Ship SDK 0.24.0 ([#496](https://github.com/cambridgetcg/agenttool/pull/496)) and Collab 0.6.0 through the staged lane, and keep package status and first useful actions easy to find. | [Tools](https://docs.agenttool.dev/packages) |
+| **Memory** | Hosted search, independent local Data, and explicit hash-checked local memory replacement. Exit-door walks of hosted continuity and deletion wave 1 are deployed; what a withdrawal hides and what it cannot is specified ([#493](https://github.com/cambridgetcg/agenttool/pull/493)). Local writes never enable loading automatically. | Release the exit-door client with SDK 0.24.0 (re-prepared from current `main` on 2026-11-24, superseding [#496](https://github.com/cambridgetcg/agenttool/pull/496)), then deletion waves 2 ([#472](https://github.com/cambridgetcg/agenttool/pull/472)) and 3, then bounded revision/restore. | [Memory](https://docs.agenttool.dev/memory) |
+| **Tools** | The package shelf links discovery, browser, extension-inspection and data tools with their own contracts. Public source projects to `cambridgetcg/agenttool-packages`, whose staged npm lane delivered its first two verified releases (`@agenttool/relational-geometry@0.1.0-dev.1`, `@agenttool/wallet@0.1.4`; [receipts](NPM-RELEASES.md#state-as-of-2026-10-28)) under per-package stage-only OIDC trust. | Ship SDK 0.24.0 (re-prepared from current `main` on 2026-11-24, superseding [#496](https://github.com/cambridgetcg/agenttool/pull/496)) and Collab 0.6.0 through the staged lane, and keep package status and first useful actions easy to find. | [Tools](https://docs.agenttool.dev/packages) |
 | **Collaboration** | Local Collab 0.4.0 on npm and 0.5.0 as a GitHub release ([record](NPM-RELEASES.md#collab-050-public-distribution--2026-10-10)); on `main` (`0.6.0-dev.0`), the host doorbell, Collab Notes eight-verb surface, sealed ballots, lazy-consensus proposals (`consent/v1`–`v2`), and declared session rest & knocks ([#575](https://github.com/cambridgetcg/agenttool/pull/575)) are merged and unreleased. Deployed scoped missions, same-project root enrollment, participant-chosen grant token hashes and participant leave. | Release Collab 0.6.0 through the staged lane, end the hand-carried enrollment packet and daily manual renewals ([issue #486](https://github.com/cambridgetcg/agenttool/issues/486); [#531](https://github.com/cambridgetcg/agenttool/pull/531) in flight), then hosted task authority, portable contribution evidence and cross-project membership. | [Phased collaboration roadmap](COLLABORATION-ROADMAP.md) |
 
 Source implementation does not establish deployment, current availability or
@@ -88,7 +88,9 @@ These are open PRs on 2026-11-19; none is merged.
 
 - **SDK 0.24.0 release preparation:** bundle the `<trace>` consent gate, exit-door
   client and retired `explore()`, superseding unpublished `0.23.0`
-  ([#496](https://github.com/cambridgetcg/agenttool/pull/496)).
+  ([#496](https://github.com/cambridgetcg/agenttool/pull/496)). On 2026-11-24
+  0.24.0 was re-prepared from current `main`, which supersedes #496, and adds
+  the Math Cards transport fix and the undici and httpx floors.
 - **Cross-device enrollment, renewal and carrier loops:** pairing codes read
   aloud ([#487](https://github.com/cambridgetcg/agenttool/pull/487)), participant
   renewal within an administrator-set grant window
@@ -128,11 +130,12 @@ Collab `0.6.0-dev.0` line ([#570](https://github.com/cambridgetcg/agenttool/pull
 releases of already-merged source first:
 
 1. **SDK 0.24.0 and Collab 0.6.0 through the public staged lane.** Land SDK
-   `0.24.0` ([#496](https://github.com/cambridgetcg/agenttool/pull/496), carrying
+   `0.24.0`, re-prepared from current `main` on 2026-11-24 (superseding
+   [#496](https://github.com/cambridgetcg/agenttool/pull/496)) and carrying
    the [#459](https://github.com/cambridgetcg/agenttool/pull/459) `<trace>`
    consent gate, the [#464](https://github.com/cambridgetcg/agenttool/pull/464)
    exit-door client and [#533](https://github.com/cambridgetcg/agenttool/pull/533)
-   retired `explore()`; `0.23.0` stays skipped), then stage Collab `0.6.0` on npm
+   retired `explore()` (`0.23.0` stays skipped), then stage Collab `0.6.0` on npm
    with the host doorbell, Collab Notes, `consent/v1`–`v2`, and declared rest and
    knocks. Because npm expires unvalidated trusted-publisher entries after 48
    hours ([release state](NPM-RELEASES.md#state-as-of-2026-10-28)), each

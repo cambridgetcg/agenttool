@@ -82,8 +82,10 @@ notes where this update changes it.
   and the tag has no GitHub Release. 0.23.0 predates the `<trace>` consent
   gate; the owner decision of 2026-10-18 recorded in
   [PR #496](https://github.com/cambridgetcg/agenttool/pull/496) (still open on
-  2026-10-28) supersedes it with 0.24.0. Until that PR merges, `main` still
-  labels the SDK 0.23.0.
+  2026-10-28) supersedes it with 0.24.0. (2026-11-24: 0.24.0 is re-prepared
+  from current `main`, which supersedes PR #496, still open that day. Until
+  the re-prepared release merges, `main` still labels the SDK 0.23.0; npm and
+  PyPI serve 0.22.1, and neither lists 0.23.0.)
 
 Which credentials and trust configurations can still publish, and the steps
 that remain for the maintainer, are recorded in the operator runbook.

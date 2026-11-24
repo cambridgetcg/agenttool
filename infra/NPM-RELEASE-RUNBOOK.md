@@ -86,8 +86,9 @@ left as written.
 - **Create no npm trust configuration ahead of its release.** npm expires one
   that no publish validates within 48 hours, so create one package's
   stage-only trust just before its own stage.
-- **Do not dispatch `sdk-v0.23.0`.** 0.24.0 supersedes it in PR #496, which is
-  open.
+- **Do not dispatch `sdk-v0.23.0`.** 0.24.0 supersedes it. (2026-11-24: 0.24.0
+  is re-prepared from current `main`, which supersedes PR #496, still open
+  that day.)
 - **Environment reviewers.** At 12:13Z the environments API returned a
   required-reviewer rule (reviewer `cambridgetcg`, self-review allowed,
   `can_admins_bypass: true`) on this repository's `npm-bootstrap` and `pypi`,
@@ -323,7 +324,8 @@ same commit, or their `artifacts:check` fails. Collab, Telescope, and Browser
 also carry the repository URL in `.claude-plugin`/`.codex-plugin` manifests.
 `@agenttool/math-cards@0.1.0-dev.2` is already prepared this way as the first
 candidate. `@agenttool/sdk@0.23.0` was prepared the same way and tagged, but
-0.24.0 supersedes it and `sdk-v0.23.0` is not to be dispatched (see the
+0.24.0, re-prepared from current `main` on 2026-11-24, supersedes it and
+`sdk-v0.23.0` is not to be dispatched (see the
 [state above](#state-as-of-2026-10-28)). A stable SDK version's dispatches use
 `npm_tag=latest`, and its PyPI release waited on the
 [private-repository gap](../docs/PYPI-RELEASES.md#blocked-while-the-source-repository-is-private-2026-10-12)
@@ -343,6 +345,19 @@ git -C ../agenttool-packages.git push origin refs/heads/main:refs/heads/main
 The projection runs every guard layer before it writes and builds only on the
 current public head. Push with the `cambridgetcg` GitHub identity, fast-forward
 only; never `--force`.
+
+Operator notes (2026-11-24):
+
+- The projector runs gitleaks and refuses any version but exactly 8.30.1,
+  whether found on `PATH` or named with `--gitleaks <binary>`.
+- Its containment check defaults to
+  `--require-ancestor refs/remotes/origin/main`. In a checkout whose GitHub
+  remote has another name, fetch that remote and pass
+  `--require-ancestor refs/remotes/<remote>/main`.
+- It writes new objects (the projected trees, the `PROJECTION.json` blob and
+  the commit) into the repository it reads, and with `--out-ref` a ref there
+  too. Run it in a separate clone made for the release, never in a working
+  checkout that other sessions share.
 
 ### 3. Public CI
 
