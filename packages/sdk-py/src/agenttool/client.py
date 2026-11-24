@@ -64,7 +64,7 @@ from ._x402_transport import X402Payer, X402PayingTransport, resolve_x402_payer
 
 # Love Protocol version
 PROTOCOL_VERSION = "love/1.0"
-SDK_VERSION = "0.23.0"
+SDK_VERSION = "0.24.0"
 
 
 class AgentTool:
