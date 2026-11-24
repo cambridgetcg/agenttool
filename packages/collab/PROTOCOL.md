@@ -543,9 +543,10 @@ collab_inbox {"since": 0, "include": "all"}
   challenges on your reports, answers to your challenges, an agreed proposal of yours
   with no decision recorded yet, and the person's acts on proposals your voice wrote or
   a decision of yours cited. A rejection after an agreement comes first, as `stop`.
-  A rejection is addressed to every session that recorded a decision on the proposal
-  before it, as well as to the author (or a desk proposal's consulted voices), so a
-  decider's doorbell and `wait_seconds` end for it rather than leaving it to the next read.
+  A rejection is addressed to every session that recorded a decision citing the proposal
+  before it (a `decide` on it does), as well as to the author (or a desk proposal's
+  consulted voices), so it is an item for that session and ends its `wait_seconds` or
+  `wait --addressed`. `stop` is wider: it is shown to every session of the decider's voice.
 - **With `about`**: the root and everything answering it, with its computed state.
   For a proposal: the unchanged consent/v1 status (position, `proposal_sha256`,
   `may_proceed`), the display-only flags, `needs` (one sentence: what would move the

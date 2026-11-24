@@ -450,6 +450,30 @@ describe("collab_note decide", () => {
       .toEqual(["alpha"]);
   });
 
+  test("a rejection rings a decision record citing the proposal, on a desk proposal too, and never its relayer or another proposal's decider", async () => {
+    const { j, a, b, c, sa, sb, sc } = trio();
+    // Opened at the desk before delta arrives, so delta is not a consulted voice.
+    const desk = j.store.openPersonProposal({ workspace_id: a.workspace.id, idempotency_key: "desk", ...TERMS });
+    const d = j.start("delta");
+    const other = await ok(sa, "collab_propose", { ...TERMS, question: "Something else?" });
+    const legacy = (handle: SessionHandle, key: string, refs: string[]) => j.store.appendReportForSession({
+      ...handle.credential, idempotency_key: key, kind: "decision", body: "Decided.", evidence_refs: refs,
+      authority_scope: "Nothing.", authority_basis: "recorded by this session",
+    });
+    legacy(d, "delta", [`report:${desk.proposal.id}`]);
+    legacy(b, "bravo", [`report:${other.ids.proposal}`]);
+    const named = (id: string) => {
+      const event = j.store.eventsSince(a.workspace.id, 0, 500).events.filter((item) => item.type === "proposal.rejected" && item.entity_id === id).at(-1)!;
+      return [a, b, c, d].filter((handle) => j.store.eventAddressesSession(event, handle.session.id)).map((handle) => handle.session.actor);
+    };
+    rejectAtTerminal(j, desk.proposal.id, "No.");
+    expect(named(desk.proposal.id)).toEqual(["alpha", "bravo", "charlie", "delta"]);
+    // Bravo decided on the other one and relays its rejection: it wrote that event.
+    await ok(sc, "collab_note", { act: "decide", outcome: "no_decision", text: "No decision yet.", re: other.ids.proposal });
+    await ok(sb, "collab_note", { act: "relay_rejection", text: "The person said no.", re: other.ids.proposal });
+    expect(named(other.ids.proposal)).toEqual(["alpha", "charlie"]);
+  });
+
   test("refusals: not_agreed, agreement_withdrawn (relayed or authenticated) and proposal_retired, each a say, never a desk command", async () => {
     const { j, sa, sb, sc } = trio();
     const opened = await ok(sa, "collab_propose", TERMS);

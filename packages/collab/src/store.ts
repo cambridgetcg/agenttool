@@ -6213,7 +6213,9 @@ export class CollabStoreCore {
   /**
    * Whether this session recorded a decision citing the proposal before the
    * given sequence: a collab_note decide on it, or a decision record whose
-   * evidence names report:<proposal>, as waiting_on_you counts one. Routing only.
+   * evidence names report:<proposal>. These are the decisions waiting_on_you
+   * watches for a stop, except that it watches the whole voice's and this
+   * names only the session that recorded one. Routing only.
    */
   private decidedOnProposalBefore(workspaceId: string, proposalReportId: string, sessionId: string, beforeSequence: number): boolean {
     return this.db.query(`
@@ -6240,7 +6242,7 @@ export class CollabStoreCore {
    * on its own completion; the recovery of its expired lease; and a proposal
    * or ballot event that names it (its author, a consulted voice, an elector,
    * an objector whose challenge was set aside, and for a rejection a session
-   * that had recorded a decision on the proposal). This is the set
+   * that had recorded a decision citing the proposal). This is the set
    * `wait --addressed` rings for and collab_inbox reads to say why an item is
    * for you. It contains isAddressedTo's explicit set, which alone feeds
    * addressed_waiting, the tap and the wake. A review request and a verdict
@@ -6310,7 +6312,7 @@ export class CollabStoreCore {
         return this.proposalAddressesSession(event.entity_id, sessionId);
       case "proposal.rejected":
         // As an agreement does, and every session that recorded a decision
-        // on the proposal before it, so a delegate working under that
+        // citing the proposal before it, so a delegate working under that
         // decision is rung for the stop rather than finding it on its next read.
         return this.proposalAddressesSession(event.entity_id, sessionId)
           || this.decidedOnProposalBefore(event.workspace_id, event.entity_id, sessionId, event.sequence);

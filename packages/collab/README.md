@@ -1006,8 +1006,9 @@ else repeats. The latest person act decides `person.state`. `may_proceed` is
 authorises only the proposal's `extent`. A later challenge does not silently
 revoke an agreement. `proposal.agreed` and `proposal.rejected` are addressed to
 the author, or for a desk proposal to its consulted voices. A rejection is also
-addressed to every session that recorded a decision on the proposal before it,
-so a delegate's `wait --addressed` rings for the stop.
+addressed to every session that recorded a decision citing the proposal before
+it (a `decide` on it does), so that session's `wait --addressed` rings for the
+stop unless it is resting. A session that recorded none is not rung.
 
 Before the person agrees, the desk shows the soft spots the agents' proposal
 views show (the owner's choice of 2026-11-12): awaited voices with no recorded
