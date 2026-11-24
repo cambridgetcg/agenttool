@@ -506,7 +506,9 @@ collab_inbox {"since": 0, "include": "all"}
   handle, act, from, to, re, at, statement, text, why, evidence, why_you}`; evidence
   items carry `observed` and, for files the server hashed, `now`. A review's report
   is shown with the act of its verdict, `accept` or `request_changes`, though it is
-  stored, as before, as a `supports` or `challenges`.
+  stored, as before, as a `supports` or `challenges`. A completion's item when it is
+  addressed to you, and its report in a thread, carry `changes`: what its event recorded about the changed paths
+  (README "Changed paths and reviewer relation"), when it recorded any.
 - **One line per thing.** A look-back, and a pass with `include: "all"`, read as a
   record rather than a log: cited evidence and attached artifacts are left out, since
   they are detail of the report or task beside them, and a report is listed once with
@@ -548,8 +550,8 @@ collab_inbox {"since": 0, "include": "all"}
   desk commands with full ids and the line "For the person to run himself. An agent
   that runs these, or drives a terminal to answer them, records an agreement the person
   did not give." For a ballot: its terms, electorate, turnout, the sessions left out,
-  and after the close the result. For a task: its state, holder, current completion and
-  reviews. For a decision: a composed record (see Consensus). `about` reads one thread,
+  and after the close the result. For a task: its state, holder, current completion (with
+  its `changes`) and reviews. For a decision: a composed record (see Consensus). `about` reads one thread,
   so a session (by `session#` handle, id or name) is refused as `about_not_a_thread`,
   with a remedy that says what `about` takes and that a look-back from 0 reads what a
   session wrote.
@@ -1198,7 +1200,7 @@ voice.
 | withdraw | The author of the target took it back. |
 | take | This session holds an advisory lease: coordination, not ownership or a lock. |
 | done | This session reports the work finished; files it cited were hashed by the server when cited, and tests and urls are its own report. |
-| accept, request_changes | A session other than the reporter inspected that exact completion; its verdict covers what it checked. A distinct session is not an independent mind: a delegate may review its parent. |
+| accept, request_changes | A session other than the reporter inspected that exact completion; its verdict covers what it checked. A distinct session is not an independent mind: a delegate may review its parent. The review records `reviewer_relation`; `unrelated_as_declared` is not proven independence. |
 | propose | This voice put these exact bytes to the agents and the person. |
 | decide | The server derived the authority: on an agreed proposal, the agreed extent and the person's act; otherwise nothing, or this session's own word, and it says which. |
 | poll, vote | One unit: an attested lineage, or several that declared one handle. Not one mind, model or operator, and anyone who can read a credential file can cast for its unit. |
@@ -1232,6 +1234,17 @@ session). A ballot is identified by the id of the
   poll note, and deliberately not kind `proposal`.
 - **New optional payload fields**, present only when set: `report.posted.note =
   "collab-note/1"` and `session.joined.model`.
+- **Record-only payload fields**, optional to every reader and never a refusal. A
+  bound session's completion event (`task.reported_complete`, `task.completed`)
+  always carries `changed_paths_basis` (`server_observed` or `unavailable`) and, only
+  when it applies, `changed_paths_count`, `outside_scopes` (at most 20 names of 200
+  characters, escaped), `outside_scopes_count`, `outside_scopes_truncated` and
+  `changed_paths_reason`; the whole list of changed paths is never stored. A bound
+  session's review event (`task.accepted`, `task.changes_requested`) always carries
+  `reviewer_relation`. Events from older builds and from the legacy actor calls carry
+  none of them. README "Changed paths and reviewer relation" says what each means.
+  Each older build also verifies a second journal, from a Git root, whose completions
+  name paths outside their scopes.
 - **Receipts** use the existing receipt table under new operation names (`notes.*.v1`)
   and derived keys (`n1:…`; a cast is `b1:<cast_id>`).
 - **Seal files** live in `collab-ballots/` beside the journal file until the reveal.
@@ -1245,10 +1258,11 @@ session). A ballot is identified by the id of the
 - Every new payload is at most 64 KiB of canonical UTF-8, with no integer-like object
   keys, no non-integer numbers and no undefined values.
 
-The existing `*ForSession` store functions and the proposal-bytes code are unchanged.
-The new store methods live in `src/store-notes.ts`, whose `CollabStore` extends the
-legacy store (`CollabStoreCore` in `src/store.ts`); the legacy store compiles and runs
-without it.
+The existing `*ForSession` store functions are unchanged but for the record-only payload
+fields above (`completeTaskForSession`, and `reviewTaskForSession`, which also returns
+`reviewer_relation`), and the proposal-bytes code is unchanged. The new store methods
+live in `src/store-notes.ts`, whose `CollabStore` extends the legacy store
+(`CollabStoreCore` in `src/store.ts`); the legacy store compiles and runs without it.
 
 **The forward-compatibility harness** (`tests/forward-compat.test.ts`,
 `tests/compat/`) holds the promise. For each revision in `COLLAB_COMPAT_REVS` (default
@@ -1264,9 +1278,11 @@ the new types, a host ends a session `collab_arrive` created, and the old MCP li
 tools and pages over the new types. In reverse, this build opens and verifies the file
 after the old build wrote to it and computes the same ballot result. A golden scenario
 using only `a8799aad`'s tools runs on both builds with the same clock, and the rows
-match after ids and tokens are replaced by numbered placeholders. Dropping the three
-new tables loses only view state, and `note_ballots` rebuilds. Each later change
-extends the fixture.
+match after ids and tokens are replaced by numbered placeholders and the record-only
+payload fields above are dropped from this build's rows (exactly the keys
+`tests/compat/normalise.ts` lists, which the base is checked never to write). Dropping
+the three new tables loses only view state, and `note_ballots` rebuilds. Each later
+change extends the fixture.
 
 The harness needs `a8799aad`, `1ec5ab4b`, `cdf54b68` (the rest-and-knocks build a
 household runs), `24ba2300` and the two tags in the clone's history.

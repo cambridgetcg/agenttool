@@ -1249,8 +1249,17 @@ export function buildCollabMcpServer(
             expected_version: input.expected_version,
             summary: input.summary,
           });
+      // Record-only: what the completion event says of the paths changed since the base checkpoint.
+      let changes: object = {};
+      try {
+        changes = state.binding && task.completion_report_id
+          ? store.completionChanges(task.workspace_id, task.id, task.completion_report_id) ?? {}
+          : {};
+      } catch {
+        // The completion committed; a record that cannot be read is omitted.
+      }
       // Unbound calls with review_requested_session_id were refused above.
-      return withAddressee({ task }, task.workspace_id, input.review_requested_session_id);
+      return withAddressee({ task, ...changes }, task.workspace_id, input.review_requested_session_id);
     }),
   );
 

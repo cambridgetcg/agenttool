@@ -54,6 +54,7 @@ import {
   type CollabReport,
   type CollabSession,
   type CoordinationSession,
+  type CompletionChanges,
   type CompletionPolicy,
   type CreateTaskInput,
   type Decision,
@@ -71,6 +72,7 @@ import {
   type ReportRelation,
   type RestWakeOn,
   type ReviewStatus,
+  type ReviewerRelation,
   type SessionEndRelease,
   type SessionEndResult,
   type SessionAway,
@@ -109,9 +111,11 @@ import {
 import {
   inspectRepository,
   inspectSuccessorCommit,
+  observeChangedPaths,
   portableRepositoryKey,
   RepositoryProbeTimeout,
   type RepositoryIdentity,
+  type ChangedPathsObservation,
   type RepositoryProbeOptions,
   type SuccessorCommitInspection,
 } from "./repository.js";
@@ -321,6 +325,14 @@ interface PreparedWorktreeCheckpoint {
   fingerprint: string;
   git_common_dir_hash: string | null;
   checkpoint: RepoCheckpoint;
+  /** The `git status` the capture read, for a completion's changed paths; never stored. */
+  status: Buffer | null;
+}
+
+interface PreparedCompletionChanges {
+  /** The task's base checkpoint as read for the observation. */
+  base_checkpoint_json: string | null;
+  observation: ChangedPathsObservation;
 }
 
 interface PreparedReviewCheckpoint {
@@ -3389,6 +3401,9 @@ export class CollabStoreCore {
     );
     if (replay.found) return replay.value;
     const preparedCheckpoint = this.captureSessionWorktree(input);
+    // Record-only, read outside the write transaction: the worktree can change
+    // between this listing and the write below (a check-then-act window).
+    const preparedChanges = this.observeCompletionChanges(normalized.task_id, preparedCheckpoint);
     return this.mutateAsSession(
       input,
       normalized.idempotency_key,
@@ -3406,6 +3421,7 @@ export class CollabStoreCore {
         }
         this.requirePreparedWorktree(session, preparedCheckpoint);
         const checkpoint = preparedCheckpoint.checkpoint;
+        const changes = completionChangesFor(row, preparedChanges);
         const report = this.appendReportInternal(session, {
           task_id: row.id,
           to_session_id: null,
@@ -3477,6 +3493,9 @@ export class CollabStoreCore {
             ...(reviewRequestedSessionId
               ? { review_requested_session_id: reviewRequestedSessionId }
               : {}),
+            // Optional fields, record-only: counts of what the worktree changed
+            // since the base, and the names outside the task's path scopes.
+            ...changes,
           },
           session.id,
         );
@@ -5275,7 +5294,7 @@ export class CollabStoreCore {
     confidence?: ReportConfidence;
     confidence_basis?: string;
     limits?: string;
-  }): { task: Task; review: TaskReview; report: CollabReport } {
+  }): { task: Task; review: TaskReview; report: CollabReport; reviewer_relation?: ReviewerRelation } {
     const taskId = validateId(input.task_id, "task_id");
     const expectedVersion = validateExpectedVersion(input.expected_version);
     if (input.outcome !== "accept" && input.outcome !== "request_changes") {
@@ -5303,6 +5322,7 @@ export class CollabStoreCore {
       task: Task;
       review: TaskReview;
       report: CollabReport;
+      reviewer_relation?: ReviewerRelation;
     }>(input, input.idempotency_key, "task.review.v2", request);
     if (replay.found) return replay.value;
     const preparedCheckpoint = input.outcome === "accept"
@@ -5323,6 +5343,8 @@ export class CollabStoreCore {
           "A distinct session must review reported completion",
         );
       }
+      // Record-only: never a refusal, and unrelated_as_declared is not independence.
+      const reviewerRelation = this.reviewerRelation(session.id, row.reported_by_session_id);
       for (const reference of evidenceRefs) this.requireEvidenceRef(row.workspace_id, reference);
       if (
         input.outcome === "accept"
@@ -5428,6 +5450,8 @@ export class CollabStoreCore {
           version,
           authority_boundary:
             "acceptance_is_local_coordination_review_not_merge_deploy_truth_or_external_authority",
+          // Optional, record-only: how the reviewer's session relates to the reporter's.
+          reviewer_relation: reviewerRelation,
           // Optional fields, present only on a host-commit acceptance.
           ...(hostCommit
             ? {
@@ -5462,8 +5486,30 @@ export class CollabStoreCore {
         task: this.requireTask(row.workspace_id, row.id),
         review: this.requireReview(reviewId),
         report,
+        reviewer_relation: reviewerRelation,
       };
     });
+  }
+
+  /**
+   * The reviewer's relation to the reporter, record-only. same_voice: one
+   * consent voice through attested lineage. Otherwise the direct declared
+   * links of coordination_sessions.parent_session_id, which nothing attests:
+   * the reviewer is the reporter's declared parent, its declared child, or
+   * they declare the same parent. unrelated_as_declared says only that no such
+   * direct link was declared (a grandparent is not read), never independence.
+   */
+  protected reviewerRelation(reviewerSessionId: string, reporterSessionId: string): ReviewerRelation {
+    if (this.consentVoice(reviewerSessionId) === this.consentVoice(reporterSessionId)) return "same_voice";
+    const parentOf = (sessionId: string): string | null =>
+      (this.db.query(`SELECT parent_session_id FROM coordination_sessions WHERE id = ?`)
+        .get(sessionId) as { parent_session_id: string | null } | null)?.parent_session_id ?? null;
+    const reviewerParent = parentOf(reviewerSessionId);
+    const reporterParent = parentOf(reporterSessionId);
+    if (reporterParent === reviewerSessionId) return "declared_parent";
+    if (reviewerParent === reporterSessionId) return "declared_child";
+    if (reviewerParent !== null && reviewerParent === reporterParent) return "declared_sibling";
+    return "unrelated_as_declared";
   }
 
   offerHandoff(input: LeaseTaskInput & { to_actor: string; summary: string; ttl_seconds?: number }): {
@@ -6560,6 +6606,67 @@ export class CollabStoreCore {
     return this.captureRegisteredWorktree(session, worktree);
   }
 
+  /**
+   * The paths the completing worktree changed since the task's base
+   * checkpoint, observed before the write transaction. It never refuses: any
+   * gap, and anything that throws, becomes an `unavailable` basis with a
+   * reason. The transaction checks that the base read here is still the task's.
+   */
+  private observeCompletionChanges(
+    taskId: string,
+    prepared: PreparedWorktreeCheckpoint,
+  ): PreparedCompletionChanges {
+    let baseJson: string | null = null;
+    const unavailable = (reason: string): PreparedCompletionChanges => ({
+      base_checkpoint_json: baseJson,
+      observation: { ok: false, reason },
+    });
+    try {
+      baseJson = this.requireTaskRow(prepared.workspace_id, taskId).base_checkpoint_json;
+      const base = parseCheckpoint(baseJson);
+      if (!base) return unavailable("The claim recorded no base checkpoint");
+      if (base.source !== "server_observed" || !base.head_sha) {
+        return unavailable("The base checkpoint was not server-observed: no Git repository or no HEAD at the claim");
+      }
+      if (base.worktree_id !== prepared.worktree_id) {
+        return unavailable("The base checkpoint belongs to another worktree");
+      }
+      const head = prepared.checkpoint.head_sha;
+      if (prepared.checkpoint.source !== "server_observed" || !head) {
+        return unavailable("The worktree has no Git HEAD now");
+      }
+      return {
+        base_checkpoint_json: baseJson,
+        observation: observeChangedPaths(prepared.root_path, base.head_sha, head, prepared.status),
+      };
+    } catch {
+      return unavailable("The server could not observe the changed paths");
+    }
+  }
+
+  /**
+   * What a completion recorded about its changed paths, read from the
+   * completion event of `completionReportId`; null when that completion
+   * recorded none (an older build wrote it), or no completion of this task
+   * has that report.
+   */
+  completionChanges(workspaceId: string, taskId: string, completionReportId: string): CompletionChanges | null {
+    const completion = this.db.query(`SELECT event_sequence FROM reports WHERE id = ? AND workspace_id = ?`)
+      .get(completionReportId, workspaceId) as { event_sequence: number } | null;
+    if (!completion) return null;
+    // The completion report and its completion event share one transaction.
+    const event = this.db.query(`
+      SELECT payload_json FROM events
+      WHERE workspace_id = ? AND sequence > ? AND entity_id = ?
+        AND type IN ('task.reported_complete', 'task.completed')
+      ORDER BY sequence
+      LIMIT 1
+    `).get(workspaceId, completion.event_sequence, taskId) as { payload_json: string } | null;
+    if (!event) return null;
+    const payload = JSON.parse(event.payload_json) as Record<string, unknown>;
+    return payload.completion_report_id === completionReportId ? recordedCompletionChanges(payload) : null;
+  }
+
   private captureReviewCheckpoint(
     input: {
       session_id: string;
@@ -6707,8 +6814,11 @@ export class CollabStoreCore {
     worktree: WorktreeRow,
   ): PreparedWorktreeCheckpoint {
     let identity: RepositoryIdentity;
+    let status: Buffer | null = null;
     try {
-      identity = inspectRepository(worktree.root_path);
+      identity = inspectRepository(worktree.root_path, undefined, false, {
+        observeStatus: (listed) => { status = listed; },
+      });
     } catch (error) {
       throw new CollabError(
         "worktree_unavailable",
@@ -6739,6 +6849,7 @@ export class CollabStoreCore {
       fingerprint: worktree.fingerprint,
       git_common_dir_hash: worktree.git_common_dir_hash,
       checkpoint: identity.checkpoint,
+      status,
     };
   }
 
@@ -9268,6 +9379,114 @@ function artifactRepositoryPath(uri: string, rootPath: string): string | null {
     || relative.startsWith(".git/")
   ) return null;
   return relative;
+}
+
+/** One plain line for a review's advice: what its reviewer_relation means. */
+export function reviewerRelationAdvice(relation: ReviewerRelation): string {
+  switch (relation) {
+    case "same_voice":
+      return "You and the reporter share one consent voice through attested lineage: a same-voice review is not independent.";
+    case "declared_parent":
+      return "You are the reporter's declared parent session: a review across declared lineage is not independent.";
+    case "declared_child":
+      return "You are a declared child of the reporter's session: a review across declared lineage is not independent.";
+    case "declared_sibling":
+      return "You and the reporter declare the same parent session: a review across declared lineage is not independent.";
+    case "unrelated_as_declared":
+      return "You and the reporter share no attested voice and declare no direct parent link; that is not proof the review is independent.";
+  }
+}
+
+/**
+ * The most outside_scopes names a completion records, and the most characters
+ * each may take, escapes and the ellipsis of a cut name included. The journal
+ * is permanent and every reader sees it, so it never holds the whole list.
+ */
+export const MAX_RECORDED_OUTSIDE_PATHS = 20;
+export const MAX_RECORDED_PATH_CHARS = 200;
+
+/** The completion event's optional changed-path fields. */
+function completionChangesFor(row: TaskRow, prepared: PreparedCompletionChanges): CompletionChanges {
+  if (prepared.observation.ok && prepared.base_checkpoint_json !== row.base_checkpoint_json) {
+    return {
+      changed_paths_basis: "unavailable",
+      changed_paths_reason: "The task's base checkpoint changed after the paths were observed",
+    };
+  }
+  // A coordination task's work is not bounded by paths, whether or not it names some.
+  return changedPathFields(
+    prepared.observation,
+    row.work_mode === "coordination" ? [] : parseStringArray(row.path_scopes_json),
+  );
+}
+
+/** Without path scopes nothing is inside or outside, so outside_scopes and its count are left out. */
+export function changedPathFields(observation: ChangedPathsObservation, scopes: string[]): CompletionChanges {
+  if (!observation.ok) return { changed_paths_basis: "unavailable", changed_paths_reason: observation.reason };
+  const counted = {
+    changed_paths_basis: "server_observed" as const,
+    changed_paths_count: observation.paths.length,
+  };
+  if (scopes.length === 0) return counted;
+  const outside = observation.paths.filter((path) => !pathWithinScopesFolded(path, scopes));
+  const names = outside.slice(0, MAX_RECORDED_OUTSIDE_PATHS).map(recordedPathName);
+  return {
+    ...counted,
+    outside_scopes: names.map(({ name }) => name),
+    outside_scopes_count: outside.length,
+    ...(names.length < outside.length || names.some(({ cut }) => cut) ? { outside_scopes_truncated: true as const } : {}),
+  };
+}
+
+/**
+ * A path as the journal holds it. A file name is the worktree's text, not the
+ * server's: control, line-breaking, bidirectional, zero-width and other
+ * invisible characters become `\u{…}`, so a name cannot hide or reorder what
+ * a reader sees, and a long name is cut between whole characters and escapes.
+ */
+export function recordedPathName(path: string): { name: string; cut: boolean } {
+  const shown: string[][] = [];
+  let length = 0;
+  for (const char of path) {
+    const piece = [...char.replace(/[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\u2028\u2029]/u, (unsafe) =>
+      `\\u{${unsafe.codePointAt(0)!.toString(16).toUpperCase()}}`)];
+    shown.push(piece);
+    length += piece.length;
+    if (length > MAX_RECORDED_PATH_CHARS) break;
+  }
+  const cut = length > MAX_RECORDED_PATH_CHARS;
+  while (cut && length > MAX_RECORDED_PATH_CHARS - 1) length -= shown.pop()!.length;
+  return { name: shown.flat().join("") + (cut ? "…" : ""), cut };
+}
+
+/** The changed-path fields a completion event's payload carries; null when it carries none. */
+export function recordedCompletionChanges(payload: Record<string, unknown>): CompletionChanges | null {
+  const basis = payload.changed_paths_basis;
+  if (basis !== "server_observed" && basis !== "unavailable") return null;
+  const count = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
+  return {
+    changed_paths_basis: basis,
+    ...(count(payload.changed_paths_count) ? { changed_paths_count: payload.changed_paths_count } : {}),
+    ...(Array.isArray(payload.outside_scopes)
+      ? { outside_scopes: payload.outside_scopes.filter((name): name is string => typeof name === "string") }
+      : {}),
+    ...(count(payload.outside_scopes_count) ? { outside_scopes_count: payload.outside_scopes_count } : {}),
+    ...(payload.outside_scopes_truncated === true ? { outside_scopes_truncated: true as const } : {}),
+    ...(typeof payload.changed_paths_reason === "string" ? { changed_paths_reason: payload.changed_paths_reason } : {}),
+  };
+}
+
+/**
+ * The claims' rule (pathConflicts), one way: a path is within a scope when it
+ * is the scope or lies under it, segment by segment, compared NFC and
+ * case-folded as on the default macOS filesystem.
+ */
+export function pathWithinScopesFolded(path: string, scopes: string[]): boolean {
+  const key = path.normalize("NFC").toLowerCase();
+  return scopes.some((scope) => {
+    const scopeKey = scope.normalize("NFC").toLowerCase();
+    return key === scopeKey || key.startsWith(`${scopeKey}/`);
+  });
 }
 
 /** Exact, case-sensitive containment: the path is a scope or lies under one. */

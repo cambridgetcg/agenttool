@@ -1619,6 +1619,8 @@ export function formatEntry(
     // In a look-back: addressed to an ended session that carried your name.
     ...(entry.for_name ? { for_your_name: true } : {}),
   };
+  // Record-only: what a completion's event recorded, shown on that event and on its report.
+  const changes = entry.changes ? { changes: entry.changes } : {};
   // Whom an addressed event names: you, or in a look-back the ended session of your name.
   const addressed = entry.for_name?.session_id ?? me;
   if (event.type === "report.posted" && report && entry.folded) {
@@ -1686,6 +1688,7 @@ export function formatEntry(
       kind: report.kind,
       ...(report.confidence !== "unknown" ? { confidence: report.confidence } : {}),
       ...(limits ? { limits } : {}),
+      ...changes,
       ...flags,
     };
   }
@@ -1772,6 +1775,7 @@ export function formatEntry(
         completion: typeof payload.completion_report_id === "string"
           ? { id: payload.completion_report_id, handle: handleOf("report", payload.completion_report_id) }
           : null,
+        ...changes,
       };
     case "task.accepted":
     case "task.changes_requested":
@@ -1809,6 +1813,7 @@ export function formatEntry(
         text: null,
         why: [],
         evidence: [],
+        ...changes,
       };
   }
 }
@@ -3179,6 +3184,7 @@ function taskView(
           handle: handleOf("report", task.completion_report_id),
           by: sessionShown(task.reported_by_session_id, task.reported_by ?? "unknown", byId),
           at: task.reported_at,
+          ...(thread.completion_changes ? { changes: thread.completion_changes } : {}),
         }
         : null,
       review_requested: task.review_requested_session_id

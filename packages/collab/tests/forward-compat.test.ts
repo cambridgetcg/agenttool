@@ -30,7 +30,13 @@ import {
   type FixtureManifest,
 } from "./compat/fixture.js";
 import { GOLDEN_BARE_REPORT_BODY, type GoldenOutcome } from "./compat/golden-scenario.js";
-import { normaliseEvents, Placeholders, type EventRow } from "./compat/normalise.js";
+import {
+  laterOptionalKeysIn,
+  normaliseEvents,
+  Placeholders,
+  withoutLaterOptionalKeys,
+  type EventRow,
+} from "./compat/normalise.js";
 import {
   gitIn,
   resolveRevision,
@@ -519,7 +525,76 @@ const fixture = lazy(async (): Promise<Fixture> => {
   }
 });
 
+/**
+ * The fixture's one root is no Git repository, so its completions record why
+ * no paths were listed. This second journal holds the observed form: a Git
+ * root, capped names and a same-voice review of each outcome.
+ */
+const listedChanges = lazy(async (): Promise<string> => {
+  const directory = join(work, "listed-changes");
+  const root = join(directory, "repo");
+  const state = join(directory, "state");
+  mkdirSync(join(root, "many"), { recursive: true });
+  const identity = ["-c", "user.name=fixture", "-c", "user.email=fixture@example.org", "-c", "commit.gpgsign=false"];
+  for (const args of [["init", "-q"], [...identity, "commit", "-q", "--allow-empty", "-m", "base"]]) {
+    const result = gitIn(root, args);
+    if (!result.ok) throw new Error(`git ${args.join(" ")} failed: ${result.stderr}`);
+  }
+  const store = new CollabStore(join(state, "collab.sqlite"));
+  try {
+    const worker = store.startSession({ root_path: root, actor: "listed-worker" });
+    const child = store.startSession({ root_path: root, actor: "listed-child", parent_session_id: worker.session.id, parent_attested: true });
+    for (const outcome of ["request_changes", "accept"] as const) {
+      const key = `listed-${outcome}`;
+      const created = store.createTaskForSession({
+        ...worker.credential, idempotency_key: `${key}-create`, title: key, work_mode: "edit",
+        completion_policy: "accepted", path_scopes: [`${outcome}.txt`],
+      });
+      const claimed = store.claimTaskForSession({
+        ...worker.credential, idempotency_key: `${key}-claim`, task_id: created.id, expected_version: created.version,
+      });
+      for (let index = 0; index < 300; index += 1) writeFileSync(join(root, "many", `第${index}.txt`), key);
+      const reported = store.completeTaskForSession({
+        ...worker.credential, idempotency_key: `${key}-complete`, task_id: claimed.id, lease_id: claimed.lease_id!,
+        expected_version: claimed.version, summary: key,
+      });
+      store.reviewTaskForSession({
+        ...child.credential, idempotency_key: `${key}-review`, task_id: reported.id, expected_version: reported.version,
+        outcome, summary: key,
+      });
+    }
+  } finally {
+    store.close();
+  }
+  return state;
+});
+
 describe("forward-compatibility fixture", () => {
+  test("a second journal holds the observed form of the changed paths, names capped, and both review outcomes", async () => {
+    const rows = eventRows(join(await listedChanges(), "collab.sqlite"));
+    expect(laterOptionalKeysIn(rows)).toEqual([
+      "task.accepted.reviewer_relation",
+      "task.changes_requested.reviewer_relation",
+      "task.reported_complete.changed_paths_basis",
+      "task.reported_complete.changed_paths_count",
+      "task.reported_complete.outside_scopes",
+      "task.reported_complete.outside_scopes_count",
+      "task.reported_complete.outside_scopes_truncated",
+    ]);
+  }, TEST_TIMEOUT_MS);
+
+  test("carries the later optional fields on the events older builds page and the completion they review", async () => {
+    const { directory, manifest } = await fixture();
+    const rows = eventRows(join(directory, "collab.sqlite"));
+    const keys = laterOptionalKeysIn(rows);
+    expect(keys).toContain("task.reported_complete.changed_paths_basis");
+    expect(keys).toContain("task.completed.changed_paths_basis");
+    expect(keys).toContain("task.accepted.reviewer_relation");
+    // The completion each older build accepts was written with them.
+    const completion = rows.find((row) => row.type === "task.reported_complete" && row.entity_id === manifest.review_task_id);
+    expect(Object.keys(JSON.parse(completion!.payload_json) as object)).toContain("changed_paths_basis");
+  }, TEST_TIMEOUT_MS);
+
   test("covers every Collab Notes event type this build defines", async () => {
     const { manifest } = await fixture();
     const current = eventTypeUnion(readFileSync(join(packageRoot, "src", "protocol.ts"), "utf8"));
@@ -792,6 +867,13 @@ for (const revision of revisions) {
       } else {
         expect(result.proposals).toBeNull();
       }
+    }, TEST_TIMEOUT_MS);
+
+    test("opens and verifies a journal whose completions name paths outside their scopes", async () => {
+      const listedCopy = copyJournal(await listedChanges(), join(directory, "listed-changes"));
+      const output = await runWorker(["verify", join(await archive(revision), "src"), listedCopy]);
+      expect(output.errors).toEqual({});
+      expect(Object.values(output.verified as Record<string, boolean>)).toEqual([true]);
     }, TEST_TIMEOUT_MS);
 
     test("refuses a consent/v2 proposal by code and lists it as unreadable, without breaking its other calls", async () => {
@@ -1108,7 +1190,8 @@ describe(`golden scenario against ${GOLDEN_REVISION}`, () => {
     const [mine, theirs] = [await current(), await base()];
     const minePlaceholders = new Placeholders();
     const theirPlaceholders = new Placeholders();
-    const mineRows = normaliseEvents(eventRows(mine.databasePath), minePlaceholders);
+    // This build's later optional fields are checked by the test below.
+    const mineRows = normaliseEvents(withoutLaterOptionalKeys(eventRows(mine.databasePath)), minePlaceholders);
     const theirRows = normaliseEvents(eventRows(theirs.databasePath), theirPlaceholders);
     expect(mineRows.length).toBeGreaterThan(30);
     expect(mineRows).toEqual(theirRows);
@@ -1121,6 +1204,17 @@ describe(`golden scenario against ${GOLDEN_REVISION}`, () => {
       expect(canonicalJson(minePlaceholders.value(JSON.parse(proposal.proposal_bytes))))
         .toBe(canonicalJson(theirPlaceholders.value(JSON.parse(other.proposal_bytes))));
     });
+  }, TEST_TIMEOUT_MS);
+
+  test("only this build writes the later optional fields, and only the ones the scenario sets", async () => {
+    const [mine, theirs] = [await current(), await base()];
+    expect(laterOptionalKeysIn(eventRows(theirs.databasePath))).toEqual([]);
+    // The golden root is no Git repository, so the completion records why no paths were listed.
+    expect(laterOptionalKeysIn(eventRows(mine.databasePath))).toEqual([
+      "task.accepted.reviewer_relation",
+      "task.reported_complete.changed_paths_basis",
+      "task.reported_complete.changed_paths_reason",
+    ]);
   }, TEST_TIMEOUT_MS);
 
   test("a bare collab_report_append writes the same payload keys as the base build", async () => {

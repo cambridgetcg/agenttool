@@ -51,6 +51,7 @@ import {
   type CollabEvent,
   type CollabEventType,
   type CollabReport,
+  type CompletionChanges,
   type EventCursor,
   type PersonActBasis,
   CONSENT_RULE_V2,
@@ -83,6 +84,7 @@ import {
   optionalText,
   type ProposalReadContext,
   type ReceiptPlanGuard,
+  recordedCompletionChanges,
   reportFromRow,
   type ReportRow,
   restFromDeclaration,
@@ -934,6 +936,9 @@ export class CollabStore extends CollabStoreCore {
             .map((row) => this.noteEntryAt(session, row.event_sequence)),
           truncated: reports.length > NOTE_THREAD_MAX,
           task,
+          completion_changes: task.completion_report_id
+            ? this.completionChanges(session.workspace_id, task.id, task.completion_report_id)
+            : null,
           reviews,
           challenges: challenges.filter((challenge) => reports.some((row) => row.id === challenge.target_report_id)),
           termed: false,
@@ -1443,7 +1448,17 @@ export class CollabStore extends CollabStoreCore {
       folded: foldedBy ? { ballot_id: foldedBy } : null,
       for_name: namesake ? { session_id: namesake } : null,
       verdict: report && event.type === "report.posted" ? this.reviewVerdictOf(report) : null,
+      changes: event.type === "task.reported_complete" || event.type === "task.completed"
+        ? recordedCompletionChanges(payload)
+        : report && event.type === "report.posted" ? this.completionReportChanges(report) : null,
     };
+  }
+
+  /** What a completion's own report recorded about its changed paths; only a report shaped as one is looked up. */
+  private completionReportChanges(report: CollabReport): CompletionChanges | null {
+    if (!report.task_id || report.kind !== "observation" || report.relation !== "informs"
+      || report.to_session_id || report.target_report_id) return null;
+    return this.completionChanges(report.workspace_id, report.task_id, report.id);
   }
 
   /**
@@ -3097,6 +3112,8 @@ export interface NoteEntry {
    * stored relation stays supports or challenges; views show the verdict.
    */
   verdict: "accept" | "request_changes" | null;
+  /** A completion event or its report: what it recorded about the changed paths, record-only; null for anything else. */
+  changes: CompletionChanges | null;
 }
 
 export interface NoteChallengeView {
@@ -3358,6 +3375,8 @@ export interface NoteThreadData {
   answers: NoteEntry[];
   truncated: boolean;
   task: Task | null;
+  /** For a task root: what its current completion recorded about the changed paths. */
+  completion_changes?: CompletionChanges | null;
   reviews: TaskReview[];
   challenges: NoteChallengeView[];
   termed: boolean;

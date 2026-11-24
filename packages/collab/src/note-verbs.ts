@@ -30,7 +30,15 @@ import {
   type NoteInput,
   type NoteReason,
 } from "./note.js";
-import { CONSENT_RULE_V2, type CollabReport, type ProposalStatus, type SessionRest, type Task } from "./protocol.js";
+import {
+  CONSENT_RULE_V2,
+  type CollabReport,
+  type CompletionChanges,
+  type ProposalStatus,
+  type ReviewerRelation,
+  type SessionRest,
+  type Task,
+} from "./protocol.js";
 import { gitCommitExists, hashWorktreeFile, MAX_CITED_FILE_BYTES } from "./repository.js";
 import { removeSessionCredentialFile } from "./session-file.js";
 import {
@@ -38,6 +46,7 @@ import {
   NOTE_DEFAULT_DECISION_EXTENT,
   NOTE_NOTHING_AUTHORISED,
   normalizePathScopes,
+  reviewerRelationAdvice,
   type NoteAppendReceipt,
   type NoteDecisionOutcome,
   type NoteDecisionReceipt,
@@ -1678,7 +1687,7 @@ async function reviewNote(
           evidence_refs: [...evidence.journal, ...(cite ? [`event:${cite.event_id}`] : [])],
           ...(confidenceBasis ? { confidence_basis: confidenceBasis } : {}),
           ...(fields.limits ? { limits: fields.limits } : {}),
-        })) as { task: Task; review: unknown; report: CollabReport };
+        })) as { task: Task; review: unknown; report: CollabReport; reviewer_relation?: ReviewerRelation };
       }));
       if (reviewed.replayed) replays += 1;
       return { plan, cite, citeReplayed, review: reviewed.value, replayed: replays === steps };
@@ -1692,6 +1701,7 @@ async function reviewNote(
     advice.push("This repeats your latest verdict on this completion exactly, so it was read as a retry. Add a word to say it again.");
   }
   const shown = cite && citeReplayed ? recordedEvidence(evidence, cite.items, advice) : evidence;
+  if (review.reviewer_relation) advice.push(reviewerRelationAdvice(review.reviewer_relation));
   const taskHandle = handleOf("task", pin.task_id);
   const completionHandle = handleOf("report", pin.completion_id);
   return {
@@ -1716,6 +1726,7 @@ async function reviewNote(
     recorded_as: planned.recorded_as,
     ...(options.read_as ? { read_as: options.read_as } : {}),
     evidence: evidenceSummary(shown),
+    ...(review.reviewer_relation ? { reviewer_relation: review.reviewer_relation } : {}),
   };
 }
 
@@ -2987,6 +2998,7 @@ async function finishTask(
   const handle = handleOf("task", task.id);
   const completion = completed.completion_report_id!;
   const reviewed = completed.completion_policy === "accepted";
+  const changes = recordedChanges(ctx, workspaceId, task.id, completion);
   // Said as the task stands now, so a replay after the review does not say it still waits.
   const now = ctx.store.getTask(workspaceId, task.id);
   const accepted = reviewed && now.completion_report_id === completion && now.review_status === "accepted";
@@ -3014,7 +3026,17 @@ async function finishTask(
       replayed,
     }),
     evidence: evidenceSummary(shown),
+    ...(changes ?? {}),
   };
+}
+
+/** What a completion recorded about its changed paths; null when nothing or unreadable (the completion committed). */
+function recordedChanges(ctx: NoteVerbContext, workspaceId: string, taskId: string, completionId: string): CompletionChanges | null {
+  try {
+    return ctx.store.completionChanges(workspaceId, taskId, completionId);
+  } catch {
+    return null;
+  }
 }
 
 /**
