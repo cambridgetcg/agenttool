@@ -6312,8 +6312,9 @@ export class CollabStoreCore {
         return this.proposalAddressesSession(event.entity_id, sessionId);
       case "proposal.rejected":
         // As an agreement does, and every session that recorded a decision
-        // citing the proposal before it, so a delegate working under that
-        // decision is rung for the stop rather than finding it on its next read.
+        // citing the proposal before it, so the session that recorded it is
+        // rung for the stop rather than finding it on its next read. A child
+        // or delegate that recorded none is not rung.
         return this.proposalAddressesSession(event.entity_id, sessionId)
           || this.decidedOnProposalBefore(event.workspace_id, event.entity_id, sessionId, event.sequence);
       case "proposal.challenge_set_aside":
@@ -6572,7 +6573,7 @@ export class CollabStoreCore {
     return row;
   }
 
-  private captureSessionWorktree(input: {
+  protected captureSessionWorktree(input: {
     session_id: string;
     session_token: string;
     generation: number;
@@ -6805,7 +6806,13 @@ export class CollabStoreCore {
     return row;
   }
 
-  private requireExpectedBase(row: TaskRow, checkpoint: RepoCheckpoint): void {
+  /**
+   * Run wherever a session comes to hold the task: its first and every later
+   * claim, a recovery that takes it over, and a handoff acceptance. The base
+   * never changes, so after a holder commits, only a worktree still at the
+   * base can take the task again.
+   */
+  protected requireExpectedBase(row: Pick<TaskRow, "expected_base_sha">, checkpoint: RepoCheckpoint): void {
     if (row.expected_base_sha && checkpoint.head_sha !== row.expected_base_sha) {
       throw new CollabError(
         "expected_base_mismatch",

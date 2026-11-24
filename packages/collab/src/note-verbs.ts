@@ -2174,7 +2174,7 @@ export interface TakeInput {
   purpose?: string;
   review?: string;
   because?: string;
-  /** A new task's expected_base_sha: the commit its claim requires the worktree's HEAD to be. */
+  /** A new task's expected_base_sha: the HEAD its every claim, recovery and handoff acceptance requires of the session's worktree. */
   base?: string;
 }
 
@@ -2210,15 +2210,53 @@ export async function takeVerb(ctx: NoteVerbContext, input: TakeInput): Promise<
     : takeExisting(ctx, binding, credential, { task: String(input.task), purpose, because, review: input.review, paths: input.paths, base }, advice);
 }
 
-/** A take's base: a full commit id, 40 to 64 hexadecimal characters, kept in lower case; null when not given. */
+/** A take's base: a full commit id, 40 to 64 hexadecimal characters, kept in lower case; null when not given or blank. */
 function takeBase(value: unknown): string | null {
   if (value === undefined || value === null) return null;
-  if (typeof value !== "string" || !/^[a-fA-F0-9]{40,64}$/.test(value)) {
+  const given = typeof value === "string" ? value.trim() : null;
+  if (given === "") return null;
+  if (given === null || !/^[a-fA-F0-9]{40,64}$/.test(given)) {
     throw new CollabError("invalid_base", "base is a full commit id: 40 to 64 hexadecimal characters", {
       remedy: { say: "Give base as the full commit id the work starts from (git rev-parse HEAD prints it), or leave it out." },
     });
   }
-  return value.toLowerCase();
+  return given.toLowerCase();
+}
+
+/** The HEAD an expected_base_mismatch observed, or null when it observed none. */
+function observedHead(error: CollabError): string | null {
+  return typeof error.details.observed_head_sha === "string" ? error.details.observed_head_sha : null;
+}
+
+/** Refuse a new task whose base the claim would refuse, before the task is created. */
+function requireBaseAtHead(ctx: NoteVerbContext, credential: Credential, base: string, retryInput: Record<string, unknown>): void {
+  try {
+    ctx.store.noteBasePrecheck(credential, base);
+  } catch (error) {
+    if (!(error instanceof CollabError) || error.code !== "expected_base_mismatch") throw error;
+    const head = observedHead(error);
+    if (head === null) {
+      // Nothing to check out: the base can never match here, so the remedy is the call without it.
+      const { base: _base, ...withoutBase } = retryInput;
+      throw new CollabError(
+        error.code,
+        `base ${base} cannot be checked here: no HEAD commit was observed in your session's worktree ` +
+          "(a directory outside Git, or a repository with no commit yet). Leave base out; nothing was written.",
+        { ...error.details, remedy: withSlot(ctx, { tool: "collab_take", input: withoutBase }) },
+      );
+    }
+    throw new CollabError(
+      error.code,
+      `This task would start from ${base}, and the HEAD of your session's worktree is ${head}. Nothing was written.`,
+      {
+        ...error.details,
+        remedy: {
+          say: `Check out ${base} in your session's worktree, then send this call again; ` +
+            `or give base ${head} to start from where you are, or leave base out.`,
+        },
+      },
+    );
+  }
 }
 
 function normalizedPaths(paths: string[]): string[] {
@@ -2261,6 +2299,7 @@ async function takeNew(
         const conflicts = ctx.store.notePathConflicts(workspaceId, paths, { work_mode: workMode });
         if (conflicts.length > 0) throw pathConflictRefusal(ctx, workspaceId, conflicts, null);
       }
+      if (options.base) requireBaseAtHead(ctx, credential, options.base, retryInput);
       return ctx.store.withReceiptPlan(plan.guard, () => ctx.store.createTaskForSession({
         ...credential,
         idempotency_key: plan.step(1),
@@ -2414,18 +2453,59 @@ async function claimStep(
       });
     }
     if (error.code === "expected_base_mismatch") {
-      const expected = String(error.details.expected_base_sha ?? "");
-      const observed = typeof error.details.observed_head_sha === "string" ? `is ${error.details.observed_head_sha}` : "was not observed";
-      throw new CollabError(error.code, `${handleOf("task", task.id)} starts from ${expected}, and your worktree's HEAD ${observed}.${createdNote}`, {
-        ...error.details,
-        remedy: { say: `Check out ${expected} in your worktree, then take ${exactRef("task", task.id)} again; or take work that starts from where you are.` },
-      });
+      throw baseMismatchRefusal(ctx, error, current, retryInput, created, createdNote);
     }
     if (created && error.code !== "changed_under_you") {
       throw new CollabError(error.code, `${error.message}.${createdNote}`, error.details);
     }
     throw error;
   }
+}
+
+/**
+ * A claim or recovery refused over the task's base. A task this call just
+ * created holds no work yet, so its remedy is to check the base out. An
+ * existing one may have been worked on, perhaps by this session, so its
+ * remedy never moves HEAD off commits: the same call (because kept) from a
+ * worktree at the base, or a new task from where the caller is.
+ */
+function baseMismatchRefusal(
+  ctx: NoteVerbContext,
+  error: CollabError,
+  task: Task,
+  retryInput: Record<string, unknown>,
+  created: boolean,
+  createdNote: string,
+): CollabError {
+  const handle = handleOf("task", task.id);
+  const expected = String(error.details.expected_base_sha ?? "");
+  const head = observedHead(error);
+  const observed = head === null
+    ? "no HEAD commit was observed in your session's worktree"
+    : `the HEAD of your session's worktree is ${head}`;
+  if (created) {
+    return new CollabError(error.code, `${handle} starts from ${expected}, and ${observed}.${createdNote}`, {
+      ...error.details,
+      remedy: { say: `Check out ${expected} in your session's worktree, then take ${exactRef("task", task.id)} again; or take work that starts from where you are.` },
+    });
+  }
+  // A lapsed session hold reserves its paths until it is recovered, so a new task over them would be refused.
+  const reserved = task.effective_status === "recovery_required" && task.path_scopes.length > 0
+    ? " The lapsed hold still reserves its paths, so free them first: collab_task_recover with action release (full tool profile), which checks no base."
+    : "";
+  return new CollabError(
+    error.code,
+    `${handle}'s base is fixed at ${expected}, which its every claim, recovery and handoff acceptance checks, and ${observed}. Nothing was written.`,
+    {
+      ...error.details,
+      next: withSlot(ctx, { tool: "collab_take", input: retryInput }),
+      remedy: {
+        say: `Leave your own commits where they are. To take this task, send the call in next from a session in a worktree at ${expected} ` +
+          `(git worktree add --detach <path> ${expected}); once it is held, that HEAD may move on. Or make a new task from where you are: ` +
+          `collab_take with title${task.path_scopes.length > 0 ? " and paths" : ""}${head === null ? ", without base" : `, and base ${head} if you want it checked`}.${reserved}`,
+      },
+    },
+  );
 }
 
 function safeSession(ctx: NoteVerbContext, workspaceId: string, id: string) {

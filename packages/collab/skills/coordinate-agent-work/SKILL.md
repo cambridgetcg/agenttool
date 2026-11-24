@@ -99,7 +99,9 @@ Principles:
   it waits for the session's return, unless the session asked to be woken.
 - **`collab_take`** `{title, paths}` or `{task}`: claim before you edit; with `paths` a
   distinct session reviews it. A lapsed lease needs `because`. `base` (a full commit id)
-  makes a new task's claim check that your worktree's HEAD is that commit.
+  fixes a new task's base: your worktree's HEAD must be at it now, and again on every
+  later claim, recovery or handoff acceptance, so once you commit, the task is retaken
+  only from a worktree at the base.
 - **`collab_done`** `{text}`: `finished` (with `why`, `evidence`, `limits`,
   `review_by`), `released`, `blocked` (with `because`), or `leave`, which releases what
   you hold and ends your session. To stay reachable instead of leaving, declare rest

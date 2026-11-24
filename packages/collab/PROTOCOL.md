@@ -504,12 +504,14 @@ collab_inbox {"since": 0, "include": "all"}
   ready look-back that lists it: `collab_inbox {since: <the mark before this pass>,
   include: "all"}`. Each item names the entity the next call takes and has `{id,
   handle, act, from, to, re, at, statement, text, why, evidence, why_you}`; evidence
-  items carry `observed` and, for files the server hashed, `now`. A note's `Limits:`,
-  `Purpose:` and `Extent:` lines are not part of its `text`, so an item, and each entry
-  of a thread read with `about`, carries them as `limits`, `purpose` and `extent`
-  whenever the note wrote them, and leaves them out when it did not. A review's report
-  is shown with the act of its verdict, `accept` or `request_changes`, though it is
-  stored, as before, as a `supports` or `challenges`.
+  items carry `observed` and, for files the server hashed, `now`. A note's `Purpose:`
+  and `Extent:` lines are not part of its `text`, so an item shown in full, and such an
+  entry of a thread read with `about`, carries them as `purpose` and `extent` when the
+  note wrote them, and leaves them out when it did not. `limits` is the note's
+  `Limits:` line, or else the limits stored with the report. Subject lines and folded
+  ballot answers carry none of the three. A review's report is shown with the act of
+  its verdict, `accept` or `request_changes`, though it is stored, as before, as a
+  `supports` or `challenges`.
 - **One line per thing.** A look-back, and a pass with `include: "all"`, read as a
   record rather than a log: cited evidence and attached artifacts are left out, since
   they are detail of the report or task beside them, and a report is listed once with
@@ -697,6 +699,7 @@ Input: `task` or `title`, `paths`, `purpose`, `review` (`required` or `none`),
 
 ```collab-call
 collab_take {"task": "task#0b12de"}
+collab_take {"title": "Make retry idempotent", "paths": ["src/retry.ts"], "base": "9f2c4e1a7b3d5f60819a2c4e6b8d0f1a3c5e7092"}
 ```
 
 With `title` it creates a task and claims it: an edit task whose completion waits for
@@ -704,10 +707,24 @@ a distinct reviewer when `paths` are given, else a coordination task you report 
 `review` overrides that. With `task` it claims it, and when its lease has lapsed it
 recovers it, which needs `because`. `purpose` goes into a new task's description only.
 `base`, a full commit id of 40 to 64 hexadecimal characters, becomes a new task's
-`expected_base_sha`, as `collab_task_create` sets it, so its claim checks that your
-worktree's HEAD is that commit; a mismatch leaves the task created and open and says
-what to check out, and a malformed `base` is refused before anything is written. With
-`task` it is not used: the task keeps its own base.
+`expected_base_sha`, as `collab_task_create` sets it. A blank `base` is read as not
+given, and a malformed one is refused as `invalid_base`. The take reads your session's
+worktree HEAD before it creates the task: when it is not that commit, the take is
+refused as `expected_base_mismatch`, nothing is written, and the remedy says what to
+check out; where no HEAD is observed (outside Git, or before a first commit) the
+remedy is the same call without `base`. With `task`, `base` is not used: the task keeps
+its own.
+
+The base is fixed for the task's life, and it is checked again on every claim, every
+recovery that takes the task over, and every handoff acceptance. It is not checked
+while the task is held, so its holder's HEAD moves on as it commits. After that the
+task can be taken again, by that holder too, only from a session whose worktree is at
+the base. A take refused for that leaves the task as it was; its `next` is the same
+call, `because` included, to send from such a worktree, and its remedy also offers a new
+task from where you are. Commits already made stay where they are. If HEAD moves between
+a new task's check and its claim, the task is left created and open, and the refusal
+says so.
+
 A path overlap names every holder, their purposes, and a ready `collab_note` to ask
 them; over paths you hold yourself, it says to finish or release that task. A lease is
 coordination, not ownership or a lock.
