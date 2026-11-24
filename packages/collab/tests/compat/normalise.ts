@@ -93,3 +93,58 @@ export function normaliseEvents(rows: EventRow[], placeholders = new Placeholder
     payload: JSON.parse(row.payload_json) as unknown,
   })));
 }
+
+/**
+ * Optional payload fields this build writes and the golden revision does not,
+ * by event type. Each is present only when set, and older builds page over
+ * it as over any key they do not read, so the golden comparison drops exactly
+ * these from this build's rows; the harness checks they are written here and
+ * never by the base.
+ * - Completion events: the changed paths the server observed (record-only).
+ * - Review events: the reviewer's relation to the reporter (record-only).
+ */
+export const LATER_OPTIONAL_PAYLOAD_KEYS: Readonly<Record<string, readonly string[]>> = {
+  "task.reported_complete": [
+    "changed_paths_basis",
+    "changed_paths",
+    "changed_paths_count",
+    "outside_scopes",
+    "outside_scopes_count",
+    "changed_paths_truncated",
+    "changed_paths_reason",
+  ],
+  "task.completed": [
+    "changed_paths_basis",
+    "changed_paths",
+    "changed_paths_count",
+    "outside_scopes",
+    "outside_scopes_count",
+    "changed_paths_truncated",
+    "changed_paths_reason",
+  ],
+  "task.accepted": ["reviewer_relation"],
+  "task.changes_requested": ["reviewer_relation"],
+};
+
+/** The rows without the later optional keys, for comparison with an older build. */
+export function withoutLaterOptionalKeys(rows: EventRow[]): EventRow[] {
+  return rows.map((row) => {
+    const keys = LATER_OPTIONAL_PAYLOAD_KEYS[row.type];
+    if (!keys) return row;
+    const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
+    for (const key of keys) delete payload[key];
+    return { ...row, payload_json: JSON.stringify(payload) };
+  });
+}
+
+/** The later optional keys a row carries, as `type.key`. */
+export function laterOptionalKeysIn(rows: EventRow[]): string[] {
+  const found = new Set<string>();
+  for (const row of rows) {
+    const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
+    for (const key of LATER_OPTIONAL_PAYLOAD_KEYS[row.type] ?? []) {
+      if (payload[key] !== undefined) found.add(`${row.type}.${key}`);
+    }
+  }
+  return [...found].sort();
+}

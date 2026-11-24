@@ -328,11 +328,14 @@ carries the next step.
    the bytes written.
 6. **Complete.** `collab_task_complete` with a summary, `confidence`,
    `confidence_basis`, `limits`, and `evidence_refs`, optionally naming
-   `review_requested_session_id`. The server records the result checkpoint. An
+   `review_requested_session_id`. The server records the result checkpoint and
+   the paths changed since the base checkpoint (see
+   [Changed paths and reviewer relation](#changed-paths-and-reviewer-relation)). An
    edit task remains `reported_complete` until a distinct session accepts it.
 7. **Review.** Another session inspects the evidence and calls
    `collab_task_review` with `accept` or `request_changes`, a summary, and its
-   own `confidence`, `confidence_basis`, and `limits`. A late reviewer concurs
+   own `confidence`, `confidence_basis`, and `limits`. The review records the
+   reviewer's `reviewer_relation` to the reporter. A late reviewer concurs
    or disagrees by report.
 8. **End or rest.** `collab_session_end` with a `reason`,
    `release_leases: true`, and an optional `release_summary`; or, to stay
@@ -360,6 +363,46 @@ task's `base_checkpoint_digest` or `result_checkpoint_digest`. Each
 `evidence_not_found` errors carry an `allowed_prefixes` field; send the
 corrected mutation with a fresh idempotency key rather than dropping the
 evidence. Attach a path, commit, or URL before citing it.
+
+### Changed paths and reviewer relation
+
+Both are record-only: neither ever refuses a completion or a review.
+
+At completion, when the claim's base checkpoint was server-observed in the same
+worktree, the server's own Git lists the paths changed since that base `HEAD`:
+tracked changes (`git diff --name-only <base>`, staged or not, deletions
+included, a rename as both its paths) and untracked files that are not ignored.
+An untracked nested repository is one name ending in `/`. It records names only,
+decoded as UTF-8, never content; every reader of the journal sees those names,
+so keep a name that should stay private ignored by Git. The completion event
+(`task.reported_complete`, or `task.completed` for a `reported` policy) carries
+optional fields, and `collab_task_complete` and `collab_done` return them:
+
+- `changed_paths_basis`: `server_observed`, or `unavailable` with a short
+  `changed_paths_reason` (no Git repository or `HEAD` at the claim, a base from
+  another worktree, a base commit no longer in the repository, Git failing or out
+  of its bounds).
+- `changed_paths` and `outside_scopes`, sorted, with `changed_paths_count` and
+  `outside_scopes_count`. `outside_scopes` are the changed paths within no path
+  scope, by the claims' segment-aware, case-folded rule. Each list holds at most
+  256 paths and 12 KiB as JSON; `changed_paths_truncated: true` says one was
+  capped, and the counts stay whole.
+
+The listing is relative to the base `HEAD`, so changes already present at the
+claim count too, and the observation runs outside the write transaction, so the
+worktree can change between it and the record. It says what the worktree
+changed, not who changed it: another session's edits in the same worktree are
+listed too.
+
+A review records `reviewer_relation` on its `task.accepted` or
+`task.changes_requested` event and returns it: `same_voice` (one consent voice
+through attested lineage), `declared_parent` (the reviewer is the reporter's
+declared parent), `declared_child`, `declared_sibling` (both declare the same
+parent), or `unrelated_as_declared`. The declared relations read
+`parent_session_id`, direct links only, which nothing attests.
+`unrelated_as_declared` means only that no such direct link was declared (a
+declared grandparent is not read): it is not proven independence. `collab_note` adds one plain line to its advice, such as "a
+same-voice review is not independent".
 
 ### Requesting and giving review
 
@@ -575,7 +618,7 @@ separation should continue using separate processes. Parent end does not end chi
 parent exists in the same workspace. It is unauthenticated and shares no
 authority, lease, or cursor. Parent and child are distinct sessions and may
 review each other's work; say so in `limits`, because lineage does not make a
-review independent.
+review independent. The review records `reviewer_relation` either way.
 
 ### A host that cannot commit
 
@@ -820,8 +863,10 @@ A checkpoint records the local worktree ID, `HEAD` SHA, branch, a coarse dirty
 flag, capture time, and hashes of the Git index plus the tracked binary diff
 and status-path stream. It also hashes the contents and executable bit of
 non-ignored untracked regular files, plus non-ignored untracked symlink
-targets. Only aggregate digests are journaled; filenames, targets, file
-contents, and diff bytes are not. A task may also require an exact base SHA
+targets. A checkpoint journals only aggregate digests; filenames, targets, file
+contents, and diff bytes are not in it. A completion event does name the paths
+its worktree changed (see
+[Changed paths and reviewer relation](#changed-paths-and-reviewer-relation)). A task may also require an exact base SHA
 before claim. Use these fields to notice worktree drift between claim,
 completion, and review.
 

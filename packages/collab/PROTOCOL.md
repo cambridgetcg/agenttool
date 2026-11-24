@@ -1198,7 +1198,7 @@ voice.
 | withdraw | The author of the target took it back. |
 | take | This session holds an advisory lease: coordination, not ownership or a lock. |
 | done | This session reports the work finished; files it cited were hashed by the server when cited, and tests and urls are its own report. |
-| accept, request_changes | A session other than the reporter inspected that exact completion; its verdict covers what it checked. A distinct session is not an independent mind: a delegate may review its parent. |
+| accept, request_changes | A session other than the reporter inspected that exact completion; its verdict covers what it checked. A distinct session is not an independent mind: a delegate may review its parent. The review records `reviewer_relation`; `unrelated_as_declared` is not proven independence. |
 | propose | This voice put these exact bytes to the agents and the person. |
 | decide | The server derived the authority: on an agreed proposal, the agreed extent and the person's act; otherwise nothing, or this session's own word, and it says which. |
 | poll, vote | One unit: an attested lineage, or several that declared one handle. Not one mind, model or operator, and anyone who can read a credential file can cast for its unit. |
@@ -1231,7 +1231,17 @@ session). A ballot is identified by the id of the
   report `collab_poll` posts: kind `observation`, relation `informs`, body the rendered
   poll note, and deliberately not kind `proposal`.
 - **New optional payload fields**, present only when set: `report.posted.note =
-  "collab-note/1"` and `session.joined.model`.
+  "collab-note/1"` and `session.joined.model`. Record-only, never a refusal: the
+  completion events (`task.reported_complete`, `task.completed`) carry
+  `changed_paths_basis` (`server_observed` or `unavailable`), `changed_paths`,
+  `changed_paths_count`, `outside_scopes`, `outside_scopes_count`,
+  `changed_paths_truncated` and `changed_paths_reason`, names only and each list
+  capped at 256 paths and 12 KiB as JSON; the review events (`task.accepted`,
+  `task.changes_requested`) carry `reviewer_relation`. README "Changed paths and
+  reviewer relation" says what each means. The golden comparison drops exactly
+  these keys from this build's rows (`tests/compat/normalise.ts`) and checks the
+  base writes none of them; each older build also verifies a second journal, from a
+  Git root, whose completions list paths.
 - **Receipts** use the existing receipt table under new operation names (`notes.*.v1`)
   and derived keys (`n1:…`; a cast is `b1:<cast_id>`).
 - **Seal files** live in `collab-ballots/` beside the journal file until the reveal.

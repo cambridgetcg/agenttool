@@ -579,6 +579,43 @@ export interface PersonInbox {
   unreadable: UnreadableProposal[];
 }
 
+/**
+ * What a completion recorded about the paths its worktree changed (record-only;
+ * never a refusal). `server_observed`: the server's own Git listed the paths
+ * changed since the base checkpoint's HEAD, tracked and untracked, names only.
+ * The base HEAD is the claim's, so changes already present at the claim count
+ * too. `unavailable`: nothing was listed, and `changed_paths_reason` says why.
+ * Observed outside the write transaction, so the worktree may have changed
+ * between the observation and the record.
+ */
+export interface CompletionChanges {
+  changed_paths_basis: "server_observed" | "unavailable";
+  /** Sorted; capped (see changed_paths_truncated). Present only when server_observed. */
+  changed_paths?: string[];
+  changed_paths_count?: number;
+  /** Changed paths within no path scope: the claim's segment-aware, case-folded rule. */
+  outside_scopes?: string[];
+  outside_scopes_count?: number;
+  /** Present, and true, only when a list was capped. */
+  changed_paths_truncated?: true;
+  /** Present only when unavailable. */
+  changed_paths_reason?: string;
+}
+
+/**
+ * How a review's session relates to the reporter's (record-only; never a
+ * refusal). `same_voice`: one consent voice through attested lineage. The
+ * declared relations read coordination_sessions.parent_session_id, direct
+ * links only, which nothing attests. `unrelated_as_declared` means only that
+ * no such link was declared: it is not proven independence.
+ */
+export type ReviewerRelation =
+  | "same_voice"
+  | "declared_parent"
+  | "declared_child"
+  | "declared_sibling"
+  | "unrelated_as_declared";
+
 export interface TaskReview {
   id: string;
   workspace_id: string;

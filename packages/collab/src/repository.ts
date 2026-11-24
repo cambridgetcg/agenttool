@@ -257,6 +257,65 @@ export function captureRepoCheckpoint(rootPath: string, id: string): RepoCheckpo
 }
 
 /**
+ * The paths a worktree has changed since a base commit, as the server's own
+ * Git sees them: tracked changes against that commit (staged or not, deleted
+ * included; a rename is both its paths) plus untracked files that are not
+ * ignored; an untracked nested repository is one name ending in `/`. Names
+ * only, decoded as UTF-8; no content is returned or kept. Read-only, bounded
+ * like the checkpoint capture, and run outside any SQLite transaction, so the
+ * worktree can change between this observation and the write that records it.
+ */
+export type ChangedPathsObservation =
+  | { ok: true; paths: string[] }
+  | { ok: false; reason: string };
+
+export function observeChangedPaths(rootPath: string, baseHeadSha: string): ChangedPathsObservation {
+  if (!GIT_OBJECT_ID.test(baseHeadSha)) {
+    return { ok: false, reason: "The base checkpoint's HEAD is not a Git object ID" };
+  }
+  // No index refresh is written and no missing object is fetched for a record.
+  const env = { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1" };
+  // Two children only, and none to check the base first: a synchronous spawn
+  // can stall this process (cf3a05bb), and a missing base fails the diff itself.
+  const tracked = gitBytes(rootPath, [
+    "diff",
+    "--no-ext-diff",
+    "--no-textconv",
+    "--no-renames",
+    "--ignore-submodules=none",
+    "--name-only",
+    "-z",
+    baseHeadSha,
+    "--",
+  ], MAX_GIT_OUTPUT, env);
+  if (!tracked.ok) {
+    return {
+      ok: false,
+      reason: "Git could not list the changes since the base checkpoint's HEAD: that commit is missing, or a bound was exceeded",
+    };
+  }
+  const untracked = gitBytes(rootPath, [
+    "ls-files",
+    "--others",
+    "--exclude-standard",
+    "-z",
+  ], MAX_GIT_OUTPUT, env);
+  if (!untracked.ok) {
+    return { ok: false, reason: "Git could not list the untracked paths within its bounds" };
+  }
+  const paths = new Set<string>();
+  for (const listing of [tracked.stdout, untracked.stdout]) {
+    // `-z` ends every name with NUL, as splitNul requires.
+    const entries = splitNul(listing);
+    if (!entries || entries.some((entry) => !safeGitRelativePath(withoutTrailingSlash(entry)))) {
+      return { ok: false, reason: "Git reported a changed path that cannot be read safely" };
+    }
+    for (const entry of entries) paths.add(entry.toString("utf8"));
+  }
+  return { ok: true, paths: [...paths].sort() };
+}
+
+/**
  * Server-side Git facts about a commit that may directly follow a result
  * checkpoint's HEAD: its parents, the paths it changes against that parent, and
  * the SHA-256 of each committed regular-file blob. Read-only plumbing, bounded
@@ -538,11 +597,13 @@ function gitBytes(
   rootPath: string,
   args: string[],
   maxBuffer = MAX_GIT_OUTPUT,
+  env?: NodeJS.ProcessEnv,
 ): { ok: boolean; stdout: Buffer } {
   const result = spawnSync("git", ["-C", rootPath, ...args], {
     timeout: GIT_TIMEOUT_MS,
     maxBuffer,
     stdio: ["ignore", "pipe", "ignore"],
+    ...(env ? { env } : {}),
   });
   return {
     ok: result.status === 0 && !spawnFailed(result),
@@ -713,6 +774,11 @@ function safeGitRelativePath(value: Buffer): boolean {
     start = index + 1;
   }
   return true;
+}
+
+/** Git lists an untracked nested repository as its directory, `name/`, and does not look inside. */
+function withoutTrailingSlash(value: Buffer): Buffer {
+  return value[value.length - 1] === 0x2f ? value.subarray(0, value.length - 1) : value;
 }
 
 function lengthPrefix(value: number): Buffer {

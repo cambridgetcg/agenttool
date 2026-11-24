@@ -30633,6 +30633,48 @@ function captureRepoCheckpoint(rootPath, id) {
     captured_at: new Date().toISOString()
   };
 }
+function observeChangedPaths(rootPath, baseHeadSha) {
+  if (!GIT_OBJECT_ID.test(baseHeadSha)) {
+    return { ok: false, reason: "The base checkpoint's HEAD is not a Git object ID" };
+  }
+  const env = { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1" };
+  const tracked = gitBytes(rootPath, [
+    "diff",
+    "--no-ext-diff",
+    "--no-textconv",
+    "--no-renames",
+    "--ignore-submodules=none",
+    "--name-only",
+    "-z",
+    baseHeadSha,
+    "--"
+  ], MAX_GIT_OUTPUT, env);
+  if (!tracked.ok) {
+    return {
+      ok: false,
+      reason: "Git could not list the changes since the base checkpoint's HEAD: that commit is missing, or a bound was exceeded"
+    };
+  }
+  const untracked = gitBytes(rootPath, [
+    "ls-files",
+    "--others",
+    "--exclude-standard",
+    "-z"
+  ], MAX_GIT_OUTPUT, env);
+  if (!untracked.ok) {
+    return { ok: false, reason: "Git could not list the untracked paths within its bounds" };
+  }
+  const paths = new Set;
+  for (const listing of [tracked.stdout, untracked.stdout]) {
+    const entries = splitNul(listing);
+    if (!entries || entries.some((entry) => !safeGitRelativePath(withoutTrailingSlash(entry)))) {
+      return { ok: false, reason: "Git reported a changed path that cannot be read safely" };
+    }
+    for (const entry of entries)
+      paths.add(entry.toString("utf8"));
+  }
+  return { ok: true, paths: [...paths].sort() };
+}
 function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
   const refuse = (reason) => ({
     ok: false,
@@ -30855,11 +30897,12 @@ function gitDigest(rootPath, args) {
   const result = gitBytes(rootPath, args);
   return result.ok ? sha256Bytes(result.stdout) : null;
 }
-function gitBytes(rootPath, args, maxBuffer = MAX_GIT_OUTPUT) {
+function gitBytes(rootPath, args, maxBuffer = MAX_GIT_OUTPUT, env) {
   const result = spawnSync2("git", ["-C", rootPath, ...args], {
     timeout: GIT_TIMEOUT_MS,
     maxBuffer,
-    stdio: ["ignore", "pipe", "ignore"]
+    stdio: ["ignore", "pipe", "ignore"],
+    ...env ? { env } : {}
   });
   return {
     ok: result.status === 0 && !spawnFailed(result),
@@ -31007,6 +31050,9 @@ function safeGitRelativePath(value) {
     start = index + 1;
   }
   return true;
+}
+function withoutTrailingSlash(value) {
+  return value[value.length - 1] === 47 ? value.subarray(0, value.length - 1) : value;
 }
 function lengthPrefix(value) {
   const prefix2 = Buffer.allocUnsafe(8);
@@ -34560,6 +34606,7 @@ class CollabStoreCore {
     if (replay.found)
       return replay.value;
     const preparedCheckpoint = this.captureSessionWorktree(input);
+    const preparedChanges = this.observeCompletionChanges(normalized.task_id, preparedCheckpoint);
     return this.mutateAsSession(input, normalized.idempotency_key, "task.complete.v2", request, (session) => {
       const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
       this.requireVersion(row, normalized.expected_version);
@@ -34572,6 +34619,7 @@ class CollabStoreCore {
       }
       this.requirePreparedWorktree(session, preparedCheckpoint);
       const checkpoint = preparedCheckpoint.checkpoint;
+      const changes = completionChangesFor(row, preparedChanges);
       const report = this.appendReportInternal(session, {
         task_id: row.id,
         to_session_id: null,
@@ -34611,7 +34659,8 @@ class CollabStoreCore {
         summary,
         version: version2,
         note: reviewStatus === "pending" ? "Reported completion does not satisfy dependencies until a distinct session accepts it." : "Reported completion satisfies this task's explicit reported-only policy; it is not external acceptance.",
-        ...reviewRequestedSessionId ? { review_requested_session_id: reviewRequestedSessionId } : {}
+        ...reviewRequestedSessionId ? { review_requested_session_id: reviewRequestedSessionId } : {},
+        ...changes
       }, session.id);
       if (reviewRequestedSessionId) {
         this.appendReportInternal(session, {
@@ -35851,6 +35900,7 @@ class CollabStoreCore {
       if (row.reported_by_session_id === session.id) {
         throw new CollabError("self_review_forbidden", "A distinct session must review reported completion");
       }
+      const reviewerRelation = this.reviewerRelation(session.id, row.reported_by_session_id);
       for (const reference of evidenceRefs)
         this.requireEvidenceRef(row.workspace_id, reference);
       if (input.outcome === "accept" && this.hasObsoletedCompletionReport(row.workspace_id, row.completion_report_id)) {
@@ -35925,6 +35975,7 @@ class CollabStoreCore {
         summary,
         version: version2,
         authority_boundary: "acceptance_is_local_coordination_review_not_merge_deploy_truth_or_external_authority",
+        reviewer_relation: reviewerRelation,
         ...hostCommit ? {
           checkpoint_basis: "host_commit_successor",
           host_commit_sha: hostCommit.commit_sha,
@@ -35941,9 +35992,24 @@ class CollabStoreCore {
       return {
         task: this.requireTask(row.workspace_id, row.id),
         review: this.requireReview(reviewId),
-        report
+        report,
+        reviewer_relation: reviewerRelation
       };
     });
+  }
+  reviewerRelation(reviewerSessionId, reporterSessionId) {
+    if (this.consentVoice(reviewerSessionId) === this.consentVoice(reporterSessionId))
+      return "same_voice";
+    const parentOf = (sessionId) => this.db.query(`SELECT parent_session_id FROM coordination_sessions WHERE id = ?`).get(sessionId)?.parent_session_id ?? null;
+    const reviewerParent = parentOf(reviewerSessionId);
+    const reporterParent = parentOf(reporterSessionId);
+    if (reporterParent === reviewerSessionId)
+      return "declared_parent";
+    if (reviewerParent === reporterSessionId)
+      return "declared_child";
+    if (reviewerParent !== null && reviewerParent === reporterParent)
+      return "declared_sibling";
+    return "unrelated_as_declared";
   }
   offerHandoff(input) {
     const normalized = {
@@ -36714,6 +36780,64 @@ class CollabStoreCore {
     const session = this.authenticateSession(input);
     const worktree = this.requireWorktreeRow(session.worktree_id);
     return this.captureRegisteredWorktree(session, worktree);
+  }
+  observeCompletionChanges(taskId, prepared) {
+    let baseJson;
+    try {
+      baseJson = this.requireTaskRow(prepared.workspace_id, taskId).base_checkpoint_json;
+    } catch {
+      return { base_checkpoint_json: null, observation: { ok: false, reason: "The task could not be read" } };
+    }
+    const unavailable = (reason) => ({
+      base_checkpoint_json: baseJson,
+      observation: { ok: false, reason }
+    });
+    const base = parseCheckpoint(baseJson);
+    if (!base)
+      return unavailable("The claim recorded no base checkpoint");
+    if (base.source !== "server_observed" || !base.head_sha) {
+      return unavailable("The base checkpoint was not server-observed: no Git repository or no HEAD at the claim");
+    }
+    if (base.worktree_id !== prepared.worktree_id) {
+      return unavailable("The base checkpoint belongs to another worktree");
+    }
+    if (prepared.checkpoint.source !== "server_observed" || !prepared.checkpoint.head_sha) {
+      return unavailable("The worktree has no Git HEAD now");
+    }
+    try {
+      return { base_checkpoint_json: baseJson, observation: observeChangedPaths(prepared.root_path, base.head_sha) };
+    } catch {
+      return unavailable("Git could not list the changed paths");
+    }
+  }
+  completionChanges(workspaceId, taskId, completionReportId) {
+    const completion = this.db.query(`SELECT event_sequence FROM reports WHERE id = ? AND workspace_id = ?`).get(completionReportId, workspaceId);
+    if (!completion)
+      return null;
+    const event = this.db.query(`
+      SELECT payload_json FROM events
+      WHERE workspace_id = ? AND sequence > ? AND entity_id = ?
+        AND type IN ('task.reported_complete', 'task.completed')
+      ORDER BY sequence
+      LIMIT 1
+    `).get(workspaceId, completion.event_sequence, taskId);
+    if (!event)
+      return null;
+    const payload = JSON.parse(event.payload_json);
+    if (payload.completion_report_id !== completionReportId)
+      return null;
+    if (payload.changed_paths_basis !== "server_observed" && payload.changed_paths_basis !== "unavailable")
+      return null;
+    const keys = [
+      "changed_paths_basis",
+      "changed_paths",
+      "changed_paths_count",
+      "outside_scopes",
+      "outside_scopes_count",
+      "changed_paths_truncated",
+      "changed_paths_reason"
+    ];
+    return Object.fromEntries(keys.filter((key) => payload[key] !== undefined).map((key) => [key, payload[key]]));
   }
   captureReviewCheckpoint(input, taskId) {
     const session = this.authenticateSession(input);
@@ -38458,6 +38582,66 @@ function artifactRepositoryPath(uri, rootPath) {
   if (!relative2 || relative2 === "." || relative2 === ".." || relative2.startsWith("../") || relative2.endsWith("/") || relative2 === ".git" || relative2.startsWith(".git/"))
     return null;
   return relative2;
+}
+function reviewerRelationAdvice(relation) {
+  switch (relation) {
+    case "same_voice":
+      return "You and the reporter share one consent voice through attested lineage: a same-voice review is not independent.";
+    case "declared_parent":
+      return "You are the reporter's declared parent session: a review across declared lineage is not independent.";
+    case "declared_child":
+      return "You are a declared child of the reporter's session: a review across declared lineage is not independent.";
+    case "declared_sibling":
+      return "You and the reporter declare the same parent session: a review across declared lineage is not independent.";
+    case "unrelated_as_declared":
+      return "You and the reporter share no attested voice and declare no direct parent link; that is not proof the review is independent.";
+  }
+}
+var MAX_RECORDED_CHANGED_PATHS = 256;
+var MAX_RECORDED_CHANGED_PATH_BYTES = 12 * 1024;
+function completionChangesFor(row, prepared) {
+  if (prepared.base_checkpoint_json !== row.base_checkpoint_json) {
+    return {
+      changed_paths_basis: "unavailable",
+      changed_paths_reason: "The task's base checkpoint changed after the paths were observed"
+    };
+  }
+  return changedPathFields(prepared.observation, parseStringArray(row.path_scopes_json));
+}
+function changedPathFields(observation, scopes) {
+  if (!observation.ok)
+    return { changed_paths_basis: "unavailable", changed_paths_reason: observation.reason };
+  const outside = observation.paths.filter((path) => !pathWithinScopesFolded(path, scopes));
+  const changed = capPaths(observation.paths);
+  const outsideCapped = capPaths(outside);
+  return {
+    changed_paths_basis: "server_observed",
+    changed_paths: changed.paths,
+    changed_paths_count: observation.paths.length,
+    outside_scopes: outsideCapped.paths,
+    outside_scopes_count: outside.length,
+    ...changed.truncated || outsideCapped.truncated ? { changed_paths_truncated: true } : {}
+  };
+}
+function capPaths(paths) {
+  const kept = [];
+  let bytes = 0;
+  for (const path of paths) {
+    const size = Buffer.byteLength(JSON.stringify(path), "utf8") + 1;
+    if (kept.length >= MAX_RECORDED_CHANGED_PATHS || bytes + size > MAX_RECORDED_CHANGED_PATH_BYTES) {
+      return { paths: kept, truncated: true };
+    }
+    kept.push(path);
+    bytes += size;
+  }
+  return { paths: kept, truncated: false };
+}
+function pathWithinScopesFolded(path, scopes) {
+  const key = path.normalize("NFC").toLowerCase();
+  return scopes.some((scope) => {
+    const scopeKey = scope.normalize("NFC").toLowerCase();
+    return key === scopeKey || key.startsWith(`${scopeKey}/`);
+  });
 }
 function pathWithinScopes(path, scopes) {
   return scopes.some((scope) => path === scope || path.startsWith(`${scope}/`));
@@ -44596,6 +44780,8 @@ async function reviewNote(ctx, binding, credential, options) {
     advice.push("This repeats your latest verdict on this completion exactly, so it was read as a retry. Add a word to say it again.");
   }
   const shown = cite && citeReplayed ? recordedEvidence(evidence, cite.items, advice) : evidence;
+  if (review.reviewer_relation)
+    advice.push(reviewerRelationAdvice(review.reviewer_relation));
   const taskHandle = handleOf("task", pin.task_id);
   const completionHandle = handleOf("report", pin.completion_id);
   return {
@@ -44617,7 +44803,8 @@ async function reviewNote(ctx, binding, credential, options) {
     act: planned.act,
     recorded_as: planned.recorded_as,
     ...options.read_as ? { read_as: options.read_as } : {},
-    evidence: evidenceSummary(shown)
+    evidence: evidenceSummary(shown),
+    ...review.reviewer_relation ? { reviewer_relation: review.reviewer_relation } : {}
   };
 }
 function reviewRefusal(ctx, error51) {
@@ -45589,6 +45776,12 @@ async function finishTask(ctx, binding, credential, task, options) {
   const handle = handleOf("task", task.id);
   const completion = completed.completion_report_id;
   const reviewed = completed.completion_policy === "accepted";
+  const changes = recordedChanges(ctx, workspaceId, task.id, completion);
+  if (changes?.outside_scopes_count) {
+    const shownPaths = (changes.outside_scopes ?? []).slice(0, 5).map((path) => JSON.stringify(path));
+    const more = changes.outside_scopes_count - shownPaths.length;
+    advice.push(`The server saw ${changes.outside_scopes_count} changed path${changes.outside_scopes_count === 1 ? "" : "s"} outside this task's path scopes ` + `since its base checkpoint: ${shownPaths.join(", ")}${more > 0 ? ` and ${more} more` : ""}. ` + "This is recorded for the reviewer, not refused; changes already present at the claim count too.");
+  }
   const now = ctx.store.getTask(workspaceId, task.id);
   const accepted = reviewed && now.completion_report_id === completion && now.review_status === "accepted";
   return {
@@ -45607,8 +45800,16 @@ async function finishTask(ctx, binding, credential, task, options) {
       note,
       replayed
     }),
-    evidence: evidenceSummary(shown)
+    evidence: evidenceSummary(shown),
+    ...changes ?? {}
   };
+}
+function recordedChanges(ctx, workspaceId, taskId, completionId) {
+  try {
+    return ctx.store.completionChanges(workspaceId, taskId, completionId);
+  } catch {
+    return null;
+  }
 }
 function artifactItem(item, artifact) {
   const label = artifact.label ?? "";
@@ -47417,7 +47618,11 @@ Legacy session tools: ${legacyInstructions}`
       expected_version: input.expected_version,
       summary: input.summary
     });
-    return withAddressee({ task }, task.workspace_id, input.review_requested_session_id);
+    let changes = {};
+    try {
+      changes = state.binding && task.completion_report_id ? store2.completionChanges(task.workspace_id, task.id, task.completion_report_id) ?? {} : {};
+    } catch {}
+    return withAddressee({ task, ...changes }, task.workspace_id, input.review_requested_session_id);
   }));
   server.registerTool("collab_task_review", {
     title: "Review reported task completion",

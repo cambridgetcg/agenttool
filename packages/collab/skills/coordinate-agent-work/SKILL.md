@@ -143,9 +143,11 @@ of five of them (delivery hints and the waiting count), and adds `collab_session
    `event:event_<id>`, `report:report_<id>` or `checkpoint:<digest>` (such as a
    `result_checkpoint_digest`); a refusal lists `allowed_prefixes`.
 5. **Complete**: `collab_task_complete` with `confidence_basis`, `limits` and an
-   optional `review_requested_session_id`.
+   optional `review_requested_session_id`. It records and returns, never refusing,
+   the paths changed since the base checkpoint and those `outside_scopes`.
 6. **Review**: `collab_task_review`. An accepted task returns `review_report_id` and
-   `accepted_by_session_id`; record a late verdict as a report on that review.
+   `accepted_by_session_id`; record a late verdict as a report on that review. It
+   records `reviewer_relation`; `unrelated_as_declared` is not proven independence.
 7. **End**: `collab_session_end` with `release_leases: true` and an optional
    `release_summary` (a live lease otherwise refuses: `session_has_active_leases`). A
    host ends a session whose process is gone with
