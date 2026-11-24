@@ -1000,8 +1000,8 @@ posting into a newer ceremony.
 Agreement needs the agents' position to be `consented`, the exact current
 `proposal_sha256`, and the same position the person was shown; the challenge
 and the terminal refuse before any prompt otherwise. A rejection may come at
-any position. An authenticated rejection may follow a relayed one; nothing
-else repeats. The latest person act decides `person.state`. `may_proceed` is
+any position. A rejection recorded at the terminal or with a passkey may follow a
+relayed one; nothing else repeats. The latest person act decides `person.state`. `may_proceed` is
 `true` only while that act agrees and the proposal is still on the table; it
 authorises only the proposal's `extent`. A later challenge does not silently
 revoke an agreement. `proposal.agreed` and `proposal.rejected` are addressed to
@@ -1054,10 +1054,12 @@ path asserted a yes; it proves no terminal and no person. Only
 `user_verified_passkey` carries a proof that can be re-verified, and that proof
 shows which key signed, not whose key it is. The stored basis values are
 unchanged, but `proposals`, `inbox --workspace`, the act receipts,
-`collab_proposal_status` and the notes proposal view say this in one more key,
-`basis_note`, when they show a person act or a set-aside; a decide on a terminal agreement
-says it in its basis (`agreement asserted by controlling_terminal …`); and the
-decision record lists it in `does_not_establish`. Desk notes, desk proposals and
+`collab_proposal_status` and the notes views and decide results say this in one
+more key, `basis_note`, when they show a person act or a set-aside; the notes
+views say an agreement "was recorded as the person's (basis …)"; a decide on a
+terminal agreement says it in its basis (`agreement asserted by
+controlling_terminal …`); and the decision record lists it in
+`does_not_establish`. Desk notes, desk proposals and
 their withdrawal are not authenticated as the person; they inform and
 authorise nothing. An agent can place a report in the person's inbox with
 `collab_report_append` and `to_person: true`; that is routing, not access

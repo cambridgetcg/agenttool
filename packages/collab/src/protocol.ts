@@ -437,9 +437,9 @@ export type PersonActBasis = "relayed_by_session" | "controlling_terminal" | "us
 
 /**
  * What a person act's basis proves, shown as `basis_note` by
- * collab_proposal_status, the notes proposal view, and the desk's proposal
- * reads and act receipts when they show one. Display only: no stored value,
- * hash or count changes with it.
+ * collab_proposal_status, the notes views and decide results, and the desk's
+ * proposal reads and act receipts when they show one. Display only: no stored
+ * value, hash or count changes with it.
  */
 export const PERSON_ACT_BASIS_NOTE =
   "What a person act's basis proves: only user_verified_passkey carries a proof that can be re-verified without "
@@ -458,7 +458,10 @@ export function personActBasisNote(
     : {};
 }
 
-/** A platform passkey a person enrolled at the controlling terminal. */
+/**
+ * A platform passkey in this journal's table. The desk enrols one only after
+ * a yes at the terminal, which the store does not check.
+ */
 export interface PersonPasskey {
   credential_id: string;
   /** Base64url DER SubjectPublicKeyInfo; ES256 (P-256) only. */
@@ -525,7 +528,10 @@ export interface AiSnapshot {
   set_aside_challenge_report_ids?: string[];
 }
 
-/** How a set-aside reached the journal: only the person, and only authenticated. */
+/**
+ * How a set-aside reached the journal: recorded with basis controlling_terminal
+ * or user_verified_passkey, never relayed (PERSON_ACT_BASIS_NOTE says what each proves).
+ */
 export type SetAsideBasis = "controlling_terminal" | "user_verified_passkey";
 
 /**

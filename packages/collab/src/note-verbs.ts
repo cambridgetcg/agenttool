@@ -30,7 +30,7 @@ import {
   type NoteInput,
   type NoteReason,
 } from "./note.js";
-import { CONSENT_RULE_V2, type CollabReport, type ProposalStatus, type SessionRest, type Task } from "./protocol.js";
+import { CONSENT_RULE_V2, PERSON_ACT_BASIS_NOTE, type CollabReport, type ProposalStatus, type SessionRest, type Task } from "./protocol.js";
 import { gitCommitExists, hashWorktreeFile, MAX_CITED_FILE_BYTES } from "./repository.js";
 import { removeSessionCredentialFile } from "./session-file.js";
 import {
@@ -1861,8 +1861,8 @@ function decideRefusal(error: unknown, proposalId: string | null): unknown {
   const later = error.details.later_act as { id?: string; basis?: string } | undefined;
   const say: Record<string, string> = {
     not_agreed: `Ask the person to act on ${proposalId} at his desk. No agent tool records agreement.`,
-    agreement_withdrawn: `Stop work that rests on ${proposalId}: the person's latest act (${later?.id ?? "a rejection"}, ` +
-      `${later?.basis ?? "unknown basis"}) rejects these bytes. ` +
+    agreement_withdrawn: `Stop work that rests on ${proposalId}: the latest act recorded as the person's (${later?.id ?? "a rejection"}, ` +
+      `basis ${later?.basis ?? "unknown"}) rejects these bytes. ` +
       (later?.basis === "relayed_by_session"
         ? "That rejection was relayed by a session, and a relayed no is forgeable; if it was not the person's, the person may agree again on the same bytes at his desk. "
         : "The person may agree again on the same bytes at his desk. ") +
@@ -1940,7 +1940,7 @@ function planDecide(
       // lines trimmed); the authority_scope column keeps it byte for byte.
       const shown = normalizeNoteFields({ ...fields, extent: agreed });
       if (fields.extent !== null && fields.extent !== agreed && fields.extent !== shown.extent) {
-        throw new CollabError("extent_from_proposal", "A decision on a proposal covers the extent the person agreed to; extent cannot change it", {
+        throw new CollabError("extent_from_proposal", "A decision on a proposal covers the agreed extent; extent cannot change it", {
           agreed_extent: agreed,
           remedy: withoutExtent(),
         });
@@ -2104,7 +2104,7 @@ function decideResult(
   const act = receipt.person_act;
   const effect = proposal
     ? {
-      proceed: `Recorded decision ${handle}: proceed on ${ph}, within the extent the person agreed to (act ${act?.id}, ${act?.basis}).`,
+      proceed: `Recorded decision ${handle}: proceed on ${ph}, within the agreed extent: an agreement was recorded as the person's (act ${act?.id}, basis ${act?.basis}).`,
       do_not_proceed: `Recorded decision ${handle}: not proceeding with ${ph}. Nothing is authorised.`,
       no_decision: `Recorded decision ${handle}: no decision was reached on ${ph}. Nothing is authorised.`,
     }[receipt.outcome]
@@ -2156,10 +2156,11 @@ function decideResult(
           proposal_sha256: proposal.proposal_sha256,
           person_act: { id: act.id, event: act.event_id, act: act.act, basis: act.basis, at: act.at },
           extent: proposal.extent,
-          says: `the person's agreement (act ${act.id}, basis ${act.basis}) to proposal_sha256 ${proposal.proposal_sha256}, within: ${proposal.extent}`,
+          says: `an agreement recorded as the person's (act ${act.id}, basis ${act.basis}) to proposal_sha256 ${proposal.proposal_sha256}, within: ${proposal.extent}`,
         },
       }
       : {}),
+    ...(proposal && act ? { basis_note: PERSON_ACT_BASIS_NOTE } : {}),
     ...(proposal ? {} : { not_the_persons_agreement: true }),
   };
 }

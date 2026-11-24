@@ -465,6 +465,8 @@ describe("the challenger whose challenge was set aside is told", () => {
     const inbox = await inboxOf();
     const item = (inbox.items as Array<Record<string, any>>).find((entry) => entry.act === "set_aside");
     expect(item).toMatchObject({ challenge: { id: challenge.id }, text: "Its author went quiet.", why_you: "your_challenge_set_aside" });
+    expect(item!.statement).toContain("was recorded as the person's (basis controlling_terminal)");
+    expect(inbox.basis_note).toBe(PERSON_ACT_BASIS_NOTE);
     // The author answers the challenge; the challenger, which alone can lift it, is still told.
     const answer = store.appendReportForSession({
       ...author.credential, idempotency_key: key("answer"), kind: "inference", body: "The order is in PROTOCOL.md.",
@@ -737,7 +739,7 @@ describe("the desk", () => {
     const spots = deskSoftSpots(view.view);
     expect(spots.rule).toBe(CONSENT_RULE_V2);
     expect(spots.set_asides).toEqual([expect.objectContaining({ challenge: challenge.id, reason: "Its author left.", basis: "controlling_terminal" })]);
-    expect(spots.lines.some((line) => line.startsWith(`Challenge ${challenge.id} by "challenger" was set aside by the person at`)
+    expect(spots.lines.some((line) => line.startsWith(`Challenge ${challenge.id} by "challenger" was set aside at`)
       && line.includes(`Reason: "Its author left."`))).toBe(true);
     expect(spots.lines).toContain(SET_ASIDE_SENTENCE);
   });
@@ -991,7 +993,7 @@ describe("the notes views", () => {
       challenge: v2.challenge, carried_in_terms: true, standing_on_replaced: false,
     })]);
     const line = v2.spots.lines.find((entry) => entry.startsWith(`Objection ${v2.challenge}`));
-    expect(line).toContain("was set aside by the person where it was raised");
+    expect(line).toContain("was set aside where it was raised");
     expect(line).toContain(`Reason: "Its author left."`);
     expect(v2.replacing.carried_objections).toEqual([expect.objectContaining({
       challenge: v2.challenge, carried_in_terms: true, set_aside_on_replaced: expect.objectContaining({ reason: "Its author left." }),
@@ -1056,15 +1058,16 @@ describe("the notes views", () => {
       set_aside: { by: "person", basis: "controlling_terminal", reason: "Its author left.", at: clock.toISOString(), note: SET_ASIDE_SENTENCE },
     });
     expect(about.set_asides).toEqual([expect.objectContaining({ challenge: challenge.id, reason: "Its author left." })]);
-    expect(about.advice.some((entry: string) => entry.includes("set aside by the person"))).toBe(true);
+    expect(about.advice.some((entry: string) => entry.includes("set aside, recorded as the person's"))).toBe(true);
     // The challenge's own thread says so too, with the reason, and a consent/v1 thread keeps its keys.
     const thread = await tool(served(peer), "collab_inbox", { about: `report:${challenge.id}` });
     expect(thread).toMatchObject({
       standing: false,
       set_aside: { by: "person", basis: "controlling_terminal", reason: "Its author left.", at: clock.toISOString(), note: SET_ASIDE_SENTENCE },
     });
-    expect(thread.advice.some((entry: string) => entry.startsWith(`${challenge.id} was set aside by the person`)
+    expect(thread.advice.some((entry: string) => entry.startsWith(`${challenge.id} was set aside at `)
       && entry.includes(`"Its author left."`))).toBe(true);
+    expect(thread.basis_note).toBe(PERSON_ACT_BASIS_NOTE);
     const v1 = orphanedChallenge({ rule: CONSENT_RULE });
     const v1Thread = await tool(served(v1.peer), "collab_inbox", { about: `report:${v1.challenge.id}` });
     expect(Object.hasOwn(v1Thread, "set_aside")).toBe(false);

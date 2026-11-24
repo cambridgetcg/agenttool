@@ -10030,7 +10030,7 @@ class CollabStore extends CollabStoreCore {
             by_session_id: answer.from_session_id,
             due: null,
             at: answer.created_at,
-            summary: challenge.standing ? "An answer to your standing challenge; only you can lift it." : "An answer to your challenge, which the person set aside, so it no longer blocks; you may lift it, or challenge again."
+            summary: challenge.standing ? "An answer to your standing challenge; only you can lift it." : "An answer to your challenge, which was set aside (recorded as the person's), so it no longer blocks; you may lift it, or challenge again."
           });
         }
       }
@@ -10708,16 +10708,16 @@ class CollabStore extends CollabStoreCore {
       if (!status.may_proceed || !status.agreement) {
         const agreedBefore = [...acts].reverse().find((act) => act.act === "agree") ?? null;
         if (latest?.act === "reject" && agreedBefore) {
-          throw new CollabError("agreement_withdrawn", `The person agreed (act ${agreedBefore.id}), but a later act rejects these bytes: act ${latest.id}, ` + `${latest.basis === "relayed_by_session" ? "relayed by a session" : `by ${latest.basis}`}`, { agreed_act: actView(agreedBefore), later_act: actView(latest) });
+          throw new CollabError("agreement_withdrawn", `An agreement was recorded as the person's (act ${agreedBefore.id}, basis ${agreedBefore.basis}), but a later act rejects these bytes: act ${latest.id}, ` + `${latest.basis === "relayed_by_session" ? "relayed by a session" : `by ${latest.basis}`}`, { agreed_act: actView(agreedBefore), later_act: actView(latest) });
         }
-        throw new CollabError("not_agreed", latest?.act === "reject" ? "The person's latest act on these bytes is a rejection, and there is no agreement to proceed on" : "The person has not agreed to these bytes", {
+        throw new CollabError("not_agreed", latest?.act === "reject" ? `The latest act recorded as the person's on these bytes is a rejection (basis ${latest.basis}), and there is no agreement to proceed on` : "No agreement to these bytes is recorded as the person's", {
           position: status.ai.position,
           person: status.person.state,
           ...latest ? { latest_act: actView(latest) } : {}
         });
       }
       scope = status.terms.extent;
-      basis = status.agreement.basis === "controlling_terminal" ? `agreement asserted by controlling_terminal to proposal_sha256 ${status.proposal_sha256} (act ${status.agreement.id}): ` + "the terminal path asserted a yes, which proves no terminal and no person" : `person agreed by ${status.agreement.basis} to proposal_sha256 ${status.proposal_sha256} (act ${status.agreement.id})`;
+      basis = agreementBasis(status.agreement.basis, status.proposal_sha256, status.agreement.id);
       personAct = actView(status.agreement);
     } else {
       scope = NOTE_NOTHING_AUTHORISED;
@@ -11084,6 +11084,9 @@ function normalizeNoteReport(report, index) {
 var NOTE_DECISION_OUTCOMES = ["proceed", "do_not_proceed", "no_decision"];
 var NOTE_NOTHING_AUTHORISED = "nothing is authorised";
 var NOTE_DEFAULT_DECISION_EXTENT = "work this session already holds";
+function agreementBasis(basis, proposalSha256, actId) {
+  return basis === "controlling_terminal" ? `agreement asserted by controlling_terminal to proposal_sha256 ${proposalSha256} (act ${actId}): ` + "the terminal path asserted a yes, which proves no terminal and no person" : `person agreed by ${basis} to proposal_sha256 ${proposalSha256} (act ${actId})`;
+}
 var NOTE_SELF_DECISION_BASIS = "recorded by this session; not a direction decision and not the person's agreement";
 var NOTE_ADDRESSING_EVENT_TYPES = [
   "report.posted",
@@ -11320,13 +11323,13 @@ function deskSoftSpots(data) {
   }), "flagged supports"));
   lines.push(...capped(ended.map((stance) => `Challenge ${stance.id} by ${quoted(stance.from_actor)} still stands, but its challenger's session has ended` + (stance.voice_has_active_session ? "; another session of the same voice is active and can lift it." : ", and no session of its voice is active to lift it.") + ` While it stands the position cannot be consented.` + (v2 && stance.voice_has_live_session === false ? " Under consent/v2 the person can set it aside at the desk, with a reason, while no session of its voice is live." : "") + ` It said: ${quoted(excerpt(stance.statement))}`), "challenges whose challenger's session has ended"));
   lines.push(...capped(ungrounded.map((stance) => `${stance.relation === "supports" ? "Support" : "Challenge"} ${stance.id} by ${quoted(stance.from_actor)} ` + `(${counted(stance.counted, rule)}) gives no reason and no evidence: ` + (stance.grounded_by === "note" ? "the note has no Why and no Evidence lines." : "it has no evidence_refs and no confidence_basis (a legacy report's body is not read for reasons, so its text may still argue a case).")), "stances with no reason or evidence"));
-  const setAsideThere = (entry) => entry.set_aside_on_replaced ? `the person set it aside there at ${entry.set_aside_on_replaced.created_at} (${entry.set_aside_on_replaced.basis}). ` + `Reason: ${quoted(entry.set_aside_on_replaced.reason)}` : "";
-  lines.push(...capped(carried.map((entry) => (entry.carried_in_terms ? `Objection ${entry.challenge_id} by ${quoted(entry.by)}, raised on ${entry.raised_on}, is carried as text in these terms` + (entry.standing_on_replaced ? " and still stands where it was raised" : entry.set_aside_on_replaced ? ` and was set aside by the person where it was raised: ${setAsideThere(entry)}` : " and no longer stands where it was raised") : entry.set_aside_on_replaced ? `Objection ${entry.challenge_id} by ${quoted(entry.by)} was set aside by the person on ${entry.raised_on}, which this proposal replaces, ` + `but is not in these terms: ${setAsideThere(entry)}` : `Objection ${entry.challenge_id} by ${quoted(entry.by)} still stands on ${entry.raised_on}, which this proposal replaces, ` + "but is not in these terms") + (entry.re_raised_here ? "; the same voice also challenges this proposal, and that challenge is counted" : "") + `. It said: ${quoted(excerpt(entry.statement))}`), "carried objections"));
+  const setAsideThere = (entry) => entry.set_aside_on_replaced ? `set aside there at ${entry.set_aside_on_replaced.created_at}, recorded as the person's (basis ${entry.set_aside_on_replaced.basis}). ` + `Reason: ${quoted(entry.set_aside_on_replaced.reason)}` : "";
+  lines.push(...capped(carried.map((entry) => (entry.carried_in_terms ? `Objection ${entry.challenge_id} by ${quoted(entry.by)}, raised on ${entry.raised_on}, is carried as text in these terms` + (entry.standing_on_replaced ? " and still stands where it was raised" : entry.set_aside_on_replaced ? ` and was set aside where it was raised: ${setAsideThere(entry)}` : " and no longer stands where it was raised") : entry.set_aside_on_replaced ? `Objection ${entry.challenge_id} by ${quoted(entry.by)} was set aside on ${entry.raised_on}, which this proposal replaces, ` + `but is not in these terms: ${setAsideThere(entry)}` : `Objection ${entry.challenge_id} by ${quoted(entry.by)} still stands on ${entry.raised_on}, which this proposal replaces, ` + "but is not in these terms") + (entry.re_raised_here ? "; the same voice also challenges this proposal, and that challenge is counted" : "") + `. It said: ${quoted(excerpt(entry.statement))}`), "carried objections"));
   if (carried.length > 0)
     lines.push(carriedObjectionsSentence(rule));
   lines.push(...capped(setAside.map((stance) => {
     const entry = stance.set_aside;
-    return `Challenge ${stance.id} by ${quoted(stance.from_actor)} was set aside by the person at ${entry.created_at} ` + `(${entry.basis}), while no session of its voice was live` + (entry.challenger.last_seen_at ? ` (last seen ${entry.challenger.last_seen_at})` : "") + `. Reason: ${quoted(entry.reason)}. It no longer blocks the position. It said: ${quoted(excerpt(stance.statement))}`;
+    return `Challenge ${stance.id} by ${quoted(stance.from_actor)} was set aside at ${entry.created_at}, ` + `recorded as the person's (basis ${entry.basis}) while no session of its voice was live` + (entry.challenger.last_seen_at ? ` (last seen ${entry.challenger.last_seen_at})` : "") + `. Reason: ${quoted(entry.reason)}. It no longer blocks the position. It said: ${quoted(excerpt(stance.statement))}`;
   }), "set-aside challenges"));
   if (setAside.length > 0)
     lines.push(SET_ASIDE_SENTENCE);

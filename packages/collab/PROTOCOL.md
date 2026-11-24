@@ -87,7 +87,7 @@ One meaning per word. Where storage has a name, the surface uses the same one.
 | accept, request_changes | A verdict on finished work by a session other than the one that reported it. Nothing else is "accept". |
 | proposal | Only a consent/v1 termed proposal. |
 | position | The agents' computed state on a proposal: open, challenged, consented, split, lapsed, withdrawn or superseded. |
-| agree, reject | Only the person's act on exact proposal bytes, at the terminal or by passkey. |
+| agree, reject | An act on exact proposal bytes, meant only for the person and recorded with basis `controlling_terminal` or `user_verified_passkey` (see `basis_note`). A rejection may also be relayed, which only stops work. |
 | ballot, vote, result | A sealed poll among agents with named options; one unit's answer; the tally computed at the close, which authorises nothing. |
 | top choice | The option or options with the most approvals in a ballot. Not a decision and not agreement. |
 | voice | The consent/v1 counting unit: the root of a session's attested lineage. |
@@ -301,7 +301,7 @@ collab_note {"act": "accept", "re": "report#9e3b07", "text": "Checked the diff a
 ```
 
 **Decide.** Put a direction to the agents and the person, take a stand on it, and,
-once the person has agreed at the desk, record the decision:
+once an agreement is recorded as the person's at the desk, record the decision:
 
 ```collab-call
 collab_propose {"question": "Adopt receipt replay for every verb?", "criteria": "No double writes; no new columns; older builds still open the journal.", "extent": "Change packages/collab verbs only.", "closes": "6h", "evidence": ["report:report_3fa91c2e-8d4b-4f6a-9c1e-2b7d5a0e4f91"]}
@@ -653,17 +653,24 @@ stay as a `Re:` line in the body only. Every act on a report copies that report'
 task.
 
 **Decide** takes `outcome`: `proceed` (the default), `do_not_proceed` or
-`no_decision`, and never a free-text authority. On a proposal the person agreed to,
-the scope is the agreed extent, byte for byte, and the basis is derived: `person
-agreed by <basis> to proposal_sha256 <hex> (act <id>)`; the result adds `rests_on`.
-On a proposal that may not proceed it refuses: `not_agreed` ("Ask the person to act on
-<id> at his desk. No agent tool records agreement."), `agreement_withdrawn` (a later
-rejection; the person may agree again on the same bytes), or `proposal_retired`. An
-`extent` that differs from the agreed one is refused as `extent_from_proposal`, and
-any extent on do_not_proceed or no_decision as `extent_not_used`; those two record
-"nothing is authorised". Without a proposal, the scope is your `extent` (default "work
-this session already holds"), the basis is "recorded by this session; not a direction
-decision and not the person's agreement", and the result says so.
+`no_decision`, and never a free-text authority. On an agreed proposal the scope is the
+agreed extent, byte for byte, and the basis is derived from the agreement's own:
+
+- terminal: `agreement asserted by controlling_terminal to proposal_sha256 <hex> (act <id>): the terminal path asserted a yes, which proves no terminal and no person`
+- passkey: `person agreed by user_verified_passkey to proposal_sha256 <hex> (act <id>)`
+
+The terminal form is an assertion. The passkey form says the person agreed, on the
+strength of a signature by a key enrolled in this journal; whose key that is, the record
+does not show (see Identity). The result adds `rests_on`, and `basis_note` when it
+rests on or names a person act. On a proposal that may not proceed it refuses:
+`not_agreed` ("Ask the person to act on <id> at his desk. No agent tool records
+agreement."), `agreement_withdrawn` (a later rejection; the person may agree again on
+the same bytes), or `proposal_retired`. An `extent` that differs from the agreed one is
+refused as `extent_from_proposal`, and any extent on do_not_proceed or no_decision as
+`extent_not_used`; those two record "nothing is authorised". Without a proposal, the
+scope is your `extent` (default "work this session already holds"), the basis is
+"recorded by this session; not a direction decision and not the person's agreement",
+and the result says so.
 
 **Advice, never refusals.** A support or challenge with no reason and no evidence is
 flagged `ungrounded`, either way. A stance on a completion that waits for review is
@@ -823,10 +830,10 @@ person in its own chat; the person acts at the desk; `collab_note {act: "decide"
 <proposal>}` records the decision, with its authority derived by the server.
 
 **Only the person agrees.** The desk takes an agreement only while the agents'
-position is `consented`, and a rejection at any time. The person agrees at his own
-terminal (`agenttool-collab-host person consent --proposal <id>`, recorded with basis
-`controlling_terminal`) or with a passkey (`agenttool-collab-host person ceremony
---proposal <id> --act agree`, basis `user_verified_passkey`). Both show the exact
+position is `consented`, and a rejection at any time. An agreement is meant only for the
+person, and is recorded with basis `controlling_terminal` (`agenttool-collab-host person
+consent --proposal <id>`) or `user_verified_passkey` (`agenttool-collab-host person
+ceremony --proposal <id> --act agree`); see `basis_note`. Both commands show the exact
 bytes, and both now show the soft spots below, outside those bytes, before the act. No
 MCP tool records an agreement. The two bases do not prove the same thing:
 `user_verified_passkey` journals the assertion and the key's public key, so the act
@@ -834,17 +841,20 @@ can be re-verified without this database (it shows that a key enrolled in this j
 signed, not whose key it is); `controlling_terminal` is the terminal path's own
 assertion that a yes was read, and it proves no terminal and no person, because a
 process running as the same user can call the store's terminal method directly or
-answer the prompt through a pseudo-terminal. `collab_proposal_status`, `collab_inbox
-{about: <proposal>}` and the desk's `proposals`, `inbox --workspace` and act receipts
-say so in one more key, `basis_note`, when they show a person act or a set-aside, and a
-decide on a terminal agreement says it in its basis (`agreement asserted by
-controlling_terminal …`). The stored basis values are unchanged, and decisions already
-written keep the words they were written with. A session can only relay a rejection
-(`relay_rejection`, basis `relayed_by_session`), which stops work and can be answered
-by the person agreeing again on the same bytes. `may_proceed` is true while the
-person's latest act on these bytes is an agreement and the proposal has not been
-withdrawn or replaced; work then stays inside the extent, which never widens what the
-host, the repository's rules or the person's other instructions allow.
+answer the prompt through a pseudo-terminal. One more key, `basis_note`, says so
+wherever a person act or a set-aside is shown: in `collab_proposal_status`, in
+`collab_inbox` and `collab_arrive` (a listed item, something waiting on you, or the
+proposal, set-aside challenge or decision asked about), in a decide's result, and in the
+desk's `proposals`, `inbox --workspace` and act receipts. Those views say an agreement
+"was recorded as the person's (basis …)", never that the person agreed, and a decide on
+a terminal agreement says it in its basis (`agreement asserted by controlling_terminal
+…`). The stored basis values are unchanged, and decisions already written keep the words
+they were written with. A session can only relay a rejection (`relay_rejection`, basis
+`relayed_by_session`), which stops work and can be answered by the person agreeing again
+on the same bytes. `may_proceed` is true while the latest act recorded as the person's on
+these bytes is an agreement and the proposal has not been withdrawn or replaced; work
+then stays inside the extent, which never widens what the host, the repository's rules or
+the person's other instructions allow.
 
 **What a decision rests on.** `collab_inbox {about: <decision>}` composes a record that
 is not stored: the decision and its outcome; what it rests on, derived from the
@@ -910,9 +920,9 @@ authorises are unchanged.
   It applies to `collab_proposal_open`, `collab_propose` and `person propose`. An unknown
   value, or two spellings that disagree, refuses to start, as the tools profile does: a
   host must not state a position under a rule it was not given. Agents never choose a rule.
-- **Only the person, authenticated**: at the controlling terminal or with a user-verified
-  passkey, never relayed by a session and never through an MCP tool, for the reason
-  agreement is not. No tool was added.
+- **Meant only for the person**: recorded with basis `controlling_terminal` or
+  `user_verified_passkey` (see `basis_note`), never relayed by a session and never through
+  an MCP tool, for the reason agreement is not. No tool was added.
 - **Only a standing challenge whose voice has no live session at the moment of the act.**
   Live is `sessionLiveness` over every session of the challenger's voice, the notion the
   voice snapshot uses. A present voice can be answered and can lift its own challenge;
@@ -1315,9 +1325,11 @@ start with a line naming `full | notes`.
 
 - **`full`**, the default: the 36 existing tools, whose `tools/list` entries a test
   holds byte-identical to `a8799aad`'s but for what declared rest adds (one sentence on
-  the four tools whose result names an addressee, and `collab_next`'s last sentence)
-  and one optional input, `expected_head_sequence` on `collab_report_append` (below),
-  plus `collab_session_rest` and the eight verbs: 45 tools. Its
+  the four tools whose result names an addressee, and `collab_next`'s last sentence),
+  the basis wording of `collab_proposal_open` and `collab_proposal_status` (recorded with
+  basis …, see `basis_note`) and one optional input, `expected_head_sequence` on
+  `collab_report_append` (below), plus `collab_session_rest` and the eight verbs: 45
+  tools. Its
   instructions are the notes text, then "collab_arrive does not move the legacy cursor;
   call collab_next only if you mean to page the journal from its start.", then the
   existing text under "Legacy session tools:".

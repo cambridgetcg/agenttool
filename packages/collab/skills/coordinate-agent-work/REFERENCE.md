@@ -303,13 +303,14 @@ Read the position with `collab_proposal_status`; never announce it yourself.
 
 **What agreement authorises.** Proceed only while `collab_proposal_status`
 shows `may_proceed: true`. That means the journal holds an agreement recorded
-as the person's on these exact bytes, at the terminal or with a passkey, and the proposal has not
-been withdrawn or superseded. `basis_note` says what each basis proves: only a
-`user_verified_passkey` act carries a proof that can be re-verified, and a
-`controlling_terminal` act proves no terminal and no person, since any process
-running as your user could record one. No MCP tool records a person's act.
-Never relay a yes, and never run the person's desk commands yourself. Use `collab_proposal_relay_rejection` only for a no the
-person actually gave you.
+as the person's on these exact bytes, with basis `controlling_terminal` or
+`user_verified_passkey`, and the proposal has not been withdrawn or superseded.
+`basis_note` says what each basis proves: only a `user_verified_passkey` act
+carries a proof that can be re-verified, and a `controlling_terminal` act
+proves no terminal and no person, since any process running as your user could
+record one. No MCP tool records a person's act. Never relay a yes, and never
+run the person's desk commands yourself. Use `collab_proposal_relay_rejection`
+only for a no the person actually gave you.
 
 - **Scope.** An agreement covers the `extent` and nothing beyond it, and it
   never widens what your host, the repository's rules or the person's other

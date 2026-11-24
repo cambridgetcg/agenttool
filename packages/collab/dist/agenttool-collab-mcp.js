@@ -39898,7 +39898,7 @@ class CollabStore extends CollabStoreCore {
             by_session_id: answer.from_session_id,
             due: null,
             at: answer.created_at,
-            summary: challenge.standing ? "An answer to your standing challenge; only you can lift it." : "An answer to your challenge, which the person set aside, so it no longer blocks; you may lift it, or challenge again."
+            summary: challenge.standing ? "An answer to your standing challenge; only you can lift it." : "An answer to your challenge, which was set aside (recorded as the person's), so it no longer blocks; you may lift it, or challenge again."
           });
         }
       }
@@ -40576,16 +40576,16 @@ class CollabStore extends CollabStoreCore {
       if (!status.may_proceed || !status.agreement) {
         const agreedBefore = [...acts].reverse().find((act) => act.act === "agree") ?? null;
         if (latest?.act === "reject" && agreedBefore) {
-          throw new CollabError("agreement_withdrawn", `The person agreed (act ${agreedBefore.id}), but a later act rejects these bytes: act ${latest.id}, ` + `${latest.basis === "relayed_by_session" ? "relayed by a session" : `by ${latest.basis}`}`, { agreed_act: actView(agreedBefore), later_act: actView(latest) });
+          throw new CollabError("agreement_withdrawn", `An agreement was recorded as the person's (act ${agreedBefore.id}, basis ${agreedBefore.basis}), but a later act rejects these bytes: act ${latest.id}, ` + `${latest.basis === "relayed_by_session" ? "relayed by a session" : `by ${latest.basis}`}`, { agreed_act: actView(agreedBefore), later_act: actView(latest) });
         }
-        throw new CollabError("not_agreed", latest?.act === "reject" ? "The person's latest act on these bytes is a rejection, and there is no agreement to proceed on" : "The person has not agreed to these bytes", {
+        throw new CollabError("not_agreed", latest?.act === "reject" ? `The latest act recorded as the person's on these bytes is a rejection (basis ${latest.basis}), and there is no agreement to proceed on` : "No agreement to these bytes is recorded as the person's", {
           position: status.ai.position,
           person: status.person.state,
           ...latest ? { latest_act: actView(latest) } : {}
         });
       }
       scope = status.terms.extent;
-      basis = status.agreement.basis === "controlling_terminal" ? `agreement asserted by controlling_terminal to proposal_sha256 ${status.proposal_sha256} (act ${status.agreement.id}): ` + "the terminal path asserted a yes, which proves no terminal and no person" : `person agreed by ${status.agreement.basis} to proposal_sha256 ${status.proposal_sha256} (act ${status.agreement.id})`;
+      basis = agreementBasis(status.agreement.basis, status.proposal_sha256, status.agreement.id);
       personAct = actView(status.agreement);
     } else {
       scope = NOTE_NOTHING_AUTHORISED;
@@ -40952,6 +40952,9 @@ function normalizeNoteReport(report, index) {
 var NOTE_DECISION_OUTCOMES = ["proceed", "do_not_proceed", "no_decision"];
 var NOTE_NOTHING_AUTHORISED = "nothing is authorised";
 var NOTE_DEFAULT_DECISION_EXTENT = "work this session already holds";
+function agreementBasis(basis, proposalSha256, actId) {
+  return basis === "controlling_terminal" ? `agreement asserted by controlling_terminal to proposal_sha256 ${proposalSha256} (act ${actId}): ` + "the terminal path asserted a yes, which proves no terminal and no person" : `person agreed by ${basis} to proposal_sha256 ${proposalSha256} (act ${actId})`;
+}
 var NOTE_SELF_DECISION_BASIS = "recorded by this session; not a direction decision and not the person's agreement";
 var NOTE_ADDRESSING_EVENT_TYPES = [
   "report.posted",
@@ -41956,6 +41959,7 @@ function composeBrief(ctx, data, pending, rootPath) {
       },
       for_you: cap(forYou),
       waiting_on_you: cap(waiting),
+      ...listedBasisNote(cap(pending?.entries ?? []), cap(data.waiting)),
       totals: {
         here: here.length,
         claimable: claimable.length,
@@ -42221,7 +42225,7 @@ function formatEntry(entry, byId, me, recheck) {
         to: "voices",
         re: { id: event.entity_id, handle: handleOf("proposal", event.entity_id) },
         ...base,
-        statement: agreed ? `The person agreed to ${handleOf("proposal", event.entity_id)} (${basis}).` : basis === "relayed_by_session" ? `A rejection of ${handleOf("proposal", event.entity_id)} was relayed by ${from.name}; a relayed no can only stop work.` : `The person rejected ${handleOf("proposal", event.entity_id)} (${basis}).`,
+        statement: agreed ? `An agreement to ${handleOf("proposal", event.entity_id)} was recorded as the person's (basis ${basis}).` : basis === "relayed_by_session" ? `A rejection of ${handleOf("proposal", event.entity_id)} was relayed by ${from.name}; a relayed no can only stop work.` : `A rejection of ${handleOf("proposal", event.entity_id)} was recorded as the person's (basis ${basis}).`,
         text: typeof act.reason === "string" ? act.reason : null,
         why: [],
         evidence: [],
@@ -42240,7 +42244,7 @@ function formatEntry(entry, byId, me, recheck) {
         to: "voices",
         re: { id: event.entity_id, handle: handleOf("proposal", event.entity_id) },
         ...base,
-        statement: `The person set aside ${challenge ? handleOf("report", challenge) : "a challenge"} on ${handleOf("proposal", event.entity_id)} ` + `(${basis}): it no longer blocks the position, and it stays on the record.`,
+        statement: `A set-aside of ${challenge ? handleOf("report", challenge) : "a challenge"} on ${handleOf("proposal", event.entity_id)} ` + `was recorded as the person's (basis ${basis}): it no longer blocks the position, and it stays on the record.`,
         text: typeof record2.reason === "string" ? record2.reason : null,
         why: [],
         evidence: [],
@@ -42338,11 +42342,17 @@ function subjectLine(entry, byId, me) {
   };
 }
 var PERSON_ACT_WAITING = new Set(["stop", "rejected", "record_decision"]);
+var PERSON_ACT_EVENTS = new Set(["proposal.agreed", "proposal.rejected", "proposal.challenge_set_aside"]);
+function listedBasisNote(entries, waiting) {
+  return entries.some((entry) => PERSON_ACT_EVENTS.has(entry.event.type)) || waiting.some((entry) => PERSON_ACT_WAITING.has(entry.what)) ? { basis_note: PERSON_ACT_BASIS_NOTE } : {};
+}
 function formatWaiting(ctx, entry, byId) {
   const handle = handleOf(entry.ref_kind, entry.ref_id);
   const about = entry.about_id ? { id: entry.about_id, handle: entry.what === "review" || entry.what === "challenge" || entry.what === "answer" ? handleOf("report", entry.about_id) : entry.about_id } : null;
-  const next = entry.what === "stop" ? { say: `Stop work that rests on ${handle} (${entry.ref_id}): the person's latest act on it is a rejection.` } : entry.what === "record_decision" ? {
-    say: `The person agreed to ${handle}. Record what is decided, within the agreed extent: ` + `collab_note {act: "decide", re: "${exactRef("proposal", entry.ref_id)}", text: "<what is decided>"}` + (ctx.slot_key ? `, with binding_key "${ctx.slot_key}".` : ".")
+  const next = entry.what === "stop" ? {
+    say: `Stop work that rests on ${handle} (${entry.ref_id}): the latest act recorded as the person's on it is a rejection (basis ${entry.by}).`
+  } : entry.what === "record_decision" ? {
+    say: `An agreement to ${handle} was recorded as the person's (basis ${entry.by}). Record what is decided, within the agreed extent: ` + `collab_note {act: "decide", re: "${exactRef("proposal", entry.ref_id)}", text: "<what is decided>"}` + (ctx.slot_key ? `, with binding_key "${ctx.slot_key}".` : ".")
   } : withSlot(ctx, {
     tool: "collab_inbox",
     input: {
@@ -42556,6 +42566,7 @@ function inboxResult(ctx, passes, format, waited, waitError = null, paging = {},
     read_through: { sequence: data.mark.through, head: data.head_sequence },
     ...initialisedFrom ? { mark_initialised_from: initialisedFrom } : {},
     waiting_on_you: data.waiting.map((entry) => formatWaiting(ctx, entry, byId)),
+    ...listedBasisNote(entries, data.waiting),
     ...waited ? { waited } : {},
     ...revealPendingField(passes.flatMap((pass) => pass.reveal_pending)),
     ...away ? { away_ms: away.away_ms, away_since: away.away_since } : {},
@@ -42798,7 +42809,8 @@ function reportView(ctx, thread, byId, me, advice, recheck) {
     const entry = thread.set_aside;
     view.standing = false;
     view.set_aside = setAsideItem(entry);
-    advice.push(`${report.id} was set aside by the person at ${entry.created_at} (${entry.basis}) on ${handleOf("proposal", entry.proposal_report_id)}, ` + `while no session of its voice was live. Reason: ${JSON.stringify(entry.reason)}. ${SET_ASIDE_SENTENCE}`);
+    view.basis_note = PERSON_ACT_BASIS_NOTE;
+    advice.push(`${report.id} was set aside at ${entry.created_at} on ${handleOf("proposal", entry.proposal_report_id)}, ` + `recorded as the person's (basis ${entry.basis}) while no session of its voice was live. Reason: ${JSON.stringify(entry.reason)}. ${SET_ASIDE_SENTENCE}`);
   }
   if (thread.proposal) {
     const facts = proposalFacts(ctx, thread.proposal);
@@ -43032,7 +43044,7 @@ function forThePerson(ctx, status, data) {
   const id = status.proposal.id;
   const db = personDeskDb(ctx);
   const position = status.ai.position;
-  const now = retiredPosition(status) ? `It is ${position}, so the desk no longer takes an agreement on it.` : status.may_proceed ? "The person has agreed to these bytes; nothing more is asked of the person, who may still reject." : position !== "consented" ? `The desk takes an agreement only once the agents' position is consented; it is ${position} now. The person may reject at any time.` : status.person.state === "rejected" ? "The person's latest act is a rejection; the person may agree again on the same bytes, or leave it rejected." : "The agents' position is consented; the person may agree or reject.";
+  const now = retiredPosition(status) ? `It is ${position}, so the desk no longer takes an agreement on it.` : status.may_proceed ? `An agreement to these bytes was recorded as the person's (basis ${status.agreement?.basis}); nothing more is asked of the person, who may still reject.` : position !== "consented" ? `The desk takes an agreement only once the agents' position is consented; it is ${position} now. The person may reject at any time.` : status.person.state === "rejected" ? `The latest act recorded as the person's is a rejection (basis ${status.person.acts.at(-1)?.basis}); the person may agree again on the same bytes, or leave it rejected.` : "The agents' position is consented; the person may agree or reject.";
   const settable = status.rule === CONSENT_RULE_V2 && !retiredPosition(status) && data ? data.challenges.filter((stance) => stance.standing && stance.voice_has_live_session === false) : [];
   return {
     passkey: `agenttool-collab-host person ceremony --proposal ${id} --act agree${db}`,
@@ -43061,10 +43073,10 @@ function proposalNeeds(data) {
     return `Replaced by ${status.ai.obsoleted_by_report_id}; read that proposal instead, since nothing moves this one now.`;
   }
   if (status.may_proceed) {
-    return "The person agreed to these bytes, so work may go ahead within the extent; a later challenge does not undo that, and only the person's rejection (or the author's withdrawal) stops it.";
+    return `An agreement to these bytes was recorded as the person's (basis ${status.agreement?.basis}), so work may go ahead within the extent; a later challenge does not undo that, and only a later rejection (or the author's withdrawal) stops it.`;
   }
   if (status.person.state === "rejected") {
-    return "The person's latest act rejects these bytes, so nothing proceeds unless the person agrees again on the same bytes; agents' supports do not change that.";
+    return `The latest act recorded as the person's rejects these bytes (basis ${status.person.acts.at(-1)?.basis}), so nothing proceeds unless the person agrees again on the same bytes; agents' supports do not change that.`;
   }
   const awaited = data.consulted.filter((voice) => voice.awaited);
   const standing = status.ai.unresolved_challenge_report_ids;
@@ -43156,7 +43168,7 @@ function proposalFacts(ctx, data) {
     advice.push(annotationsNote(rule));
   const setAsides = v2 ? data.challenges.filter((stance) => stance.set_aside !== undefined) : [];
   if (setAsides.length > 0)
-    advice.push(`${setAsides.length} challenge(s) were set aside by the person. ${SET_ASIDE_SENTENCE}`);
+    advice.push(`${setAsides.length} challenge(s) were set aside, recorded as the person's (see basis_note). ${SET_ASIDE_SENTENCE}`);
   const fields = {
     ...v2 ? { rule } : {},
     position: status.ai.position,
@@ -43200,7 +43212,7 @@ function proposalFacts(ctx, data) {
     const shed = data.replaced.carried.filter((entry) => !entry.carried_in_terms && (entry.standing_on_replaced || entry.set_aside_on_replaced !== undefined));
     if (shed.length > 0) {
       const setAsideShed = shed.some((entry) => entry.set_aside_on_replaced !== undefined);
-      advice.push(`${shed.length} objection(s) still standing where they were raised` + (setAsideShed ? " (or set aside there by the person, never lifted)" : "") + `, on the replaced proposal or one it replaced, are not in these terms: ` + `${shed.map((entry) => entry.challenge_id).join(", ")}. A replacement through collab_propose carries them.`);
+      advice.push(`${shed.length} objection(s) still standing where they were raised` + (setAsideShed ? " (or set aside there, never lifted)" : "") + `, on the replaced proposal or one it replaced, are not in these terms: ` + `${shed.map((entry) => entry.challenge_id).join(", ")}. A replacement through collab_propose carries them.`);
     }
   }
   if (status.ai.position === "superseded" && status.ai.obsoleted_by_report_id) {
@@ -43245,9 +43257,9 @@ function decisionRecord(data) {
     const id = status.proposal.id;
     const later = data.later_act;
     const latest = data.latest_act ?? later;
-    const cause = later ? `after the agreement this decision rests on, the person's act ${later.id} on ${id} is ${later.act === "reject" ? "a rejection" : later.act} ` + `by ${later.basis}` : retiredPosition(status) ? `${id} was ${status.ai.position === "withdrawn" ? "withdrawn" : "superseded"} by ${status.ai.obsoleted_by_report_id} after the agreement` : `the person's latest act on ${id} is not the agreement this decision cites`;
+    const cause = later ? `after the agreement this decision rests on, act ${later.id} recorded as the person's on ${id} is ${later.act === "reject" ? "a rejection" : later.act} ` + `(basis ${later.basis})` : retiredPosition(status) ? `${id} was ${status.ai.position === "withdrawn" ? "withdrawn" : "superseded"} by ${status.ai.obsoleted_by_report_id} after the agreement` : `the latest act recorded as the person's on ${id} is not the agreement this decision cites`;
     if (latest?.act === "agree" && status.may_proceed && status.agreement?.id === latest.id) {
-      advice.push(`agreement_current is false: ${cause}, and since then the person agreed again on the same bytes (act ${latest.id} by ${latest.basis}). ` + `This decision rests on the earlier agreement; record a new decide on ${id} for work to rest on the agreement that stands now.`);
+      advice.push(`agreement_current is false: ${cause}, and since then a new agreement on the same bytes was recorded as the person's (act ${latest.id}, basis ${latest.basis}). ` + `This decision rests on the earlier agreement; record a new decide on ${id} for work to rest on the agreement that stands now.`);
     } else {
       advice.push(`agreement_current is false: ${cause}. Stop work that rests on this decision.`);
     }
@@ -43256,7 +43268,7 @@ function decisionRecord(data) {
     advice.push("This decision was written by a legacy tool: its authority fields are shown as written and were not derived by the server; what it rests on is read from its evidence refs.");
   }
   if (scopeMatches === false) {
-    advice.push(`This decision's authority_scope is not the extent the person agreed to on ${status.proposal.id}: ` + "the agreement covers only that extent (rests_on.proposal.extent), and nothing checked the scope this decision states.");
+    advice.push(`This decision's authority_scope is not the extent agreed on ${status.proposal.id}: ` + "the agreement covers only that extent (rests_on.proposal.extent), and nothing checked the scope this decision states.");
   }
   if (data.proposal_unreadable) {
     advice.push(`The proposal this decision names could not be read (${data.proposal_unreadable}), so no proposal is shown.`);
@@ -43287,7 +43299,8 @@ function decisionRecord(data) {
       challenges,
       dissent: challenges.filter((challenge) => challenge.standing === true),
       voices_without_delivery: (proposal?.consulted ?? []).filter((voice) => !voice.delivery_recorded).map((voice) => ({ voice: voice.voice_id, name: voice.name })),
-      does_not_establish: [...DECISION_DOES_NOT_ESTABLISH]
+      does_not_establish: [...DECISION_DOES_NOT_ESTABLISH],
+      ...status ? personActBasisNote([status]) : {}
     }
   };
 }
@@ -43415,9 +43428,10 @@ var PROPOSAL_STAND_IN_STATEMENT = "A proposal; read it by its full id.";
 function carriedProposal(data) {
   const { status } = data;
   const carried = data.replaced?.carried.filter((entry) => entry.carried_in_terms).length ?? 0;
+  const latest = status.person.acts.at(-1);
   const position = [
     status.ai.position,
-    `person ${status.person.state}`,
+    `person ${status.person.state}${latest ? ` (basis ${latest.basis})` : ""}`,
     `may_proceed ${status.may_proceed}`,
     ...carried > 0 ? [`${carried} carried objection(s) are text in the terms, not counted by consent/v1`] : []
   ].join("; ");
@@ -43445,6 +43459,7 @@ function carriedDecision(data, marked) {
     `outcome ${data.outcome}`,
     ...legacy ? ["legacy", "authority not checked"] : [],
     on,
+    ...status && data.outcome === "proceed" && data.rests_on ? [`agreement basis ${data.rests_on.basis}`] : [],
     ...data.agreement_current !== null ? [`agreement_current ${data.agreement_current}`] : [],
     ...scopeMatchesAgreedExtent(data) === false ? ["scope is not the agreed extent"] : []
   ].join("; ");
@@ -44765,7 +44780,7 @@ function decideRefusal(error51, proposalId) {
   const later = error51.details.later_act;
   const say = {
     not_agreed: `Ask the person to act on ${proposalId} at his desk. No agent tool records agreement.`,
-    agreement_withdrawn: `Stop work that rests on ${proposalId}: the person's latest act (${later?.id ?? "a rejection"}, ` + `${later?.basis ?? "unknown basis"}) rejects these bytes. ` + (later?.basis === "relayed_by_session" ? "That rejection was relayed by a session, and a relayed no is forgeable; if it was not the person's, the person may agree again on the same bytes at his desk. " : "The person may agree again on the same bytes at his desk. ") + "To record that you are not proceeding, decide with outcome do_not_proceed.",
+    agreement_withdrawn: `Stop work that rests on ${proposalId}: the latest act recorded as the person's (${later?.id ?? "a rejection"}, ` + `basis ${later?.basis ?? "unknown"}) rejects these bytes. ` + (later?.basis === "relayed_by_session" ? "That rejection was relayed by a session, and a relayed no is forgeable; if it was not the person's, the person may agree again on the same bytes at his desk. " : "The person may agree again on the same bytes at his desk. ") + "To record that you are not proceeding, decide with outcome do_not_proceed.",
     proposal_retired: error51.details.position === "superseded" && typeof error51.details.obsoleted_by_report_id === "string" ? `It was replaced by ${error51.details.obsoleted_by_report_id}; decide on that proposal once the person has acted on it.` : "It was withdrawn, so nothing proceeds on it; open a new proposal with collab_propose if the question still stands."
   };
   if (!say[error51.code])
@@ -44824,7 +44839,7 @@ function planDecide(ctx, input, context) {
     if (outcome === "proceed") {
       const shown = normalizeNoteFields({ ...fields, extent: agreed });
       if (fields.extent !== null && fields.extent !== agreed && fields.extent !== shown.extent) {
-        throw new CollabError("extent_from_proposal", "A decision on a proposal covers the extent the person agreed to; extent cannot change it", {
+        throw new CollabError("extent_from_proposal", "A decision on a proposal covers the agreed extent; extent cannot change it", {
           agreed_extent: agreed,
           remedy: withoutExtent()
         });
@@ -44962,7 +44977,7 @@ function decideResult(ctx, workspaceId, options) {
   const ph = proposal ? handleOf("proposal", proposal.id) : null;
   const act = receipt.person_act;
   const effect = proposal ? {
-    proceed: `Recorded decision ${handle}: proceed on ${ph}, within the extent the person agreed to (act ${act?.id}, ${act?.basis}).`,
+    proceed: `Recorded decision ${handle}: proceed on ${ph}, within the agreed extent: an agreement was recorded as the person's (act ${act?.id}, basis ${act?.basis}).`,
     do_not_proceed: `Recorded decision ${handle}: not proceeding with ${ph}. Nothing is authorised.`,
     no_decision: `Recorded decision ${handle}: no decision was reached on ${ph}. Nothing is authorised.`
   }[receipt.outcome] : {
@@ -45012,9 +45027,10 @@ function decideResult(ctx, workspaceId, options) {
         proposal_sha256: proposal.proposal_sha256,
         person_act: { id: act.id, event: act.event_id, act: act.act, basis: act.basis, at: act.at },
         extent: proposal.extent,
-        says: `the person's agreement (act ${act.id}, basis ${act.basis}) to proposal_sha256 ${proposal.proposal_sha256}, within: ${proposal.extent}`
+        says: `an agreement recorded as the person's (act ${act.id}, basis ${act.basis}) to proposal_sha256 ${proposal.proposal_sha256}, within: ${proposal.extent}`
       }
     } : {},
+    ...proposal && act ? { basis_note: PERSON_ACT_BASIS_NOTE } : {},
     ...proposal ? {} : { not_the_persons_agreement: true }
   };
 }
@@ -46956,7 +46972,7 @@ Legacy session tools: ${legacyInstructions}`
   const noteEvidence = exports_external.array(exports_external.string()).optional().describe("Up to 16 pointers, one line each: file <repo path>[:a-b] | commit <sha> | test <command> exit=<n> | url <url> | " + "data <label> sha256=<hex> | msg <channel> <id> | report:<id> | event:<id> | artifact:<id> | checkpoint:<id>. " + "Files inside your worktree are hashed by the server; nothing else is fetched or rerun.");
   server.registerTool("collab_note", {
     title: "Say something on the record",
-    description: "Post a note: act note (the default), support, challenge, resolve, withdraw, accept, request_changes, relay_rejection or decide. " + 'text is the statement on its first line, then an optional body; a text that begins with an act word and ": " ' + "is read whole as a collab-note/1 note. Reasons say how each is known; outside evidence is recorded once per note. " + "Only the challenger can lift a challenge; anyone else's resolve is recorded as an answer to them. A support is a " + "position, not a permission. A decide's authority is derived by the server: on a proposal the person agreed to, its extent; " + "otherwise nothing, or this session's own record, never the person's agreement. dry_run checks and shows the note, writing nothing.",
+    description: "Post a note: act note (the default), support, challenge, resolve, withdraw, accept, request_changes, relay_rejection or decide. " + 'text is the statement on its first line, then an optional body; a text that begins with an act word and ": " ' + "is read whole as a collab-note/1 note. Reasons say how each is known; outside evidence is recorded once per note. " + "Only the challenger can lift a challenge; anyone else's resolve is recorded as an answer to them. A support is a " + "position, not a permission. A decide's authority is derived by the server: on an agreed proposal, its extent, with the agreement's basis; " + "otherwise nothing, or this session's own record, never the person's agreement. dry_run checks and shows the note, writing nothing.",
     annotations: localMutation,
     inputSchema: {
       text: exports_external.string().describe("The statement (first line, at most 200 characters), then a blank line and any body."),
@@ -47540,7 +47556,7 @@ Legacy session tools: ${legacyInstructions}`
   })));
   server.registerTool("collab_proposal_open", {
     title: "Open a direction-level proposal for consent",
-    description: `Open a proposal the agents settle by lazy consensus (${consentRule}) before a person decides. ` + "Answer it with collab_report_append supports, challenges and resolves. The agents' position is " + "computed from the journal and authorises nothing alone; a person consents only at the controlling " + "terminal or with an enrolled passkey through the person desk, never through MCP. A challenge stands " + "until its own voice resolves or withdraws it" + (consentRule === CONSENT_RULE_V2 ? ", or until the person sets it aside while no session of that voice is live, giving a reason" : "") + ". Use it for design direction, criteria and extent, " + "conflicting context and the reading of principles, not for every edit.",
+    description: `Open a proposal the agents settle by lazy consensus (${consentRule}) before a person decides. ` + "Answer it with collab_report_append supports, challenges and resolves. The agents' position is " + "computed from the journal and authorises nothing alone; a person's consent is recorded with basis " + "controlling_terminal or user_verified_passkey (see basis_note), never through MCP. A challenge stands " + "until its own voice resolves or withdraws it" + (consentRule === CONSENT_RULE_V2 ? ", or until the person sets it aside while no session of that voice is live, giving a reason" : "") + ". Use it for design direction, criteria and extent, " + "conflicting context and the reading of principles, not for every edit.",
     annotations: localRetrySafeMutation,
     inputSchema: {
       workspace_id: workspaceId,
@@ -47571,7 +47587,7 @@ Legacy session tools: ${legacyInstructions}`
   }));
   server.registerTool("collab_proposal_status", {
     title: "Read proposal consent status",
-    description: "Read one proposal's consent status, or the most recent proposals newest first. The agents' position " + "is computed from the journal. may_proceed is true only while the latest person act agrees, made at the " + "controlling terminal or with an enrolled passkey; an agreement authorises only the proposal's extent.",
+    description: "Read one proposal's consent status, or the most recent proposals newest first. The agents' position " + "is computed from the journal. may_proceed is true only while the latest person act agrees, recorded with basis " + "controlling_terminal or user_verified_passkey (see basis_note); an agreement authorises only the proposal's extent.",
     annotations: localReadOnly,
     inputSchema: {
       workspace_id: workspaceId,

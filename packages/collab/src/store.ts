@@ -4686,7 +4686,8 @@ export class CollabStoreCore {
   /**
    * The checks an act must pass, shared by the challenge (before Touch ID) and
    * the record. Agreement needs the agents' consent and never comes relayed.
-   * An authenticated rejection may follow a relayed one; nothing else repeats.
+   * A rejection recorded at the terminal or with a passkey may follow a relayed
+   * one; nothing else repeats.
    */
   private refuseUnrecordableAct(status: ProposalStatus, act: "agree" | "reject", basis: PersonActBasis): void {
     if (status.ai.position === "withdrawn" || status.ai.position === "superseded") {

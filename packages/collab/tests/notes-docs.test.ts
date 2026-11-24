@@ -12,7 +12,7 @@ import {
   type NoteAct,
   type NoteInput,
 } from "../src/note.js";
-import { CollabStore, NOTE_DECISION_OUTCOMES } from "../src/store-notes.js";
+import { agreementBasis, CollabStore, NOTE_DECISION_OUTCOMES } from "../src/store-notes.js";
 import { NOTE_CARD, NOTE_PRINCIPLES, NOTE_VERBS } from "../src/verbs.js";
 
 // Every example in the card, PROTOCOL.md and the two skills is checked here
@@ -258,5 +258,30 @@ describe("PROTOCOL.md", () => {
   test("covers each of the eight verbs with a ready example", () => {
     const tools = new Set(blocks.filter(isCallFence).flatMap((fence) => calls(fence).map((call) => call.tool)));
     expect(NOTE_VERBS.filter((verb) => !tools.has(verb))).toEqual([]);
+  });
+
+  test("Decide states both bases a decide derives, as the code writes them", () => {
+    const terminal = agreementBasis("controlling_terminal", "<hex>", "<id>");
+    const passkey = agreementBasis("user_verified_passkey", "<hex>", "<id>");
+    const decide = protocol.slice(protocol.indexOf("**Decide** takes"), protocol.indexOf("**Advice, never refusals.**"));
+    expect(decide).toContain(`- terminal: \`${terminal}\``);
+    expect(decide).toContain(`- passkey: \`${passkey}\``);
+    // A terminal agreement is asserted and proves no one; a passkey one says the person agreed.
+    expect(terminal).toBe(
+      "agreement asserted by controlling_terminal to proposal_sha256 <hex> (act <id>): "
+        + "the terminal path asserted a yes, which proves no terminal and no person",
+    );
+    expect(passkey).toBe("person agreed by user_verified_passkey to proposal_sha256 <hex> (act <id>)");
+    expect(protocol).not.toMatch(/person\s+agreed\s+by\s+<basis>/);
+  });
+
+  test("no document says the terminal route authenticates the person", () => {
+    for (const path of ["PROTOCOL.md", "README.md", "skills/coordinate-agent-work/REFERENCE.md", HERMES_SKILL]) {
+      const text = read(path).replace(/\s+/g, " ");
+      expect(text).not.toContain("Only the person, authenticated");
+      expect(text).not.toContain("authenticated rejection");
+      expect(text).not.toMatch(/at the controlling terminal or with (a user-verified|an enrolled|their) passkey/);
+      expect(text).toContain("basis_note");
+    }
   });
 });

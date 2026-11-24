@@ -27,11 +27,13 @@ const BASE_VERSION = "0.5.1-dev.0";
 const LEGACY_TOOLS = 36;
 
 /**
- * What declared rest and knocks change in those 36, and nothing else: one
- * tool more, one closing sentence on the four tools whose result names an
- * addressee, and collab_next's last sentence (the addressed-waiting count and
- * four-state liveness). Every other field of every legacy tool, and every
- * other description, stays byte for byte.
+ * What declared rest and knocks change in those 36: one tool more, one
+ * closing sentence on the four tools whose result names an addressee, and
+ * collab_next's last sentence (the addressed-waiting count and four-state
+ * liveness). And what the person act's basis changes: the two proposal tools
+ * no longer say where a person's act was made, only the basis it is recorded
+ * with. Nothing else: every other field of every legacy tool, and every other
+ * description, stays byte for byte.
  */
 const REST_TOOLS = ["collab_session_rest"];
 /**
@@ -58,7 +60,15 @@ const ADDRESSEE_HINT =
   + "A hint: it blocks nothing and promises no delivery.";
 const BASE_LIVENESS_SENTENCE =
   "Session liveness and task assignee_liveness are a derived view (stale after 6 hours unseen), never a status change.";
-const REST_DESCRIPTIONS: Record<string, (base: string) => string> = {
+const LEGACY_DESCRIPTIONS: Record<string, (base: string) => string> = {
+  collab_proposal_open: (base) => base.replace(
+    "a person consents only at the controlling terminal or with an enrolled passkey through the person desk, never through MCP",
+    "a person's consent is recorded with basis controlling_terminal or user_verified_passkey (see basis_note), never through MCP",
+  ),
+  collab_proposal_status: (base) => base.replace(
+    "made at the controlling terminal or with an enrolled passkey;",
+    "recorded with basis controlling_terminal or user_verified_passkey (see basis_note);",
+  ),
   collab_handoff_offer: (base) => `${base} A bound session's offer names to_session_id: ${ADDRESSEE_HINT}`,
   collab_report_append: (base) => `${base} With to_session_id: ${ADDRESSEE_HINT}`,
   collab_task_complete: (base) => `${base} With review_requested_session_id: ${ADDRESSEE_HINT}`,
@@ -186,15 +196,15 @@ function baseBundle(): string {
 const source = join(packageRoot, "bin", "agenttool-collab-mcp.ts");
 
 describe("the tools profile", () => {
-  test.skipIf(skipBase)("full keeps every existing tool byte for byte but for declared rest, and adds the verbs built so far", async () => {
+  test.skipIf(skipBase)("full keeps every existing tool byte for byte but for the listed changes, and adds the verbs built so far", async () => {
     const [base, mine] = await Promise.all([stdio(baseBundle()), stdio(source)]);
     expect(base.tools.length).toBe(LEGACY_TOOLS);
     const mineByName = new Map(mine.tools.map((tool) => [tool.name, tool]));
     for (const tool of base.tools) {
-      const rest = REST_DESCRIPTIONS[tool.name];
-      let expected: Record<string, any> = rest ? { ...tool, description: rest(tool.description as string) } : tool;
+      const changed = LEGACY_DESCRIPTIONS[tool.name];
+      let expected: Record<string, any> = changed ? { ...tool, description: changed(tool.description as string) } : tool;
       // Each listed change is really one: a rule that changed nothing would hide a drift.
-      if (rest) expect(expected.description).not.toBe(tool.description);
+      if (changed) expect(expected.description).not.toBe(tool.description);
       const added = ADDED_INPUT_FIELDS[tool.name];
       if (added) {
         const mineTool = mineByName.get(tool.name) as Record<string, any>;
