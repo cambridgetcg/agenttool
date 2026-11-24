@@ -429,10 +429,40 @@ export const PERSON_ACT_PROTOCOL = "agenttool.collab-person-act/1" as const;
 /** The bytes a person signs to set aside one challenge (consent/v2). */
 export const PERSON_SET_ASIDE_PROTOCOL = "agenttool.collab-person-set-aside/1" as const;
 
-/** How a person's act reached the journal. Only a rejection may be relayed. */
+/**
+ * How a person's act reached the journal. Only a rejection may be relayed.
+ * The stored values are unchanged; PERSON_ACT_BASIS_NOTE says what each proves.
+ */
 export type PersonActBasis = "relayed_by_session" | "controlling_terminal" | "user_verified_passkey";
 
-/** A platform passkey a person enrolled at the controlling terminal. */
+/**
+ * What a person act's basis proves, shown as `basis_note` by
+ * collab_proposal_status, the notes views and decide results, and the desk's
+ * proposal reads and act receipts when they show one. Display only: no stored
+ * value, hash or count changes with it.
+ */
+export const PERSON_ACT_BASIS_NOTE =
+  "What a person act's basis proves: only user_verified_passkey carries a proof that can be re-verified without "
+  + "this database (the assertion and the key's public key are journaled with the act), and it shows that a key "
+  + "enrolled in this journal signed these bytes, not whose key it is: compare the fingerprint of the key in the act's own "
+  + "proof (the SHA-256 of proof.public_key_spki's bytes) with the person's own. "
+  + "controlling_terminal says the terminal path asserted a yes: it proves no terminal and no person, since a process "
+  + "running as the same user can record one through the store or answer through a pseudo-terminal. "
+  + "relayed_by_session is a session's account, and can only stop work.";
+
+/** `{ basis_note }` when any status shown carries a person act or a set-aside, else nothing. */
+export function personActBasisNote(
+  statuses: ReadonlyArray<Pick<ProposalStatus, "person" | "set_asides">>,
+): { basis_note?: typeof PERSON_ACT_BASIS_NOTE } {
+  return statuses.some((status) => status.person.acts.length > 0 || (status.set_asides?.length ?? 0) > 0)
+    ? { basis_note: PERSON_ACT_BASIS_NOTE }
+    : {};
+}
+
+/**
+ * A platform passkey in this journal's table. The desk enrols one only after
+ * a yes at the terminal, which the store does not check.
+ */
 export interface PersonPasskey {
   credential_id: string;
   /** Base64url DER SubjectPublicKeyInfo; ES256 (P-256) only. */
@@ -499,7 +529,10 @@ export interface AiSnapshot {
   set_aside_challenge_report_ids?: string[];
 }
 
-/** How a set-aside reached the journal: only the person, and only authenticated. */
+/**
+ * How a set-aside reached the journal: recorded with basis controlling_terminal
+ * or user_verified_passkey, never relayed (PERSON_ACT_BASIS_NOTE says what each proves).
+ */
 export type SetAsideBasis = "controlling_terminal" | "user_verified_passkey";
 
 /**
@@ -632,7 +665,11 @@ export type CollabEventType =
   | "ballot.opened"
   | "ballot.cast"
   | "ballot.revealed"
-  | "ballot.closed";
+  | "ballot.closed"
+  // The person desk enrolled or revoked a passkey: its public facts, in the
+  // chains it concerns. Addressed to no one, and older builds page over them.
+  | "person.passkey_enrolled"
+  | "person.passkey_revoked";
 
 export interface CollabEvent {
   protocol: CollabProtocol;

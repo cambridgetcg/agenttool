@@ -33,6 +33,25 @@ export const COLLAB_NOTES_EVENT_TYPES = [
 export const REST_EVENT_TYPES = ["session.rested", "session.returned"] as const;
 
 /**
+ * The event types passkey enrolment adds: a key enrolled and a key revoked, in
+ * the chains they concern. No build before this one knows them, and they
+ * address no one.
+ */
+export const PASSKEY_EVENT_TYPES = ["person.passkey_enrolled", "person.passkey_revoked"] as const;
+
+/** Public keys only, generated once for the fixture; their private halves were never kept. */
+const FIXTURE_PASSKEYS = [
+  {
+    credential_id: "Zml4dHVyZS1rZXB0",
+    public_key_spki: "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEnvMkdvCDWjrMIXZWcLqNpvlWhRFyZFy6z9gz5zwK7a0G_qDDm0zyhS7UYp16R5WypTT-wMjLcg0Ozouc3c5O9g",
+  },
+  {
+    credential_id: "Zml4dHVyZS1yZXZva2Vk",
+    public_key_spki: "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEP3pTjj_8DxHGOUTQaQQ_0H45Ns8F_qtNzyYomf5TQ9TAgSq_FBnBIRbkzV1VCv7x8ZThyBSuVuwuLVjN9teIiw",
+  },
+] as const;
+
+/**
  * Tables added since a8799aad: Collab Notes' (spec 8.1) and consent/v2's
  * proposal_set_asides, which is rebuilt from its events on every open. They
  * hold view state only, so dropping them must lose nothing the journal
@@ -1040,6 +1059,20 @@ export const FIXTURE_STEPS: FixtureStep[] = [
         waker: waker.session.id,
         waker_note_sequence: noteSequence,
       };
+    },
+  },
+  {
+    // Two keys enrolled, one labelled and kept, one unlabelled and revoked, so
+    // older builds page over both events and both shapes of the first.
+    name: "passkey-enrolment",
+    produces: [...PASSKEY_EVENT_TYPES],
+    run(context) {
+      const [kept, revoked] = FIXTURE_PASSKEYS;
+      const scope = { algorithm: -7, rp_id: "localhost", origin: "http://localhost:17778", workspace_id: context.manifest.workspace_id! };
+      context.store.enrollPersonPasskey({ ...kept, ...scope, label: "Touch ID 協作" });
+      context.store.enrollPersonPasskey({ ...revoked, ...scope });
+      context.clock.advance();
+      context.store.revokePersonPasskey(revoked.credential_id);
     },
   },
   // Later slices append their steps here.

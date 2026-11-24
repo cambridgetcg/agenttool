@@ -40,6 +40,7 @@ import { normalizePasskeyEnrollment } from "./passkey.js";
 import {
   confirmEnrollment,
   deskSoftSpotsFor,
+  enrolmentWorkspace,
   errorPayload,
   openDeskStore,
   parseDeskAct,
@@ -227,6 +228,7 @@ async function enrollCeremony(
   const origin = `http://localhost:${port}`;
   const store = openDeskStore(values, env, deps);
   try {
+    const workspaceId = enrolmentWorkspace(store, values);
     const challenge = randomBytes(32).toString("base64url");
     const data = {
       kind: "enroll",
@@ -247,10 +249,10 @@ async function enrollCeremony(
         origin,
         label: values.label ?? "Touch ID",
       });
-      if (!confirmEnrollment(store, enrollment, deps)) {
+      if (!confirmEnrollment(store, enrollment, workspaceId, deps)) {
         throw new CollabError("not_confirmed", "Not confirmed at the terminal; nothing was enrolled");
       }
-      const passkey = store.enrollPersonPasskey(enrollment);
+      const passkey = store.enrollPersonPasskey({ ...enrollment, workspace_id: workspaceId });
       return { enrolled: true, fingerprint: passkey.fingerprint, origin: passkey.origin };
     });
     return { status: "ok", ...result };

@@ -234,9 +234,9 @@ export function deskSoftSpots(data: NoteProposalData): DeskSoftSpots {
         ? "the note has no Why and no Evidence lines."
         : "it has no evidence_refs and no confidence_basis (a legacy report's body is not read for reasons, so its text may still argue a case).")
   ), "stances with no reason or evidence"));
-  // consent/v2: where it was raised the person set it aside, and it was never lifted, so it is carried as a standing one is.
+  // consent/v2: it was set aside where it was raised, and never lifted, so it is carried as a standing one is.
   const setAsideThere = (entry: (typeof carried)[number]) => entry.set_aside_on_replaced
-    ? `the person set it aside there at ${entry.set_aside_on_replaced.created_at} (${entry.set_aside_on_replaced.basis}). `
+    ? `set aside there at ${entry.set_aside_on_replaced.created_at}, recorded as the person's (basis ${entry.set_aside_on_replaced.basis}). `
       + `Reason: ${quoted(entry.set_aside_on_replaced.reason)}`
     : "";
   lines.push(...capped(carried.map((entry) =>
@@ -245,10 +245,10 @@ export function deskSoftSpots(data: NoteProposalData): DeskSoftSpots {
         + (entry.standing_on_replaced
           ? " and still stands where it was raised"
           : entry.set_aside_on_replaced
-            ? ` and was set aside by the person where it was raised: ${setAsideThere(entry)}`
+            ? ` and was set aside where it was raised: ${setAsideThere(entry)}`
             : " and no longer stands where it was raised")
       : entry.set_aside_on_replaced
-        ? `Objection ${entry.challenge_id} by ${quoted(entry.by)} was set aside by the person on ${entry.raised_on}, which this proposal replaces, `
+        ? `Objection ${entry.challenge_id} by ${quoted(entry.by)} was set aside on ${entry.raised_on}, which this proposal replaces, `
           + `but is not in these terms: ${setAsideThere(entry)}`
         : `Objection ${entry.challenge_id} by ${quoted(entry.by)} still stands on ${entry.raised_on}, which this proposal replaces, `
           + "but is not in these terms")
@@ -258,8 +258,8 @@ export function deskSoftSpots(data: NoteProposalData): DeskSoftSpots {
   if (carried.length > 0) lines.push(carriedObjectionsSentence(rule));
   lines.push(...capped(setAside.map((stance) => {
     const entry = stance.set_aside!;
-    return `Challenge ${stance.id} by ${quoted(stance.from_actor)} was set aside by the person at ${entry.created_at} `
-      + `(${entry.basis}), while no session of its voice was live`
+    return `Challenge ${stance.id} by ${quoted(stance.from_actor)} was set aside at ${entry.created_at}, `
+      + `recorded as the person's (basis ${entry.basis}) while no session of its voice was live`
       + (entry.challenger.last_seen_at ? ` (last seen ${entry.challenger.last_seen_at})` : "")
       + `. Reason: ${quoted(entry.reason)}. It no longer blocks the position. It said: ${quoted(excerpt(stance.statement))}`;
   }), "set-aside challenges"));

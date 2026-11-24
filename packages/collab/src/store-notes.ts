@@ -1730,7 +1730,7 @@ export class CollabStore extends CollabStoreCore {
             at: answer.created_at,
             summary: challenge.standing
               ? "An answer to your standing challenge; only you can lift it."
-              : "An answer to your challenge, which the person set aside, so it no longer blocks; you may lift it, or challenge again.",
+              : "An answer to your challenge, which was set aside (recorded as the person's), so it no longer blocks; you may lift it, or challenge again.",
           });
         }
       }
@@ -2603,7 +2603,7 @@ export class CollabStore extends CollabStoreCore {
         if (latest?.act === "reject" && agreedBefore) {
           throw new CollabError(
             "agreement_withdrawn",
-            `The person agreed (act ${agreedBefore.id}), but a later act rejects these bytes: act ${latest.id}, ` +
+            `An agreement was recorded as the person's (act ${agreedBefore.id}, basis ${agreedBefore.basis}), but a later act rejects these bytes: act ${latest.id}, ` +
               `${latest.basis === "relayed_by_session" ? "relayed by a session" : `by ${latest.basis}`}`,
             { agreed_act: actView(agreedBefore), later_act: actView(latest) },
           );
@@ -2611,8 +2611,8 @@ export class CollabStore extends CollabStoreCore {
         throw new CollabError(
           "not_agreed",
           latest?.act === "reject"
-            ? "The person's latest act on these bytes is a rejection, and there is no agreement to proceed on"
-            : "The person has not agreed to these bytes",
+            ? `The latest act recorded as the person's on these bytes is a rejection (basis ${latest.basis}), and there is no agreement to proceed on`
+            : "No agreement to these bytes is recorded as the person's",
           {
             position: status.ai.position,
             person: status.person.state,
@@ -2621,7 +2621,7 @@ export class CollabStore extends CollabStoreCore {
         );
       }
       scope = status.terms.extent;
-      basis = `person agreed by ${status.agreement.basis} to proposal_sha256 ${status.proposal_sha256} (act ${status.agreement.id})`;
+      basis = agreementBasis(status.agreement.basis, status.proposal_sha256, status.agreement.id);
       personAct = actView(status.agreement);
     } else {
       scope = NOTE_NOTHING_AUTHORISED;
@@ -3389,6 +3389,19 @@ export const NOTE_NOTHING_AUTHORISED = "nothing is authorised";
 
 /** A decision without a proposal covers this by default (spec 5.3). */
 export const NOTE_DEFAULT_DECISION_EXTENT = "work this session already holds";
+
+/**
+ * The authority_basis a decide on an agreed proposal derives, as PROTOCOL.md
+ * Decide states it. A terminal agreement is the terminal path's assertion,
+ * which the store does not check, so it proves no terminal and no person
+ * (PERSON_ACT_BASIS_NOTE). The stored basis value itself is unchanged.
+ */
+export function agreementBasis(basis: PersonActBasis, proposalSha256: string, actId: string): string {
+  return basis === "controlling_terminal"
+    ? `agreement asserted by controlling_terminal to proposal_sha256 ${proposalSha256} (act ${actId}): ` +
+      "the terminal path asserted a yes, which proves no terminal and no person"
+    : `person agreed by ${basis} to proposal_sha256 ${proposalSha256} (act ${actId})`;
+}
 
 export const NOTE_SELF_DECISION_BASIS = "recorded by this session; not a direction decision and not the person's agreement";
 

@@ -57,6 +57,102 @@ function pause(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
+/**
+ * How long a write waits, in total, for a terminal that takes no bytes
+ * (EAGAIN on the non-blocking descriptor) before it gives up as stalled: a
+ * terminal paused with ^S, or a pseudo-terminal nobody is draining. Each wait
+ * is short, only the waits are counted, and any progress starts the budget
+ * again.
+ */
+export const WRITE_STALL_BUDGET_MS = 10_000;
+const WRITE_RETRY_MS = 20;
+const READ_RETRY_MS = 50;
+
+/** The descriptor calls a terminal port makes; tests stub them. */
+export interface TtyFdCalls {
+  writeSync(fd: number, buffer: Buffer, offset: number, length: number): number;
+  readSync(fd: number, buffer: Buffer, offset: number, length: number, position: null): number;
+  closeSync(fd: number): void;
+  pause(ms: number): void;
+}
+
+const FD_CALLS: TtyFdCalls = { writeSync, readSync, closeSync, pause };
+
+function isEagain(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  return code === "EAGAIN" || code === "EWOULDBLOCK";
+}
+
+/** A terminal write that took no bytes for the whole stall budget. */
+export class TtyStalledError extends Error {
+  override name = "TtyStalledError";
+}
+
+/**
+ * A port over an open, non-blocking terminal descriptor. Reads and writes
+ * both wait out EAGAIN: a read until its deadline, a write for at most
+ * `stallBudgetMs` without progress, after which it throws TtyStalledError.
+ */
+export function ttyPortForFd(
+  fd: number,
+  calls: TtyFdCalls = FD_CALLS,
+  stallBudgetMs: number = WRITE_STALL_BUDGET_MS,
+): TtyPort {
+  return {
+    write(text: string) {
+      const bytes = Buffer.from(text, "utf8");
+      let offset = 0;
+      let stalled = 0;
+      while (offset < bytes.length) {
+        let wrote = 0;
+        let refused: unknown;
+        try {
+          wrote = calls.writeSync(fd, bytes, offset, bytes.length - offset);
+        } catch (error) {
+          if (!isEagain(error)) throw error;
+          refused = error;
+        }
+        if (wrote > 0) {
+          offset += wrote;
+          stalled = 0;
+          continue;
+        }
+        // EAGAIN, or a write that took nothing: wait a little, within the budget.
+        if (stalled >= stallBudgetMs) throw new TtyStalledError("the terminal accepted no bytes", { cause: refused });
+        calls.pause(WRITE_RETRY_MS);
+        stalled += WRITE_RETRY_MS;
+      }
+    },
+    readLine(maxBytes: number, deadline?: number, now: () => number = Date.now) {
+      const one = Buffer.alloc(1);
+      const collected: number[] = [];
+      let overflow = false;
+      while (true) {
+        if (deadline !== undefined && now() > deadline) return null;
+        let read: number;
+        try {
+          read = calls.readSync(fd, one, 0, 1, null);
+        } catch (error) {
+          if (!isEagain(error)) throw error;
+          calls.pause(READ_RETRY_MS);
+          continue;
+        }
+        if (read === 0) return collected.length === 0 ? null : Buffer.from(collected).toString("utf8");
+        // A terminal left in raw mode sends "\r" for Enter.
+        if (one[0] === 0x0a || one[0] === 0x0d) break;
+        // Past the cap, keep reading to the end of the line so nothing is
+        // left for the shell, but treat the answer as not "yes".
+        if (collected.length < maxBytes) collected.push(one[0]!);
+        else overflow = true;
+      }
+      return overflow ? "" : Buffer.from(collected).toString("utf8");
+    },
+    close() {
+      calls.closeSync(fd);
+    },
+  };
+}
+
 /** Open the controlling terminal, or null when there is none. Refuses any
  * path that is not a terminal (a file, a pipe, /dev/null). */
 export function openDevTty(path: string = DEV_TTY): TtyPort | null {
@@ -77,46 +173,13 @@ export function openDevTty(path: string = DEV_TTY): TtyPort | null {
     closeSync(fd);
     return null;
   }
-  return {
-    write(text: string) {
-      const bytes = Buffer.from(text, "utf8");
-      let offset = 0;
-      while (offset < bytes.length) {
-        offset += writeSync(fd, bytes, offset, bytes.length - offset);
-      }
-    },
-    readLine(maxBytes: number, deadline?: number, now: () => number = Date.now) {
-      const one = Buffer.alloc(1);
-      const collected: number[] = [];
-      let overflow = false;
-      while (true) {
-        if (deadline !== undefined && now() > deadline) return null;
-        let read: number;
-        try {
-          read = readSync(fd, one, 0, 1, null);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "EAGAIN") throw error;
-          pause(50);
-          continue;
-        }
-        if (read === 0) return collected.length === 0 ? null : Buffer.from(collected).toString("utf8");
-        // A terminal left in raw mode sends "\r" for Enter.
-        if (one[0] === 0x0a || one[0] === 0x0d) break;
-        // Past the cap, keep reading to the end of the line so nothing is
-        // left for the shell, but treat the answer as not "yes".
-        if (collected.length < maxBytes) collected.push(one[0]!);
-        else overflow = true;
-      }
-      return overflow ? "" : Buffer.from(collected).toString("utf8");
-    },
-    close() {
-      closeSync(fd);
-    },
-  };
+  return ttyPortForFd(fd);
 }
 
 /** Show the exact bytes on /dev/tty and return true only for "yes" typed
- * there within the window. Throws `tty_unavailable` when no terminal exists. */
+ * there within the window. Throws `tty_unavailable` when no terminal exists,
+ * or when it stops taking output; callers record only after this returns
+ * true, so in either case nothing was written. */
 export function confirmOnTty(request: ConfirmRequest, options: ConfirmOptions = {}): boolean {
   const open = options.openTty ?? (() => openDevTty());
   const now = options.now ?? Date.now;
@@ -151,6 +214,12 @@ export function confirmOnTty(request: ConfirmRequest, options: ConfirmOptions = 
     const confirmed = answer !== null && answer.trim() === CONFIRM_WORD;
     port.write(confirmed ? "confirmed\n" : "cancelled; nothing was written\n");
     return confirmed;
+  } catch (error) {
+    if (!(error instanceof TtyStalledError)) throw error;
+    throw new CollabError(
+      "tty_unavailable",
+      "The controlling terminal (/dev/tty) stopped taking output (paused with ^S, or not being read), so nothing was written",
+    );
   } finally {
     port.close();
   }

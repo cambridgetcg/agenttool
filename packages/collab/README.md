@@ -980,11 +980,11 @@ through MCP. Code: `src/{person-desk,ceremony,passkey,tty}.ts`. Tests:
 | Verb | What it does |
 |---|---|
 | `workspaces`, `voices --workspace <id>`, `proposals --workspace <id> [--proposal <id> \| --limit <n>]`, `inbox [--workspace <id>]`, `passkeys` | read; `inbox` without a workspace counts every workspace |
-| `consent --proposal <id>` / `reject --proposal <id> --reason <text>` | show the exact act and proposal bytes on `/dev/tty` and record only on `yes` typed there (`basis: controlling_terminal`) |
+| `consent --proposal <id>` / `reject --proposal <id> --reason <text>` | show the exact act and proposal bytes on `/dev/tty` and record only on `yes` typed there (`basis: controlling_terminal`, which proves no terminal and no person: see below) |
 | `ceremony --proposal <id> --act agree\|reject [--reason <text>] [--via <ssh-destination>] [--no-open]` | serve a one-time signing page on the passkey's origin (`http://localhost:17778` by default); Touch ID signs the act bytes and the desk records them (`basis: user_verified_passkey`) |
 | `set-aside --proposal <id> --challenge <report id> --reason <text> [--passkey-assertion <path>\|-]`, or `ceremony ... --act set-aside --challenge <report id> --reason <text>` | consent/v2 only: show the objection in full and set aside a standing challenge whose voice has no live session; `proposals` lists which can be (`set_aside_options`) |
-| `passkey-enroll --ceremony [--label <text>] [--no-open]` | serve a one-time page that creates the passkey, then show its fingerprint on `/dev/tty` and enrol it only on `yes` |
-| `passkey-enroll --file <path>\|-`, `passkey-export --credential <id>`, `passkey-revoke --credential <id>` | enrol a passkey exported from another table, export one, or revoke one; enrol and revoke are confirmed on `/dev/tty` |
+| `passkey-enroll --ceremony [--label <text>] [--no-open] [--workspace <id>]` | serve a one-time page that creates the passkey, then show its fingerprint on `/dev/tty` and enrol it only on `yes`; `--workspace` records the enrolment in that workspace's chain now |
+| `passkey-enroll --file <path>\|- [--workspace <id>]`, `passkey-export --credential <id>`, `passkey-revoke --credential <id>` | enrol a passkey exported from another table, export one, or revoke one; enrol and revoke are confirmed on `/dev/tty` |
 | `challenge --proposal <id> --act agree` or `--act reject --reason <text>`, then `consent`/`reject` with `--passkey-assertion <path>\|-` | the same passkey act in two steps, for a page the desk does not serve |
 | `say --workspace <id> --body <text> [--proposal <id>] --idempotency-key <key>` | a desk note; about a proposal it is routed to the author session, or for a desk proposal to every consulted voice |
 | `propose --workspace <id> --question <text> --criteria <text> --extent <text> [--known-conflicts <text>] [--topic <text>] [--consult-seconds <n>] --idempotency-key <key>` | a desk proposal (`origin: person_relayed`, author voice `person`), settled by every agent voice |
@@ -1000,8 +1000,8 @@ posting into a newer ceremony.
 Agreement needs the agents' position to be `consented`, the exact current
 `proposal_sha256`, and the same position the person was shown; the challenge
 and the terminal refuse before any prompt otherwise. A rejection may come at
-any position. An authenticated rejection may follow a relayed one; nothing
-else repeats. The latest person act decides `person.state`. `may_proceed` is
+any position. A rejection recorded at the terminal or with a passkey may follow a
+relayed one; nothing else repeats. The latest person act decides `person.state`. `may_proceed` is
 `true` only while that act agrees and the proposal is still on the table; it
 authorises only the proposal's `extent`. A later challenge does not silently
 revoke an agreement. `proposal.agreed` and `proposal.rejected` are addressed to
@@ -1030,6 +1030,21 @@ RP ID hash, user presence and user verification, the signature counter, and
 the ES256 signature, then journals the assertion with the public key in the
 event, so the act can be re-verified without this database.
 
+A passkey's enrolment is journaled as `person.passkey_enrolled`, with the key's
+SHA-256 fingerprint and never private material, in the hash chain of each
+workspace where it is used and in no other: when `passkey-enroll` names it with
+`--workspace` (`recorded: at_enrolment`), or just before the key first acts there
+(`recorded: before_first_act`). If another key has since been written over the
+row, its fingerprint is recorded before its act too; nothing is refused.
+`person.passkey_revoked` goes to each chain that holds an enrolment of the key,
+so a key enrolled without a workspace and revoked before it acted leaves no
+event. The fingerprint to compare with your own key's (shown when you enrolled
+it) is the one of the key in the act's own proof, the SHA-256 of the bytes
+`proof.public_key_spki` encodes. In a `before_first_act` event, `enrolled_at`,
+`rp_id`, `origin` and `label` are the table row's claim; only the event's
+`occurred_at` and its place in the chain date the journaling. None of it shows
+who enrolled the key.
+
 The ceremony pages come from the installed desk, not from an application that
 agents edit: the page that shows the bytes decides what Touch ID signs, and
 the system prompt names only "localhost". Each page lives at a one-time path
@@ -1039,7 +1054,20 @@ process running as the same user can still change those, and a process that can
 write the journal could still rewrite it unless its head is witnessed elsewhere.
 
 The terminal route is a speed bump, not a sandbox: a process that can allocate
-a pseudo-terminal and type into it can answer. Desk notes, desk proposals and
+a pseudo-terminal and type into it can answer, and a process running as the same
+user can skip the terminal altogether by calling the store's
+`recordPersonActAtTerminal` directly. Either way the journal records
+`basis: controlling_terminal`, so that basis says only that the desk's terminal
+path asserted a yes; it proves no terminal and no person. Only
+`user_verified_passkey` carries a proof that can be re-verified, and that proof
+shows which key signed, not whose key it is. The stored basis values are
+unchanged, but `proposals`, `inbox --workspace`, the act receipts,
+`collab_proposal_status` and the notes views and decide results say this in one
+more key, `basis_note`, when they show a person act or a set-aside; the notes
+views say an agreement "was recorded as the person's (basis …)"; a decide on a
+terminal agreement says it in its basis (`agreement asserted by
+controlling_terminal …`); and the decision record lists it in
+`does_not_establish`. Desk notes, desk proposals and
 their withdrawal are not authenticated as the person; they inform and
 authorise nothing. An agent can place a report in the person's inbox with
 `collab_report_append` and `to_person: true`; that is routing, not access

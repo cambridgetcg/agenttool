@@ -10,8 +10,9 @@
  *
  * Limit: a signature shows that the enrolled authenticator signed these bytes
  * after user verification. Which key was enrolled rests on the terminal
- * confirmation at enrolment, and a process that can write the journal could
- * still rewrite it unless its head is witnessed elsewhere.
+ * confirmation at enrolment, which the store does not check, and a process
+ * that can write the journal could still rewrite it unless its head is
+ * witnessed elsewhere.
  * Contract: docs/superpowers/specs/2026-10-29-collab-yu-ai-consent-design.md
  * section 5 in the AgentTool source repository.
  */
@@ -138,6 +139,21 @@ export function parsePasskeyPublicKey(spki: string): KeyObject {
 
 export function passkeyFingerprint(spki: string): string {
   return sha256(base64urlDecode(spki, "public_key_spki", 1024)).toString("hex");
+}
+
+/**
+ * The fingerprint of the key a row holds: from the key itself, not from the
+ * row's own copy, which another process could have written. Only when the key
+ * cannot be parsed is the stored copy all there is. Never throws, so it can
+ * name a key that is being revoked.
+ */
+export function storedPasskeyFingerprint(passkey: Pick<PersonPasskey, "public_key_spki" | "fingerprint">): string {
+  try {
+    parsePasskeyPublicKey(passkey.public_key_spki);
+    return passkeyFingerprint(passkey.public_key_spki);
+  } catch {
+    return passkey.fingerprint;
+  }
 }
 
 /** Check an RP ID and origin pair a browser would accept for WebAuthn. */

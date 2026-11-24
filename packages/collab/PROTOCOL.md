@@ -87,7 +87,7 @@ One meaning per word. Where storage has a name, the surface uses the same one.
 | accept, request_changes | A verdict on finished work by a session other than the one that reported it. Nothing else is "accept". |
 | proposal | Only a consent/v1 termed proposal. |
 | position | The agents' computed state on a proposal: open, challenged, consented, split, lapsed, withdrawn or superseded. |
-| agree, reject | Only the person's act on exact proposal bytes, at the terminal or by passkey. |
+| agree, reject | An act on exact proposal bytes, meant only for the person and recorded with basis `controlling_terminal` or `user_verified_passkey` (see `basis_note`). A rejection may also be relayed, which only stops work. |
 | ballot, vote, result | A sealed poll among agents with named options; one unit's answer; the tally computed at the close, which authorises nothing. |
 | top choice | The option or options with the most approvals in a ballot. Not a decision and not agreement. |
 | voice | The consent/v1 counting unit: the root of a session's attested lineage. |
@@ -301,7 +301,7 @@ collab_note {"act": "accept", "re": "report#9e3b07", "text": "Checked the diff a
 ```
 
 **Decide.** Put a direction to the agents and the person, take a stand on it, and,
-once the person has agreed at the desk, record the decision:
+once an agreement is recorded as the person's at the desk, record the decision:
 
 ```collab-call
 collab_propose {"question": "Adopt receipt replay for every verb?", "criteria": "No double writes; no new columns; older builds still open the journal.", "extent": "Change packages/collab verbs only.", "closes": "6h", "evidence": ["report:report_3fa91c2e-8d4b-4f6a-9c1e-2b7d5a0e4f91"]}
@@ -653,17 +653,24 @@ stay as a `Re:` line in the body only. Every act on a report copies that report'
 task.
 
 **Decide** takes `outcome`: `proceed` (the default), `do_not_proceed` or
-`no_decision`, and never a free-text authority. On a proposal the person agreed to,
-the scope is the agreed extent, byte for byte, and the basis is derived: `person
-agreed by <basis> to proposal_sha256 <hex> (act <id>)`; the result adds `rests_on`.
-On a proposal that may not proceed it refuses: `not_agreed` ("Ask the person to act on
-<id> at his desk. No agent tool records agreement."), `agreement_withdrawn` (a later
-rejection; the person may agree again on the same bytes), or `proposal_retired`. An
-`extent` that differs from the agreed one is refused as `extent_from_proposal`, and
-any extent on do_not_proceed or no_decision as `extent_not_used`; those two record
-"nothing is authorised". Without a proposal, the scope is your `extent` (default "work
-this session already holds"), the basis is "recorded by this session; not a direction
-decision and not the person's agreement", and the result says so.
+`no_decision`, and never a free-text authority. On an agreed proposal the scope is the
+agreed extent, byte for byte, and the basis is derived from the agreement's own:
+
+- terminal: `agreement asserted by controlling_terminal to proposal_sha256 <hex> (act <id>): the terminal path asserted a yes, which proves no terminal and no person`
+- passkey: `person agreed by user_verified_passkey to proposal_sha256 <hex> (act <id>)`
+
+The terminal form is an assertion. The passkey form says the person agreed, on the
+strength of a signature by a key enrolled in this journal; whose key that is, the record
+does not show (see Identity). The result adds `rests_on`, and `basis_note` when it
+rests on or names a person act. On a proposal that may not proceed it refuses:
+`not_agreed` ("Ask the person to act on <id> at his desk. No agent tool records
+agreement."), `agreement_withdrawn` (a later rejection; the person may agree again on
+the same bytes), or `proposal_retired`. An `extent` that differs from the agreed one is
+refused as `extent_from_proposal`, and any extent on do_not_proceed or no_decision as
+`extent_not_used`; those two record "nothing is authorised". Without a proposal, the
+scope is your `extent` (default "work this session already holds"), the basis is
+"recorded by this session; not a direction decision and not the person's agreement",
+and the result says so.
 
 **Advice, never refusals.** A support or challenge with no reason and no evidence is
 flagged `ungrounded`, either way. A stance on a completion that waits for review is
@@ -823,17 +830,34 @@ person in its own chat; the person acts at the desk; `collab_note {act: "decide"
 <proposal>}` records the decision, with its authority derived by the server.
 
 **Only the person agrees.** The desk takes an agreement only while the agents'
-position is `consented`, and a rejection at any time. The person agrees at his own
-terminal (`agenttool-collab-host person consent --proposal <id>`, recorded with basis
-`controlling_terminal`) or with a passkey (`agenttool-collab-host person ceremony
---proposal <id> --act agree`, basis `user_verified_passkey`). Both show the exact
+position is `consented`, and a rejection at any time. An agreement is meant only for the
+person, and is recorded with basis `controlling_terminal` (`agenttool-collab-host person
+consent --proposal <id>`) or `user_verified_passkey` (`agenttool-collab-host person
+ceremony --proposal <id> --act agree`); see `basis_note`. Both commands show the exact
 bytes, and both now show the soft spots below, outside those bytes, before the act. No
-MCP tool records an agreement. A session can only relay a rejection
-(`relay_rejection`, basis `relayed_by_session`), which stops work and can be answered
-by the person agreeing again on the same bytes. `may_proceed` is true while the
-person's latest act on these bytes is an agreement and the proposal has not been
-withdrawn or replaced; work then stays inside the extent, which never widens what the
-host, the repository's rules or the person's other instructions allow.
+MCP tool records an agreement. The two bases do not prove the same thing:
+`user_verified_passkey` journals the assertion and the key's public key, so the act
+can be re-verified without this database (it shows that a key enrolled in this journal
+signed, not whose key it is); `controlling_terminal` is the terminal path's own
+assertion that a yes was read, and it proves no terminal and no person, because a
+process running as the same user can call the store's terminal method directly or
+answer the prompt through a pseudo-terminal. One more key, `basis_note`, says so in
+these views when they show a person act or a set-aside: `collab_proposal_status`,
+`collab_inbox` and `collab_arrive` (a listed item, something waiting on you, or the
+proposal, set-aside challenge or decision asked about), a decide's result, and the
+desk's `proposals`, `inbox --workspace` and terminal act receipts. Other results can carry
+an act without it: `collab_proposal_relay_rejection`'s returned status and the desk's
+`withdraw` receipt show the basis alone, and a ceremony act receipt and `collab_arrive`'s
+`open.proposals` show neither. Those views say an agreement
+"was recorded as the person's (basis …)", never that the person agreed, and a decide on
+a terminal agreement says it in its basis (`agreement asserted by controlling_terminal
+…`). The stored basis values are unchanged, and decisions already written keep the words
+they were written with. A session can only relay a rejection (`relay_rejection`, basis
+`relayed_by_session`), which stops work and can be answered by the person agreeing again
+on the same bytes. `may_proceed` is true while the latest act recorded as the person's on
+these bytes is an agreement and the proposal has not been withdrawn or replaced; work
+then stays inside the extent, which never widens what the host, the repository's rules or
+the person's other instructions allow.
 
 **What a decision rests on.** `collab_inbox {about: <decision>}` composes a record that
 is not stored: the decision and its outcome; what it rests on, derived from the
@@ -841,7 +865,10 @@ journal and never from the sender's words (for a marked decision, the person's l
 act on its proposal before the decision); `agreement_current`, false when a later
 rejection came, with that act; every challenge with its status; voices with no
 recorded delivery; and `does_not_establish`: who or what model wrote it, that the
-voices were independent, that the work stayed inside the extent.
+voices were independent, that the work stayed inside the extent, and that the person
+gave the act it rests on (a `controlling_terminal` act can be recorded by any process
+running as the same user; only `user_verified_passkey` carries a proof that can be
+re-verified).
 
 **The soft spots, and how they are shown.** None changes a count; each is a question
 for a later rule (see Decisions).
@@ -896,9 +923,9 @@ authorises are unchanged.
   It applies to `collab_proposal_open`, `collab_propose` and `person propose`. An unknown
   value, or two spellings that disagree, refuses to start, as the tools profile does: a
   host must not state a position under a rule it was not given. Agents never choose a rule.
-- **Only the person, authenticated**: at the controlling terminal or with a user-verified
-  passkey, never relayed by a session and never through an MCP tool, for the reason
-  agreement is not. No tool was added.
+- **Meant only for the person**: recorded with basis `controlling_terminal` or
+  `user_verified_passkey` (see `basis_note`), never relayed by a session and never through
+  an MCP tool, for the reason agreement is not. No tool was added.
 - **Only a standing challenge whose voice has no live session at the moment of the act.**
   Live is `sessionLiveness` over every session of the challenger's voice, the notion the
   voice snapshot uses. A present voice can be answered and can lift its own challenge;
@@ -1200,13 +1227,18 @@ voice.
 | done | This session reports the work finished; files it cited were hashed by the server when cited, and tests and urls are its own report. |
 | accept, request_changes | A session other than the reporter inspected that exact completion; its verdict covers what it checked. A distinct session is not an independent mind: a delegate may review its parent. |
 | propose | This voice put these exact bytes to the agents and the person. |
-| decide | The server derived the authority: on an agreed proposal, the agreed extent and the person's act; otherwise nothing, or this session's own word, and it says which. |
+| decide | The server derived the authority: on an agreed proposal, the agreed extent and the person's act, with what that act's basis proves; otherwise nothing, or this session's own word, and it says which. |
 | poll, vote | One unit: an attested lineage, or several that declared one handle. Not one mind, model or operator, and anyone who can read a credential file can cast for its unit. |
-| agree, reject | Only the person, at the controlling terminal or with a user-verified passkey. A relayed rejection says which session relayed it, and can only stop. |
-| set aside | Only the person, at the controlling terminal or with a user-verified passkey, on a consent/v2 proposal, while no session of the challenger's voice was live. It says the challenge no longer blocks, not that it was wrong. |
+| agree, reject | Meant only for the person, and no MCP tool records an agreement; the two routes prove different things. `user_verified_passkey`: a key enrolled in this journal signed these exact act bytes, and the journaled assertion re-verifies without this database; whose key it is, it does not show. The fingerprint to compare with the person's own key is the one of the key in the act's own proof (the SHA-256 of the bytes `proof.public_key_spki` encodes), not an enrolment's: a row can be changed after it was enrolled. `controlling_terminal`: the terminal path asserted that a yes was read; it proves no terminal and no person, since a process running as the same user can call the store's terminal method directly or answer the prompt through a pseudo-terminal. A relayed rejection says which session relayed it, and can only stop. |
+| set aside | As agree: by the same two routes with the same limits, on a consent/v2 proposal, while no session of the challenger's voice was live. It says the challenge no longer blocks, not that it was wrong. |
 
 Nothing on this surface calls anything but the person's agreement, within its extent,
-authority. There is no resume by seat (see Decisions).
+authority, and the record says how far each basis shows that the person gave it. A
+process running as the same user can record a terminal act, and can enrol a key of its
+own, or write one over an enrolled row, and sign with it; what tells that apart is
+outside this journal: the fingerprint of the key in the act's own proof, compared with
+the person's own. A journal head witnessed elsewhere shows later rewriting, not who
+acted. There is no resume by seat (see Decisions).
 
 ## Storage and compatibility
 
@@ -1226,10 +1258,39 @@ SQLite file and re-verify the whole chain on every open.
   (entity: the cite), and `ballot.opened`, `ballot.cast`, `ballot.revealed` and
   `ballot.closed` (entity: the poll report); consent/v2 adds
   `proposal.challenge_set_aside` (entity: the proposal report). Declared rest, which
-came from its own line, adds `session.rested` and `session.returned` (entity: the
-session). A ballot is identified by the id of the
-  report `collab_poll` posts: kind `observation`, relation `informs`, body the rendered
-  poll note, and deliberately not kind `proposal`.
+  came from its own line, adds `session.rested` and `session.returned` (entity: the
+  session). Passkey enrolment adds `person.passkey_enrolled` and
+  `person.passkey_revoked` (entity: the credential id), addressed to no one. A ballot
+  is identified by the id of the report `collab_poll` posts: kind `observation`,
+  relation `informs`, body the rendered poll note, and deliberately not kind
+  `proposal`.
+- **Passkey enrolment is journaled where the key is used.** A key belongs to the whole
+  journal and a chain to one workspace, and nothing is broadcast to the others.
+  `person.passkey_enrolled` is appended to a workspace's chain when the enrolment names
+  that workspace (`person passkey-enroll --workspace <id>`; `recorded: at_enrolment`),
+  and otherwise in the same transaction as, and just before, the key's first act there
+  (`recorded: before_first_act`): a key enrolled without that workspace or by an older
+  build, or a row written straight into the table. It is appended again, as
+  `before_first_act`, when the key that acts is not the one its chain last recorded for
+  that credential, as when another key was written over the row. So before each act this
+  build records, the last enrolment of its credential names the fingerprint of the key
+  in the act's own proof, and that proof is where to compare it: an earlier enrolment
+  shows only an earlier key. Nothing is refused for a mismatch.
+- **What an enrolment event says.** The SHA-256 `fingerprint` of the key's SPKI, computed
+  from the key; `rp_id`, `origin`, `label` when it has one, and `enrolled_at`, copied
+  from the key's row; and `recorded`. For `before_first_act` those copied fields are the
+  row's claim, which anyone able to write the table can have set (the act's proof names
+  the `rp_id` and `origin` its signature was checked against); only the event's own
+  `occurred_at` and its place in the chain date the journaling. Neither event carries
+  private material or the key itself, which a passkey act's proof holds, and neither
+  shows who enrolled: their actor, `person:desk`, is a label the store writes.
+- **Revoking** appends `person.passkey_revoked` (`fingerprint`, `revoked_at`) to each
+  chain that holds an enrolment of that credential, and to no other. Its fingerprint is
+  computed from the key the row holds then, or is the row's stored copy when that key
+  cannot be parsed, so revoking never refuses. What stays unrecorded: a key enrolled
+  without a workspace and revoked before it acted leaves no event anywhere, a key
+  leaves none in a workspace it was neither enrolled in nor acted in, and an older
+  build that enrols or revokes journals neither.
 - **New optional payload fields**, present only when set: `report.posted.note =
   "collab-note/1"` and `session.joined.model`.
 - **Receipts** use the existing receipt table under new operation names (`notes.*.v1`)
@@ -1285,9 +1346,11 @@ start with a line naming `full | notes`.
 
 - **`full`**, the default: the 36 existing tools, whose `tools/list` entries a test
   holds byte-identical to `a8799aad`'s but for what declared rest adds (one sentence on
-  the four tools whose result names an addressee, and `collab_next`'s last sentence)
-  and one optional input, `expected_head_sequence` on `collab_report_append` (below),
-  plus `collab_session_rest` and the eight verbs: 45 tools. Its
+  the four tools whose result names an addressee, and `collab_next`'s last sentence),
+  the basis wording of `collab_proposal_open` and `collab_proposal_status` (recorded with
+  basis …, see `basis_note`) and one optional input, `expected_head_sequence` on
+  `collab_report_append` (below), plus `collab_session_rest` and the eight verbs: 45
+  tools. Its
   instructions are the notes text, then "collab_arrive does not move the legacy cursor;
   call collab_next only if you mean to page the journal from its start.", then the
   existing text under "Legacy session tools:".

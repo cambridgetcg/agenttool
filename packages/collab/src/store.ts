@@ -94,6 +94,7 @@ import {
   normalizePasskeyAssertion,
   normalizePasskeyEnrollment,
   passkeyFingerprint,
+  storedPasskeyFingerprint,
   personActChallenge,
   verifyPasskeyAssertion,
 } from "./passkey.js";
@@ -4221,6 +4222,7 @@ export class CollabStoreCore {
       });
       this.db.query(`UPDATE person_passkeys SET sign_count = ? WHERE credential_id = ?`)
         .run(sign_count, passkey.credential_id);
+      this.journalPasskeyBeforeFirstAct(terms.workspace_id, passkey);
       return this.recordPersonAct({
         workspace_id: terms.workspace_id,
         proposal_report_id: terms.report_id,
@@ -4357,6 +4359,7 @@ export class CollabStoreCore {
       const { sign_count } = verifyPasskeyAssertion({ passkey, assertion, expected_challenge: derived.challenge });
       this.db.query(`UPDATE person_passkeys SET sign_count = ? WHERE credential_id = ?`)
         .run(sign_count, passkey.credential_id);
+      this.journalPasskeyBeforeFirstAct(terms.workspace_id, passkey);
       return this.recordSetAside(terms, challengeId, reason, {
         basis: "user_verified_passkey",
         actor: PERSON_PASSKEY_ACTOR,
@@ -4423,7 +4426,13 @@ export class CollabStoreCore {
     }).deferred();
   }
 
-  /** Enrol a passkey after the host CLI confirmed it at the controlling terminal. */
+  /**
+   * Enrol a passkey after the host CLI confirmed it at the controlling
+   * terminal. The store does not check that terminal itself, so a key's
+   * enrolment is journaled as person.passkey_enrolled, with its public facts,
+   * in each workspace it concerns and in no other: here when the enrolment
+   * names one, and otherwise just before the key first acts there.
+   */
   enrollPersonPasskey(input: {
     credential_id: string;
     public_key_spki: string;
@@ -4431,9 +4440,12 @@ export class CollabStoreCore {
     rp_id: string;
     origin: string;
     label?: string | null;
+    /** The workspace whose chain records this enrolment now; none waits for the key's first act. */
+    workspace_id?: string;
   }): PersonPasskey {
     const enrollment = normalizePasskeyEnrollment(input);
     const transaction = this.db.transaction(() => {
+      if (input.workspace_id !== undefined) this.requireWorkspace(input.workspace_id);
       if (this.db.query(`SELECT 1 FROM person_passkeys WHERE credential_id = ?`).get(enrollment.credential_id)) {
         throw new CollabError("passkey_already_enrolled", "This credential id is already enrolled");
       }
@@ -4451,6 +4463,9 @@ export class CollabStoreCore {
         passkeyFingerprint(enrollment.public_key_spki),
         this.timestamp(),
       );
+      if (input.workspace_id !== undefined) {
+        this.journalPasskeyEnrolment(input.workspace_id, this.requirePersonPasskey(enrollment.credential_id), "at_enrolment");
+      }
     });
     transaction.immediate();
     this.tightenFileModes();
@@ -4462,6 +4477,11 @@ export class CollabStoreCore {
       .all() as PersonPasskeyRow[]).map((row) => ({ ...row, algorithm: -7 as const }));
   }
 
+  /**
+   * Revoke a passkey. person.passkey_revoked goes to each chain that holds an
+   * enrolment of this credential, and to no other, so a key revoked before it
+   * was enrolled in, or acted in, a workspace leaves nothing there.
+   */
   revokePersonPasskey(credentialId: string): PersonPasskey {
     const transaction = this.db.transaction(() => {
       const changed = this.db.query(`
@@ -4470,10 +4490,71 @@ export class CollabStoreCore {
       if (changed.changes === 0) {
         throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
       }
+      const passkey = this.requirePersonPasskey(credentialId);
+      const recordedIn = this.db.query(`
+        SELECT DISTINCT workspace_id FROM events WHERE type = 'person.passkey_enrolled' AND entity_id = ? ORDER BY workspace_id
+      `).all(passkey.credential_id) as Array<{ workspace_id: string }>;
+      for (const { workspace_id } of recordedIn) {
+        this.appendEvent(workspace_id, "person.passkey_revoked", passkey.credential_id, PERSON_DESK_ACTOR, {
+          // Falls back to the row's copy for a key that cannot be parsed: revoking never refuses.
+          fingerprint: storedPasskeyFingerprint(passkey),
+          revoked_at: passkey.revoked_at,
+        });
+      }
     });
     transaction.immediate();
     this.tightenFileModes();
     return this.listPersonPasskeys().find((key) => key.credential_id === credentialId)!;
+  }
+
+  private requirePersonPasskey(credentialId: string): PersonPasskey {
+    const row = this.db.query(`SELECT * FROM person_passkeys WHERE credential_id = ?`).get(credentialId) as PersonPasskeyRow | null;
+    if (!row) throw new CollabError("passkey_not_enrolled", "No enrolled passkey has this credential id");
+    return { ...row, algorithm: -7 };
+  }
+
+  /**
+   * person.passkey_enrolled in one workspace's chain: the key's public facts
+   * only (its SPKI's SHA-256 fingerprint, relying party, origin, label and
+   * enrolment time), never private material and never the key itself, which
+   * a passkey act's proof carries. `recorded` says when it was journaled:
+   * at_enrolment, when the enrolment named this workspace, or
+   * before_first_act, just before an act by a key whose fingerprint this chain
+   * had not recorded last. Only the fingerprint is computed here: everything
+   * else is the row's claim, which before_first_act did not see enrolled.
+   */
+  private journalPasskeyEnrolment(
+    workspaceId: string,
+    passkey: PersonPasskey,
+    recorded: "at_enrolment" | "before_first_act",
+  ): void {
+    this.appendEvent(workspaceId, "person.passkey_enrolled", passkey.credential_id, PERSON_DESK_ACTOR, {
+      // From the key itself, not the row's own copy, which another process could have written.
+      fingerprint: passkeyFingerprint(passkey.public_key_spki),
+      rp_id: passkey.rp_id,
+      origin: passkey.origin,
+      ...(typeof passkey.label === "string" ? { label: passkey.label } : {}),
+      enrolled_at: passkey.enrolled_at,
+      recorded,
+    });
+  }
+
+  /**
+   * So that before every passkey act in a workspace's chain, the last
+   * enrolment of its credential there names the fingerprint of the key in the
+   * act's own proof. The row can change under a credential id (a key written
+   * over it, say), so the key's fingerprint is compared, not only the id; a
+   * mismatch is recorded and never refused, since the record is what shows it.
+   */
+  private journalPasskeyBeforeFirstAct(workspaceId: string, passkey: PersonPasskey): void {
+    const last = this.db.query(`
+      SELECT json_extract(payload_json, '$.fingerprint') AS fingerprint FROM events
+      WHERE workspace_id = ? AND type = 'person.passkey_enrolled' AND entity_id = ?
+      ORDER BY sequence DESC LIMIT 1
+    `).get(workspaceId, passkey.credential_id) as { fingerprint: unknown } | null;
+    if (last?.fingerprint !== passkeyFingerprint(passkey.public_key_spki)) {
+      this.journalPasskeyEnrolment(workspaceId, passkey, "before_first_act");
+    }
   }
 
   /**
@@ -4631,7 +4712,8 @@ export class CollabStoreCore {
   /**
    * The checks an act must pass, shared by the challenge (before Touch ID) and
    * the record. Agreement needs the agents' consent and never comes relayed.
-   * An authenticated rejection may follow a relayed one; nothing else repeats.
+   * A rejection recorded at the terminal or with a passkey may follow a relayed
+   * one; nothing else repeats.
    */
   private refuseUnrecordableAct(status: ProposalStatus, act: "agree" | "reject", basis: PersonActBasis): void {
     if (status.ai.position === "withdrawn" || status.ai.position === "superseded") {

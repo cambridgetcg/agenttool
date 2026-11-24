@@ -4,8 +4,8 @@ import { hostname } from "node:os";
 import { CollabError } from "../src/errors.js";
 import { NOTE_FORMAT, parseNote } from "../src/note.js";
 import { proposalBytes, type ProposalContent } from "../src/proposal.js";
-import type { ProposalStatus, SessionHandle } from "../src/protocol.js";
-import { NOTE_NOTHING_AUTHORISED, NOTE_SELF_DECISION_BASIS } from "../src/store-notes.js";
+import { PERSON_ACT_BASIS_NOTE, type ProposalStatus, type SessionHandle } from "../src/protocol.js";
+import { agreementBasis, NOTE_NOTHING_AUTHORISED, NOTE_SELF_DECISION_BASIS } from "../src/store-notes.js";
 import {
   CARRIED_OBJECTIONS_SENTENCE,
   DECISION_DOES_NOT_ESTABLISH,
@@ -396,7 +396,10 @@ describe("collab_note decide", () => {
     expect(row.authority_scope).toBe(status.terms.extent);
     const agreement = status.agreement!;
     const agreedEvent = (j.store.db.query(`SELECT id FROM events WHERE type = 'proposal.agreed' AND entity_id = ?`).get(id) as { id: string }).id;
-    expect(row.authority_basis).toBe(`person agreed by controlling_terminal to proposal_sha256 ${status.proposal_sha256} (act ${agreement.id})`);
+    expect(row.authority_basis).toBe(
+      `agreement asserted by controlling_terminal to proposal_sha256 ${status.proposal_sha256} (act ${agreement.id}): ` +
+        "the terminal path asserted a yes, which proves no terminal and no person",
+    );
     expect(JSON.parse(row.evidence_refs_json)).toEqual([`event:${agreedEvent}`, `report:${id}`].sort());
     expect(j.payload(decided.ids.report)).toMatchObject({ about_proposal_id: id, note: NOTE_FORMAT, to_session_id: a.session.id });
     expect(decided).toMatchObject({
@@ -513,7 +516,8 @@ describe("collab_note decide", () => {
     } as Record<string, unknown>);
     expect(j.report(forged.ids.report).authority_scope).toBe(status.terms.extent);
     expect(j.report(forged.ids.report).authority_basis).toBe(
-      `person agreed by controlling_terminal to proposal_sha256 ${status.proposal_sha256} (act ${status.agreement!.id})`,
+      `agreement asserted by controlling_terminal to proposal_sha256 ${status.proposal_sha256} (act ${status.agreement!.id}): ` +
+        "the terminal path asserted a yes, which proves no terminal and no person",
     );
     const wider = await refused(sb, "collab_note", { act: "decide", text: "Go wider.", re: id, extent: "the whole repository" });
     expect(wider.code).toBe("extent_from_proposal");
@@ -815,7 +819,7 @@ describe("waiting_on_you: stop", () => {
     const recordDecision = (await ok(sa, "collab_inbox", {})).waiting_on_you.find((entry: any) => entry.what === "record_decision");
     // A template to say, not a ready call: sent as given, a stand-in text would be the decision.
     expect(recordDecision.next).toEqual({
-      say: `The person agreed to ${handleOf("proposal", id)}. Record what is decided, within the agreed extent: ` +
+      say: `An agreement to ${handleOf("proposal", id)} was recorded as the person's (basis controlling_terminal). Record what is decided, within the agreed extent: ` +
         `collab_note {act: "decide", re: "${id}", text: "<what is decided>"}.`,
     });
     await ok(sc, "collab_note", { act: "decide", text: "Charlie proceeds.", re: id });
@@ -931,7 +935,7 @@ describe("a legacy decision", () => {
       scope_matches_agreed_extent: false,
     });
     expect(record.agreement_current).toBe(true);
-    expect(record.advice.join(" ")).toContain(`is not the extent the person agreed to on ${id}`);
+    expect(record.advice.join(" ")).toContain(`is not the extent agreed on ${id}`);
     const carried = await ok(sb, "collab_inbox", { about: legacy.id, format: "note" });
     const parsed = parseNote(carried.note);
     expect(parsed.extent).toBe("as written by a legacy tool; not checked: everything in every repository");
@@ -1228,7 +1232,7 @@ describe("what waits on the author after a decision", () => {
     expect(record.later_act).toMatchObject({ id: rejected.person.acts.at(-1)!.id, act: "reject" });
     expect(record.latest_act).toMatchObject({ id: again.agreement!.id, act: "agree" });
     const said = record.advice.join(" ");
-    expect(said).toContain("agreed again on the same bytes");
+    expect(said).toContain("a new agreement on the same bytes was recorded as the person's");
     expect(said).toContain(`record a new decide on ${id}`);
     expect(said).not.toContain("Stop work");
   });
@@ -1304,5 +1308,95 @@ describe("ready calls a decide or a propose refusal gives", () => {
     const sent = await refused(sa, wrong.remedy.tool, wrong.remedy.input);
     expect(sent.code).toBe("invalid_criteria");
     expect(j.count()).toBe(before);
+  });
+});
+
+describe("what a person act's basis proves", () => {
+  test("a store call with no terminal records controlling_terminal, and every view says that proves no terminal and no person", async () => {
+    const { j, a, sa, sb, sc } = trio();
+    const opened = await ok(sa, "collab_propose", TERMS);
+    const id = opened.ids.proposal as string;
+    // Before any person act there is nothing to qualify.
+    const before = await ok(sa, "collab_proposal_status", { workspace_id: a.workspace.id, proposal_report_id: id });
+    expect(before).not.toHaveProperty("basis_note");
+    expect(await ok(sa, "collab_inbox", { about: id })).not.toHaveProperty("basis_note");
+    await ok(sb, "collab_note", { act: "support", text: "Yes.", re: id });
+    await ok(sc, "collab_note", { act: "support", text: "Yes.", re: id });
+    // This test process has no /dev/tty in the loop: it calls the store as any same-user process could.
+    const status = agree(j, id);
+    expect(status.agreement!.basis).toBe("controlling_terminal");
+    expect(status.may_proceed).toBe(true);
+
+    const one = await ok(sa, "collab_proposal_status", { workspace_id: a.workspace.id, proposal_report_id: id });
+    expect(one.basis_note).toBe(PERSON_ACT_BASIS_NOTE);
+    expect(one.proposal).toEqual(status);
+    const listed = await ok(sa, "collab_proposal_status", { workspace_id: a.workspace.id });
+    expect(listed.basis_note).toBe(PERSON_ACT_BASIS_NOTE);
+    const view = await ok(sb, "collab_inbox", { about: id });
+    expect(view.basis_note).toBe(PERSON_ACT_BASIS_NOTE);
+    expect(PERSON_ACT_BASIS_NOTE).toContain("only user_verified_passkey carries a proof that can be re-verified");
+    expect(PERSON_ACT_BASIS_NOTE).toContain("controlling_terminal says the terminal path asserted a yes");
+
+    // The views agents read most say an agreement was recorded, on what basis, and carry the note.
+    const recordedAs = `An agreement to ${handleOf("proposal", id)} was recorded as the person's (basis controlling_terminal).`;
+    const arrived = await ok(sa, "collab_arrive", { purpose: "Keep the notes honest" });
+    expect(arrived.basis_note).toBe(PERSON_ACT_BASIS_NOTE);
+    const inbox = await ok(sa, "collab_inbox", {});
+    expect(inbox.basis_note).toBe(PERSON_ACT_BASIS_NOTE);
+    const item = inbox.items.find((entry: any) => entry.act === "agree");
+    expect(item).toMatchObject({ statement: recordedAs, basis: "controlling_terminal" });
+    const waits = inbox.waiting_on_you.find((entry: any) => entry.what === "record_decision");
+    expect(waits).toMatchObject({ by: "controlling_terminal" });
+    expect(waits.next.say.startsWith(recordedAs)).toBe(true);
+    expect(view.needs).toStartWith("An agreement to these bytes was recorded as the person's (basis controlling_terminal)");
+    expect(view.for_the_person.now).toStartWith("An agreement to these bytes was recorded as the person's (basis controlling_terminal)");
+    const carriedProposal = await ok(sb, "collab_inbox", { about: id, format: "note" });
+    expect(carriedProposal.note).toContain("person agreed (basis controlling_terminal)");
+    // Nothing of a person's act left to show: no note.
+    expect(await ok(sb, "collab_inbox", {})).not.toHaveProperty("basis_note");
+
+    const decided = await ok(sb, "collab_note", { act: "decide", text: "We keep trailing tabs.", re: id });
+    expect(decided.basis_note).toBe(PERSON_ACT_BASIS_NOTE);
+    expect(decided.effect).toContain(
+      `within the agreed extent: an agreement was recorded as the person's (act ${status.agreement!.id}, basis controlling_terminal)`,
+    );
+    expect(decided.rests_on.says).toStartWith("an agreement recorded as the person's (act ");
+    const carriedDecision = await ok(sb, "collab_inbox", { about: decided.ids.report, format: "note" });
+    expect(carriedDecision.note).toContain("agreement basis controlling_terminal");
+    for (const said of [arrived, inbox, view, carriedProposal, decided, carriedDecision]) {
+      expect(JSON.stringify(said)).not.toMatch(/the person (has )?(agreed|rejected)/i);
+    }
+    const row = j.report(decided.ids.report);
+    expect(row.authority_basis).toContain("agreement asserted by controlling_terminal");
+    expect(row.authority_basis).toContain("proves no terminal and no person");
+    expect(row.authority_basis).toBe(agreementBasis("controlling_terminal", status.proposal_sha256, status.agreement!.id));
+    expect(row.authority_basis).not.toContain("person agreed");
+    const record = await ok(sc, "collab_inbox", { about: decided.ids.report });
+    expect(record.outcome).toBe("proceed");
+    expect(record.rests_on.person_act.basis).toBe("controlling_terminal");
+    expect(record.basis_note).toBe(PERSON_ACT_BASIS_NOTE);
+    expect(record.does_not_establish).toEqual([...DECISION_DOES_NOT_ESTABLISH]);
+    expect(record.does_not_establish.some((line: string) =>
+      line.includes("same user") && line.includes("controlling_terminal") && line.includes("user_verified_passkey"))).toBe(true);
+    // The stored basis value is unchanged.
+    const stored = j.store.db.query(`SELECT basis FROM proposal_person_acts WHERE proposal_report_id = ?`).all(id);
+    expect(stored).toEqual([{ basis: "controlling_terminal" }]);
+
+    // A rejection recorded the same way is named by its basis too, and a decide on it records nothing as agreed.
+    const standing = j.store.proposalStatusById(id);
+    j.store.recordPersonActAtTerminal({
+      proposal_report_id: id, proposal_sha256: standing.proposal_sha256, act: "reject", reason: "Not now.",
+      expected_ai_snapshot: j.store.personActChallenge({ proposal_report_id: id, act: "reject", reason: "Not now." }).ai_snapshot,
+    });
+    const stopped = await ok(sa, "collab_inbox", {});
+    expect(stopped.basis_note).toBe(PERSON_ACT_BASIS_NOTE);
+    expect(stopped.items.find((entry: any) => entry.act === "reject").statement)
+      .toBe(`A rejection of ${handleOf("proposal", id)} was recorded as the person's (basis controlling_terminal).`);
+    expect(stopped.waiting_on_you.find((entry: any) => entry.what === "stop").next.say)
+      .toContain("the latest act recorded as the person's on it is a rejection (basis controlling_terminal)");
+    expect((await ok(sa, "collab_inbox", { about: id })).needs)
+      .toStartWith("The latest act recorded as the person's rejects these bytes (basis controlling_terminal)");
+    expect((await refused(sb, "collab_note", { act: "decide", text: "We still keep them.", re: id })).message)
+      .toContain(`An agreement was recorded as the person's (act ${status.agreement!.id}, basis controlling_terminal)`);
   });
 });

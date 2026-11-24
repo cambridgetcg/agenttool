@@ -276,6 +276,10 @@ var MIN_PROPOSAL_CONSULT_SECONDS = 10 * 60;
 var MAX_PROPOSAL_CONSULT_SECONDS = 7 * 24 * 60 * 60;
 var PERSON_ACT_PROTOCOL = "agenttool.collab-person-act/1";
 var PERSON_SET_ASIDE_PROTOCOL = "agenttool.collab-person-set-aside/1";
+var PERSON_ACT_BASIS_NOTE = "What a person act's basis proves: only user_verified_passkey carries a proof that can be re-verified without " + "this database (the assertion and the key's public key are journaled with the act), and it shows that a key " + "enrolled in this journal signed these bytes, not whose key it is: compare the fingerprint of the key in the act's own " + "proof (the SHA-256 of proof.public_key_spki's bytes) with the person's own. " + "controlling_terminal says the terminal path asserted a yes: it proves no terminal and no person, since a process " + "running as the same user can record one through the store or answer through a pseudo-terminal. " + "relayed_by_session is a session's account, and can only stop work.";
+function personActBasisNote(statuses) {
+  return statuses.some((status) => status.person.acts.length > 0 || (status.set_asides?.length ?? 0) > 0) ? { basis_note: PERSON_ACT_BASIS_NOTE } : {};
+}
 var DEFAULT_WAIT_EVENT_LIMIT = 10;
 var MAX_WAIT_EVENT_LIMIT = 50;
 var MAX_WAIT_PAGE_BYTES = 256 * 1024;
@@ -1720,6 +1724,14 @@ function parsePasskeyPublicKey(spki) {
 }
 function passkeyFingerprint(spki) {
   return sha2562(base64urlDecode(spki, "public_key_spki", 1024)).toString("hex");
+}
+function storedPasskeyFingerprint(passkey) {
+  try {
+    parsePasskeyPublicKey(passkey.public_key_spki);
+    return passkeyFingerprint(passkey.public_key_spki);
+  } catch {
+    return passkey.fingerprint;
+  }
 }
 function validatePasskeyScope(rpId, origin) {
   if (typeof rpId !== "string" || !/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(rpId)) {
@@ -5271,6 +5283,7 @@ class CollabStoreCore {
         expected_challenge: derived.challenge
       });
       this.db.query(`UPDATE person_passkeys SET sign_count = ? WHERE credential_id = ?`).run(sign_count, passkey.credential_id);
+      this.journalPasskeyBeforeFirstAct(terms.workspace_id, passkey);
       return this.recordPersonAct({
         workspace_id: terms.workspace_id,
         proposal_report_id: terms.report_id,
@@ -5351,6 +5364,7 @@ class CollabStoreCore {
       const derived = setAsideChallenge(facts.bytes);
       const { sign_count } = verifyPasskeyAssertion({ passkey, assertion, expected_challenge: derived.challenge });
       this.db.query(`UPDATE person_passkeys SET sign_count = ? WHERE credential_id = ?`).run(sign_count, passkey.credential_id);
+      this.journalPasskeyBeforeFirstAct(terms.workspace_id, passkey);
       return this.recordSetAside(terms, challengeId, reason, {
         basis: "user_verified_passkey",
         actor: PERSON_PASSKEY_ACTOR,
@@ -5408,6 +5422,8 @@ class CollabStoreCore {
   enrollPersonPasskey(input) {
     const enrollment = normalizePasskeyEnrollment(input);
     const transaction = this.db.transaction(() => {
+      if (input.workspace_id !== undefined)
+        this.requireWorkspace(input.workspace_id);
       if (this.db.query(`SELECT 1 FROM person_passkeys WHERE credential_id = ?`).get(enrollment.credential_id)) {
         throw new CollabError("passkey_already_enrolled", "This credential id is already enrolled");
       }
@@ -5417,6 +5433,9 @@ class CollabStoreCore {
           fingerprint, sign_count, enrolled_at, revoked_at
         ) VALUES (?, ?, -7, ?, ?, ?, ?, 0, ?, NULL)
       `).run(enrollment.credential_id, enrollment.public_key_spki, enrollment.rp_id, enrollment.origin, enrollment.label, passkeyFingerprint(enrollment.public_key_spki), this.timestamp());
+      if (input.workspace_id !== undefined) {
+        this.journalPasskeyEnrolment(input.workspace_id, this.requirePersonPasskey(enrollment.credential_id), "at_enrolment");
+      }
     });
     transaction.immediate();
     this.tightenFileModes();
@@ -5433,10 +5452,46 @@ class CollabStoreCore {
       if (changed.changes === 0) {
         throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
       }
+      const passkey = this.requirePersonPasskey(credentialId);
+      const recordedIn = this.db.query(`
+        SELECT DISTINCT workspace_id FROM events WHERE type = 'person.passkey_enrolled' AND entity_id = ? ORDER BY workspace_id
+      `).all(passkey.credential_id);
+      for (const { workspace_id } of recordedIn) {
+        this.appendEvent(workspace_id, "person.passkey_revoked", passkey.credential_id, PERSON_DESK_ACTOR, {
+          fingerprint: storedPasskeyFingerprint(passkey),
+          revoked_at: passkey.revoked_at
+        });
+      }
     });
     transaction.immediate();
     this.tightenFileModes();
     return this.listPersonPasskeys().find((key) => key.credential_id === credentialId);
+  }
+  requirePersonPasskey(credentialId) {
+    const row = this.db.query(`SELECT * FROM person_passkeys WHERE credential_id = ?`).get(credentialId);
+    if (!row)
+      throw new CollabError("passkey_not_enrolled", "No enrolled passkey has this credential id");
+    return { ...row, algorithm: -7 };
+  }
+  journalPasskeyEnrolment(workspaceId, passkey, recorded) {
+    this.appendEvent(workspaceId, "person.passkey_enrolled", passkey.credential_id, PERSON_DESK_ACTOR, {
+      fingerprint: passkeyFingerprint(passkey.public_key_spki),
+      rp_id: passkey.rp_id,
+      origin: passkey.origin,
+      ...typeof passkey.label === "string" ? { label: passkey.label } : {},
+      enrolled_at: passkey.enrolled_at,
+      recorded
+    });
+  }
+  journalPasskeyBeforeFirstAct(workspaceId, passkey) {
+    const last = this.db.query(`
+      SELECT json_extract(payload_json, '$.fingerprint') AS fingerprint FROM events
+      WHERE workspace_id = ? AND type = 'person.passkey_enrolled' AND entity_id = ?
+      ORDER BY sequence DESC LIMIT 1
+    `).get(workspaceId, passkey.credential_id);
+    if (last?.fingerprint !== passkeyFingerprint(passkey.public_key_spki)) {
+      this.journalPasskeyEnrolment(workspaceId, passkey, "before_first_act");
+    }
   }
   appendPersonNote(input) {
     const normalized = {
@@ -9991,7 +10046,7 @@ class CollabStore extends CollabStoreCore {
             by_session_id: answer.from_session_id,
             due: null,
             at: answer.created_at,
-            summary: challenge.standing ? "An answer to your standing challenge; only you can lift it." : "An answer to your challenge, which the person set aside, so it no longer blocks; you may lift it, or challenge again."
+            summary: challenge.standing ? "An answer to your standing challenge; only you can lift it." : "An answer to your challenge, which was set aside (recorded as the person's), so it no longer blocks; you may lift it, or challenge again."
           });
         }
       }
@@ -10669,16 +10724,16 @@ class CollabStore extends CollabStoreCore {
       if (!status.may_proceed || !status.agreement) {
         const agreedBefore = [...acts].reverse().find((act) => act.act === "agree") ?? null;
         if (latest?.act === "reject" && agreedBefore) {
-          throw new CollabError("agreement_withdrawn", `The person agreed (act ${agreedBefore.id}), but a later act rejects these bytes: act ${latest.id}, ` + `${latest.basis === "relayed_by_session" ? "relayed by a session" : `by ${latest.basis}`}`, { agreed_act: actView(agreedBefore), later_act: actView(latest) });
+          throw new CollabError("agreement_withdrawn", `An agreement was recorded as the person's (act ${agreedBefore.id}, basis ${agreedBefore.basis}), but a later act rejects these bytes: act ${latest.id}, ` + `${latest.basis === "relayed_by_session" ? "relayed by a session" : `by ${latest.basis}`}`, { agreed_act: actView(agreedBefore), later_act: actView(latest) });
         }
-        throw new CollabError("not_agreed", latest?.act === "reject" ? "The person's latest act on these bytes is a rejection, and there is no agreement to proceed on" : "The person has not agreed to these bytes", {
+        throw new CollabError("not_agreed", latest?.act === "reject" ? `The latest act recorded as the person's on these bytes is a rejection (basis ${latest.basis}), and there is no agreement to proceed on` : "No agreement to these bytes is recorded as the person's", {
           position: status.ai.position,
           person: status.person.state,
           ...latest ? { latest_act: actView(latest) } : {}
         });
       }
       scope = status.terms.extent;
-      basis = `person agreed by ${status.agreement.basis} to proposal_sha256 ${status.proposal_sha256} (act ${status.agreement.id})`;
+      basis = agreementBasis(status.agreement.basis, status.proposal_sha256, status.agreement.id);
       personAct = actView(status.agreement);
     } else {
       scope = NOTE_NOTHING_AUTHORISED;
@@ -11045,6 +11100,9 @@ function normalizeNoteReport(report, index) {
 var NOTE_DECISION_OUTCOMES = ["proceed", "do_not_proceed", "no_decision"];
 var NOTE_NOTHING_AUTHORISED = "nothing is authorised";
 var NOTE_DEFAULT_DECISION_EXTENT = "work this session already holds";
+function agreementBasis(basis, proposalSha256, actId) {
+  return basis === "controlling_terminal" ? `agreement asserted by controlling_terminal to proposal_sha256 ${proposalSha256} (act ${actId}): ` + "the terminal path asserted a yes, which proves no terminal and no person" : `person agreed by ${basis} to proposal_sha256 ${proposalSha256} (act ${actId})`;
+}
 var NOTE_SELF_DECISION_BASIS = "recorded by this session; not a direction decision and not the person's agreement";
 var NOTE_ADDRESSING_EVENT_TYPES = [
   "report.posted",
@@ -11281,13 +11339,13 @@ function deskSoftSpots(data) {
   }), "flagged supports"));
   lines.push(...capped(ended.map((stance) => `Challenge ${stance.id} by ${quoted(stance.from_actor)} still stands, but its challenger's session has ended` + (stance.voice_has_active_session ? "; another session of the same voice is active and can lift it." : ", and no session of its voice is active to lift it.") + ` While it stands the position cannot be consented.` + (v2 && stance.voice_has_live_session === false ? " Under consent/v2 the person can set it aside at the desk, with a reason, while no session of its voice is live." : "") + ` It said: ${quoted(excerpt(stance.statement))}`), "challenges whose challenger's session has ended"));
   lines.push(...capped(ungrounded.map((stance) => `${stance.relation === "supports" ? "Support" : "Challenge"} ${stance.id} by ${quoted(stance.from_actor)} ` + `(${counted(stance.counted, rule)}) gives no reason and no evidence: ` + (stance.grounded_by === "note" ? "the note has no Why and no Evidence lines." : "it has no evidence_refs and no confidence_basis (a legacy report's body is not read for reasons, so its text may still argue a case).")), "stances with no reason or evidence"));
-  const setAsideThere = (entry) => entry.set_aside_on_replaced ? `the person set it aside there at ${entry.set_aside_on_replaced.created_at} (${entry.set_aside_on_replaced.basis}). ` + `Reason: ${quoted(entry.set_aside_on_replaced.reason)}` : "";
-  lines.push(...capped(carried.map((entry) => (entry.carried_in_terms ? `Objection ${entry.challenge_id} by ${quoted(entry.by)}, raised on ${entry.raised_on}, is carried as text in these terms` + (entry.standing_on_replaced ? " and still stands where it was raised" : entry.set_aside_on_replaced ? ` and was set aside by the person where it was raised: ${setAsideThere(entry)}` : " and no longer stands where it was raised") : entry.set_aside_on_replaced ? `Objection ${entry.challenge_id} by ${quoted(entry.by)} was set aside by the person on ${entry.raised_on}, which this proposal replaces, ` + `but is not in these terms: ${setAsideThere(entry)}` : `Objection ${entry.challenge_id} by ${quoted(entry.by)} still stands on ${entry.raised_on}, which this proposal replaces, ` + "but is not in these terms") + (entry.re_raised_here ? "; the same voice also challenges this proposal, and that challenge is counted" : "") + `. It said: ${quoted(excerpt(entry.statement))}`), "carried objections"));
+  const setAsideThere = (entry) => entry.set_aside_on_replaced ? `set aside there at ${entry.set_aside_on_replaced.created_at}, recorded as the person's (basis ${entry.set_aside_on_replaced.basis}). ` + `Reason: ${quoted(entry.set_aside_on_replaced.reason)}` : "";
+  lines.push(...capped(carried.map((entry) => (entry.carried_in_terms ? `Objection ${entry.challenge_id} by ${quoted(entry.by)}, raised on ${entry.raised_on}, is carried as text in these terms` + (entry.standing_on_replaced ? " and still stands where it was raised" : entry.set_aside_on_replaced ? ` and was set aside where it was raised: ${setAsideThere(entry)}` : " and no longer stands where it was raised") : entry.set_aside_on_replaced ? `Objection ${entry.challenge_id} by ${quoted(entry.by)} was set aside on ${entry.raised_on}, which this proposal replaces, ` + `but is not in these terms: ${setAsideThere(entry)}` : `Objection ${entry.challenge_id} by ${quoted(entry.by)} still stands on ${entry.raised_on}, which this proposal replaces, ` + "but is not in these terms") + (entry.re_raised_here ? "; the same voice also challenges this proposal, and that challenge is counted" : "") + `. It said: ${quoted(excerpt(entry.statement))}`), "carried objections"));
   if (carried.length > 0)
     lines.push(carriedObjectionsSentence(rule));
   lines.push(...capped(setAside.map((stance) => {
     const entry = stance.set_aside;
-    return `Challenge ${stance.id} by ${quoted(stance.from_actor)} was set aside by the person at ${entry.created_at} ` + `(${entry.basis}), while no session of its voice was live` + (entry.challenger.last_seen_at ? ` (last seen ${entry.challenger.last_seen_at})` : "") + `. Reason: ${quoted(entry.reason)}. It no longer blocks the position. It said: ${quoted(excerpt(stance.statement))}`;
+    return `Challenge ${stance.id} by ${quoted(stance.from_actor)} was set aside at ${entry.created_at}, ` + `recorded as the person's (basis ${entry.basis}) while no session of its voice was live` + (entry.challenger.last_seen_at ? ` (last seen ${entry.challenger.last_seen_at})` : "") + `. Reason: ${quoted(entry.reason)}. It no longer blocks the position. It said: ${quoted(excerpt(stance.statement))}`;
   }), "set-aside challenges"));
   if (setAside.length > 0)
     lines.push(SET_ASIDE_SENTENCE);
@@ -11436,6 +11494,77 @@ function terminalRendering(text) {
 function pause(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
+var WRITE_STALL_BUDGET_MS = 1e4;
+var WRITE_RETRY_MS = 20;
+var READ_RETRY_MS = 50;
+var FD_CALLS = { writeSync: writeSync2, readSync: readSync2, closeSync: closeSync6, pause };
+function isEagain(error) {
+  const code = error?.code;
+  return code === "EAGAIN" || code === "EWOULDBLOCK";
+}
+
+class TtyStalledError extends Error {
+  name = "TtyStalledError";
+}
+function ttyPortForFd(fd, calls = FD_CALLS, stallBudgetMs = WRITE_STALL_BUDGET_MS) {
+  return {
+    write(text) {
+      const bytes = Buffer.from(text, "utf8");
+      let offset = 0;
+      let stalled = 0;
+      while (offset < bytes.length) {
+        let wrote = 0;
+        let refused;
+        try {
+          wrote = calls.writeSync(fd, bytes, offset, bytes.length - offset);
+        } catch (error) {
+          if (!isEagain(error))
+            throw error;
+          refused = error;
+        }
+        if (wrote > 0) {
+          offset += wrote;
+          stalled = 0;
+          continue;
+        }
+        if (stalled >= stallBudgetMs)
+          throw new TtyStalledError("the terminal accepted no bytes", { cause: refused });
+        calls.pause(WRITE_RETRY_MS);
+        stalled += WRITE_RETRY_MS;
+      }
+    },
+    readLine(maxBytes, deadline, now = Date.now) {
+      const one = Buffer.alloc(1);
+      const collected = [];
+      let overflow = false;
+      while (true) {
+        if (deadline !== undefined && now() > deadline)
+          return null;
+        let read;
+        try {
+          read = calls.readSync(fd, one, 0, 1, null);
+        } catch (error) {
+          if (!isEagain(error))
+            throw error;
+          calls.pause(READ_RETRY_MS);
+          continue;
+        }
+        if (read === 0)
+          return collected.length === 0 ? null : Buffer.from(collected).toString("utf8");
+        if (one[0] === 10 || one[0] === 13)
+          break;
+        if (collected.length < maxBytes)
+          collected.push(one[0]);
+        else
+          overflow = true;
+      }
+      return overflow ? "" : Buffer.from(collected).toString("utf8");
+    },
+    close() {
+      calls.closeSync(fd);
+    }
+  };
+}
 function openDevTty(path = DEV_TTY) {
   let fd;
   try {
@@ -11453,45 +11582,7 @@ function openDevTty(path = DEV_TTY) {
     closeSync6(fd);
     return null;
   }
-  return {
-    write(text) {
-      const bytes = Buffer.from(text, "utf8");
-      let offset = 0;
-      while (offset < bytes.length) {
-        offset += writeSync2(fd, bytes, offset, bytes.length - offset);
-      }
-    },
-    readLine(maxBytes, deadline, now = Date.now) {
-      const one = Buffer.alloc(1);
-      const collected = [];
-      let overflow = false;
-      while (true) {
-        if (deadline !== undefined && now() > deadline)
-          return null;
-        let read;
-        try {
-          read = readSync2(fd, one, 0, 1, null);
-        } catch (error) {
-          if (error.code !== "EAGAIN")
-            throw error;
-          pause(50);
-          continue;
-        }
-        if (read === 0)
-          return collected.length === 0 ? null : Buffer.from(collected).toString("utf8");
-        if (one[0] === 10 || one[0] === 13)
-          break;
-        if (collected.length < maxBytes)
-          collected.push(one[0]);
-        else
-          overflow = true;
-      }
-      return overflow ? "" : Buffer.from(collected).toString("utf8");
-    },
-    close() {
-      closeSync6(fd);
-    }
-  };
+  return ttyPortForFd(fd);
 }
 function confirmOnTty(request, options = {}) {
   const open = options.openTty ?? (() => openDevTty());
@@ -11525,6 +11616,10 @@ function confirmOnTty(request, options = {}) {
 ` : `cancelled; nothing was written
 `);
     return confirmed;
+  } catch (error) {
+    if (!(error instanceof TtyStalledError))
+      throw error;
+    throw new CollabError("tty_unavailable", "The controlling terminal (/dev/tty) stopped taking output (paused with ^S, or not being read), so nothing was written");
   } finally {
     port.close();
   }
@@ -11534,7 +11629,7 @@ function confirmOnTty(request, options = {}) {
 var PERSON_DESK_PROTOCOL = "agenttool.collab-host/1";
 var EXIT_NOT_CONFIRMED = 3;
 var MAX_JSON_INPUT_BYTES = 64 * 1024;
-var PERSON_DESK_USAGE = "usage: agenttool-collab-host person <verb> [--db <path>], where <verb> is one of: " + "workspaces | voices --workspace <id> | proposals --workspace <id> [--proposal <id> | --limit <n>]" + " | inbox [--workspace <id>]" + " | challenge --proposal <id> --act agree | challenge --proposal <id> --act reject --reason <text>" + " | challenge --proposal <id> --act set-aside --challenge <report id> --reason <text>" + " | consent --proposal <id> [--passkey-assertion <path>|-]" + " | reject --proposal <id> --reason <text> [--passkey-assertion <path>|-]" + " | set-aside --proposal <id> --challenge <report id> --reason <text> [--passkey-assertion <path>|-]" + " | ceremony --proposal <id> --act agree|reject|set-aside [--challenge <report id>] [--reason <text>] [--via <ssh-destination>] [--port <n>] [--no-open]" + " | say --workspace <id> --body <text> [--proposal <id>] --idempotency-key <key>" + " | propose --workspace <id> --question <text> --criteria <text> --extent <text>" + " [--known-conflicts <text>] [--topic <text>] [--consult-seconds <n>] --idempotency-key <key>" + " | withdraw --workspace <id> --proposal <id> --reason <text> --idempotency-key <key>" + " | passkey-enroll (--file <path>|- | --ceremony [--label <text>] [--port <n>] [--no-open])" + " | passkeys | passkey-export --credential <id> | passkey-revoke --credential <id>";
+var PERSON_DESK_USAGE = "usage: agenttool-collab-host person <verb> [--db <path>], where <verb> is one of: " + "workspaces | voices --workspace <id> | proposals --workspace <id> [--proposal <id> | --limit <n>]" + " | inbox [--workspace <id>]" + " | challenge --proposal <id> --act agree | challenge --proposal <id> --act reject --reason <text>" + " | challenge --proposal <id> --act set-aside --challenge <report id> --reason <text>" + " | consent --proposal <id> [--passkey-assertion <path>|-]" + " | reject --proposal <id> --reason <text> [--passkey-assertion <path>|-]" + " | set-aside --proposal <id> --challenge <report id> --reason <text> [--passkey-assertion <path>|-]" + " | ceremony --proposal <id> --act agree|reject|set-aside [--challenge <report id>] [--reason <text>] [--via <ssh-destination>] [--port <n>] [--no-open]" + " | say --workspace <id> --body <text> [--proposal <id>] --idempotency-key <key>" + " | propose --workspace <id> --question <text> --criteria <text> --extent <text>" + " [--known-conflicts <text>] [--topic <text>] [--consult-seconds <n>] --idempotency-key <key>" + " | withdraw --workspace <id> --proposal <id> --reason <text> --idempotency-key <key>" + " | passkey-enroll (--file <path>|- | --ceremony [--label <text>] [--port <n>] [--no-open]) [--workspace <id>]" + " | passkeys | passkey-export --credential <id> | passkey-revoke --credential <id>";
 var VERB_OPTIONS = {
   workspaces: { required: [], optional: [] },
   voices: { required: ["workspace"], optional: [] },
@@ -11551,7 +11646,7 @@ var VERB_OPTIONS = {
     optional: ["known-conflicts", "topic", "consult-seconds"]
   },
   withdraw: { required: ["workspace", "proposal", "reason", "idempotency-key"], optional: [] },
-  "passkey-enroll": { required: [], optional: ["file", "ceremony", "label", "port", "no-open"] },
+  "passkey-enroll": { required: [], optional: ["file", "ceremony", "label", "port", "no-open", "workspace"] },
   passkeys: { required: [], optional: [] },
   "passkey-export": { required: ["credential"], optional: [] },
   "passkey-revoke": { required: ["credential"], optional: [] }
@@ -11659,6 +11754,7 @@ function openDeskStore(values, env, deps) {
 }
 function runVerb(store2, verb, values, deps, rule) {
   const done = (result) => ({ cancelled: false, result });
+  const actDone = (proposal) => done({ proposal, ...personActBasisNote([proposal]) });
   switch (verb) {
     case "workspaces":
       return done({ workspaces: store2.listWorkspaces() });
@@ -11670,21 +11766,27 @@ function runVerb(store2, verb, values, deps, rule) {
         return done({
           proposal,
           soft_spots: deskSoftSpotsFor(store2, values.workspace, [proposal]),
-          ...setAsideOptionsFor(store2, values.workspace, [proposal])
+          ...setAsideOptionsFor(store2, values.workspace, [proposal]),
+          ...personActBasisNote([proposal])
         });
       }
       const listed = store2.listProposalStatuses(values.workspace, { limit: parseInteger(values.limit, "limit") });
       return done({
         ...listed,
         soft_spots: deskSoftSpotsFor(store2, values.workspace, listed.proposals),
-        ...setAsideOptionsFor(store2, values.workspace, listed.proposals)
+        ...setAsideOptionsFor(store2, values.workspace, listed.proposals),
+        ...personActBasisNote(listed.proposals)
       });
     }
     case "inbox": {
       if (!values.workspace)
         return done({ summary: store2.personInboxSummary() });
       const inbox = store2.personInbox(values.workspace);
-      return done({ inbox, soft_spots: deskSoftSpotsFor(store2, values.workspace, inbox.awaiting_person) });
+      return done({
+        inbox,
+        soft_spots: deskSoftSpotsFor(store2, values.workspace, inbox.awaiting_person),
+        ...personActBasisNote(inbox.awaiting_person)
+      });
     }
     case "challenge": {
       const act = parseDeskAct(values);
@@ -11698,14 +11800,12 @@ function runVerb(store2, verb, values, deps, rule) {
     }
     case "set-aside": {
       if (values["passkey-assertion"] !== undefined) {
-        return done({
-          proposal: store2.recordSetAsideWithPasskey({
-            proposal_report_id: values.proposal,
-            challenge_report_id: values.challenge,
-            reason: values.reason,
-            assertion: readJsonInput(values["passkey-assertion"], deps)
-          })
-        });
+        return actDone(store2.recordSetAsideWithPasskey({
+          proposal_report_id: values.proposal,
+          challenge_report_id: values.challenge,
+          reason: values.reason,
+          assertion: readJsonInput(values["passkey-assertion"], deps)
+        }));
       }
       const challenge = store2.personSetAsideChallenge({
         proposal_report_id: values.proposal,
@@ -11723,30 +11823,26 @@ function runVerb(store2, verb, values, deps, rule) {
       }, { openTty: deps.openTty, now: deps.now });
       if (!confirmed)
         return { cancelled: true };
-      return done({
-        proposal: store2.recordSetAsideAtTerminal({
-          proposal_report_id: status.proposal.id,
-          proposal_sha256: challenge.proposal_sha256,
-          challenge_report_id: challenge.challenge_report_id,
-          challenge_sha256: challenge.challenge_sha256,
-          challenger_last_seen_at: challenge.challenger_last_seen_at,
-          reason: challenge.reason,
-          expected_ai_snapshot: challenge.ai_snapshot
-        })
-      });
+      return actDone(store2.recordSetAsideAtTerminal({
+        proposal_report_id: status.proposal.id,
+        proposal_sha256: challenge.proposal_sha256,
+        challenge_report_id: challenge.challenge_report_id,
+        challenge_sha256: challenge.challenge_sha256,
+        challenger_last_seen_at: challenge.challenger_last_seen_at,
+        reason: challenge.reason,
+        expected_ai_snapshot: challenge.ai_snapshot
+      }));
     }
     case "consent":
     case "reject": {
       const act = verb === "consent" ? "agree" : "reject";
       if (values["passkey-assertion"] !== undefined) {
-        return done({
-          proposal: store2.recordPersonActWithPasskey({
-            proposal_report_id: values.proposal,
-            act,
-            reason: values.reason,
-            assertion: readJsonInput(values["passkey-assertion"], deps)
-          })
-        });
+        return actDone(store2.recordPersonActWithPasskey({
+          proposal_report_id: values.proposal,
+          act,
+          reason: values.reason,
+          assertion: readJsonInput(values["passkey-assertion"], deps)
+        }));
       }
       const challenge = store2.personActChallenge({ proposal_report_id: values.proposal, act, reason: values.reason });
       const status = store2.proposalStatusById(values.proposal);
@@ -11761,15 +11857,13 @@ ${status.proposal_bytes}`;
       }, { openTty: deps.openTty, now: deps.now });
       if (!confirmed)
         return { cancelled: true };
-      return done({
-        proposal: store2.recordPersonActAtTerminal({
-          proposal_report_id: status.proposal.id,
-          proposal_sha256: status.proposal_sha256,
-          act,
-          reason: challenge.reason ?? undefined,
-          expected_ai_snapshot: challenge.ai_snapshot
-        })
-      });
+      return actDone(store2.recordPersonActAtTerminal({
+        proposal_report_id: status.proposal.id,
+        proposal_sha256: status.proposal_sha256,
+        act,
+        reason: challenge.reason ?? undefined,
+        expected_ai_snapshot: challenge.ai_snapshot
+      }));
     }
     case "say":
       return done({
@@ -11807,6 +11901,7 @@ ${status.proposal_bytes}`;
       if (values.file === undefined) {
         throw new CollabError("usage_error", `passkey-enroll needs --file or --ceremony; ${PERSON_DESK_USAGE}`);
       }
+      const workspaceId = enrolmentWorkspace(store2, values);
       const read = readJsonInput(values.file, deps);
       const exported = read.protocol === PERSON_DESK_PROTOCOL && read.command === "person passkey-export" && typeof read.enrollment === "object" && read.enrollment !== null && !Array.isArray(read.enrollment);
       const input = exported ? read.enrollment : read;
@@ -11818,7 +11913,9 @@ ${status.proposal_bytes}`;
         origin: input.origin,
         label: values.label ?? input.label
       });
-      return confirmEnrollment(store2, enrollment, deps) ? done({ passkey: store2.enrollPersonPasskey(enrollment) }) : { cancelled: true };
+      if (!confirmEnrollment(store2, enrollment, workspaceId, deps))
+        return { cancelled: true };
+      return done({ passkey: store2.enrollPersonPasskey({ ...enrollment, workspace_id: workspaceId }) });
     }
     case "passkeys":
       return done({ passkeys: store2.listPersonPasskeys() });
@@ -11838,10 +11935,11 @@ ${status.proposal_bytes}`;
     }
     case "passkey-revoke": {
       const passkey = activePasskey(store2, values.credential);
-      const bytes = canonicalJson({ revoke: passkey.credential_id, fingerprint: passkey.fingerprint });
+      const fingerprint = storedPasskeyFingerprint(passkey);
+      const bytes = canonicalJson({ revoke: passkey.credential_id, fingerprint });
       const confirmed = confirmOnTty({
         act: "revoke a passkey",
-        summary: [`key fingerprint (sha256): ${passkey.fingerprint}`, `origin ${passkey.origin}`],
+        summary: [`key fingerprint (sha256): ${fingerprint}`, `origin ${passkey.origin}`],
         bytes,
         sha256: createHash6("sha256").update(bytes).digest("hex")
       }, { openTty: deps.openTty, now: deps.now });
@@ -11853,7 +11951,13 @@ ${status.proposal_bytes}`;
       throw new CollabError("usage_error", "person ceremony serves a page; run it through agenttool-collab-host");
   }
 }
-function confirmEnrollment(store2, enrollment, deps) {
+function enrolmentWorkspace(store2, values) {
+  if (values.workspace !== undefined && !store2.listWorkspaces().some((workspace) => workspace.id === values.workspace)) {
+    throw new CollabError("workspace_not_found", "No workspace in this journal has this id; person workspaces lists them");
+  }
+  return values.workspace;
+}
+function confirmEnrollment(store2, enrollment, workspaceId, deps) {
   if (store2.listPersonPasskeys().some((key) => key.credential_id === enrollment.credential_id)) {
     throw new CollabError("passkey_already_enrolled", "This credential id is already enrolled");
   }
@@ -11864,6 +11968,7 @@ function confirmEnrollment(store2, enrollment, deps) {
       `key fingerprint (sha256): ${passkeyFingerprint(enrollment.public_key_spki)}`,
       `relying party ${enrollment.rp_id}, signing origin ${enrollment.origin}`,
       `label ${JSON.stringify(enrollment.label)}`,
+      workspaceId !== undefined ? `recorded now in the chain of workspace ${workspaceId}; in any other, just before the key first acts there` : "recorded in a workspace's chain only just before the key first acts there (--workspace records it now)",
       "Enrol only a passkey you just created yourself; it will sign agreements in your name."
     ],
     bytes,
@@ -12162,6 +12267,7 @@ async function enrollCeremony(values, env, deps, io, command) {
   const origin = `http://localhost:${port}`;
   const store2 = openDeskStore(values, env, deps);
   try {
+    const workspaceId = enrolmentWorkspace(store2, values);
     const challenge = randomBytes2(32).toString("base64url");
     const data = {
       kind: "enroll",
@@ -12182,10 +12288,10 @@ async function enrollCeremony(values, env, deps, io, command) {
         origin,
         label: values.label ?? "Touch ID"
       });
-      if (!confirmEnrollment(store2, enrollment, deps)) {
+      if (!confirmEnrollment(store2, enrollment, workspaceId, deps)) {
         throw new CollabError("not_confirmed", "Not confirmed at the terminal; nothing was enrolled");
       }
-      const passkey = store2.enrollPersonPasskey(enrollment);
+      const passkey = store2.enrollPersonPasskey({ ...enrollment, workspace_id: workspaceId });
       return { enrolled: true, fingerprint: passkey.fingerprint, origin: passkey.origin };
     });
     return { status: "ok", ...result };

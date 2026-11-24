@@ -18,6 +18,7 @@ import {
   MAX_WAIT_EVENT_LIMIT,
   MAX_WAIT_MS,
   MAX_WAIT_RESPONSE_BYTES,
+  personActBasisNote,
   type EventCursor,
   type SessionHandle,
   type TaskStatus,
@@ -438,7 +439,7 @@ export function buildCollabMcpServer(
         "text is the statement on its first line, then an optional body; a text that begins with an act word and \": \" " +
         "is read whole as a collab-note/1 note. Reasons say how each is known; outside evidence is recorded once per note. " +
         "Only the challenger can lift a challenge; anyone else's resolve is recorded as an answer to them. A support is a " +
-        "position, not a permission. A decide's authority is derived by the server: on a proposal the person agreed to, its extent; " +
+        "position, not a permission. A decide's authority is derived by the server: on an agreed proposal, its extent, with the agreement's basis; " +
         "otherwise nothing, or this session's own record, never the person's agreement. dry_run checks and shows the note, writing nothing.",
       annotations: localMutation,
       inputSchema: {
@@ -1364,8 +1365,8 @@ export function buildCollabMcpServer(
       description:
         `Open a proposal the agents settle by lazy consensus (${consentRule}) before a person decides. `
         + "Answer it with collab_report_append supports, challenges and resolves. The agents' position is "
-        + "computed from the journal and authorises nothing alone; a person consents only at the controlling "
-        + "terminal or with an enrolled passkey through the person desk, never through MCP. A challenge stands "
+        + "computed from the journal and authorises nothing alone; a person's consent is recorded with basis "
+        + "controlling_terminal or user_verified_passkey (see basis_note), never through MCP. A challenge stands "
         + "until its own voice resolves or withdraws it"
         + (consentRule === CONSENT_RULE_V2
           ? ", or until the person sets it aside while no session of that voice is live, giving a reason"
@@ -1414,8 +1415,8 @@ export function buildCollabMcpServer(
       title: "Read proposal consent status",
       description:
         "Read one proposal's consent status, or the most recent proposals newest first. The agents' position "
-        + "is computed from the journal. may_proceed is true only while the latest person act agrees, made at the "
-        + "controlling terminal or with an enrolled passkey; an agreement authorises only the proposal's extent.",
+        + "is computed from the journal. may_proceed is true only while the latest person act agrees, recorded with basis "
+        + "controlling_terminal or user_verified_passkey (see basis_note); an agreement authorises only the proposal's extent.",
       annotations: localReadOnly,
       inputSchema: {
         workspace_id: workspaceId,
@@ -1426,9 +1427,12 @@ export function buildCollabMcpServer(
     },
     async ({ workspace_id, proposal_report_id, limit }) => call(() => {
       requireWorkspace(workspace_id);
-      return proposal_report_id
-        ? { proposal: store.proposalStatus(workspace_id, proposal_report_id) }
-        : store.listProposalStatuses(workspace_id, { limit });
+      if (proposal_report_id) {
+        const proposal = store.proposalStatus(workspace_id, proposal_report_id);
+        return { proposal, ...personActBasisNote([proposal]) };
+      }
+      const listed = store.listProposalStatuses(workspace_id, { limit });
+      return { ...listed, ...personActBasisNote(listed.proposals) };
     }),
   );
 
