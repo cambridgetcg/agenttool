@@ -704,15 +704,18 @@ a distinct reviewer when `paths` are given, else a coordination task you report 
 `review` overrides that. With `task` it claims it, and when its lease has lapsed it
 recovers it, which needs `because`. `purpose` goes into a new task's description only.
 `paths` are literal repository-relative prefixes: `src` covers everything under `src/`.
-A new task's path holding a glob character (`*`, `?`, `[` or `]`) would reserve
-nothing, so it is refused with `invalid_path_scope` and a ready `collab_take` with the
-literal prefixes it meant (`src` for `src/**`); a whole-repository pattern such as `**`
-gets the worktree's top-level tracked paths, or a remedy asking for them when git cannot
-list them, and a top-level pattern such as `*.md` gets a remedy asking for the paths it
-meant. `collab_task_create` refuses the same `path_scopes`. Only new input is refused: a
-recorded create sent again still replays, and a task an older build stored with such
-characters still reads, claims, recovers and reviews unchanged. A real path whose name
-holds one of these characters (`app/[id]`) is reserved through its parent (`app`).
+A new task's path holding a glob character (`*`, `?`, `{` or `}`) would reserve
+nothing, so it is refused with `invalid_path_scope` and a remedy naming the literal
+directory it is under (`src` for `src/**` or `src/*.ts`, also in `literal_path_scopes`).
+A pattern under no literal directory (`*.md`, `**/*.ts`, `*/foo`) gets a remedy asking
+for the directory or files it meant. Only `*`, `**` and `**/*` mean the whole
+repository: they get a ready `collab_take` with the worktree's top-level tracked paths,
+or a remedy asking for them when git cannot list them. `collab_task_create` refuses the
+same `path_scopes`. Only new input is refused: a recorded create sent again still
+replays, and a task an older build stored with such characters still reads, claims,
+recovers and reviews unchanged. `[` and `]` are literal, never a character class:
+`app/[id]` reserves exactly that directory. A real path whose name holds one of the
+refused characters is reserved through its parent; at the top level it cannot be.
 A path overlap names every holder, their purposes, and a ready `collab_note` to ask
 them; over paths you hold yourself, it says to finish or release that task. A lease is
 coordination, not ownership or a lock.

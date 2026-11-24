@@ -27,7 +27,7 @@ function populatedJournal(): { dbPath: string; workspaceId: string; store: Colla
     actor: "conformance-tester",
     idempotency_key: "conf-create-1",
     title: "conformance fixture task",
-    path_scopes: ["src/**"],
+    path_scopes: ["src"],
   });
   store.claimTask({
     workspace_id: workspace.id,
@@ -101,7 +101,7 @@ describe("hash conformance against @agenttool/collab", () => {
       ...handle.credential,
       idempotency_key: "sess-create-1",
       title: "session conformance task",
-      path_scopes: ["src/**"],
+      path_scopes: ["src"],
     });
     store.claimTaskForSession({
       ...handle.credential,

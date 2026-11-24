@@ -8160,29 +8160,28 @@ function normalizePathScopes(scopes) {
   });
   return uniqueSorted(normalized);
 }
-var PATH_SCOPE_GLOB = /[*?[\]]/;
+var PATH_SCOPE_GLOB = /[*?{}]/;
+var WHOLE_REPOSITORY_GLOB = /^(\*|\*\*|\*\*\/\*)$/;
 function globPathScopeRefusal(scopes, options = {}) {
-  const scope = scopes.find((item) => PATH_SCOPE_GLOB.test(item));
-  if (scope === undefined)
+  const globs = scopes.filter((item) => PATH_SCOPE_GLOB.test(item));
+  if (globs.length === 0)
     return null;
-  const unlisted = scopes.some((item) => PATH_SCOPE_GLOB.test(item) && literalPathPrefix(item) === "" && !/^\*+(\/|$)/.test(item));
+  const wholeRepository = globs.every((item) => WHOLE_REPOSITORY_GLOB.test(item));
   const prefixes = scopes.map((item) => PATH_SCOPE_GLOB.test(item) ? literalPathPrefix(item) : item);
-  const wholeRepository = prefixes.includes("") && !unlisted;
   let literal = null;
-  if (!unlisted) {
-    try {
-      const top = wholeRepository ? options.top_level?.() ?? [] : [];
-      if (!wholeRepository || top.length > 0 && !top.some((item) => PATH_SCOPE_GLOB.test(item))) {
-        const all = normalizePathScopes([...top, ...prefixes.filter((item) => item !== "")]);
-        literal = all.filter((item) => !all.some((other) => item.startsWith(`${other}/`)));
-      }
-    } catch {}
-  }
-  const say = literal ? `Send the literal scopes ${JSON.stringify(literal)} instead.` : wholeRepository ? 'For the whole repository, list its top-level paths, such as ["src", "tests", "README.md"]; the root itself cannot be reserved.' : 'List the literal paths the pattern meant, such as ["README.md", "src"].';
-  return new CollabError("invalid_path_scope", `Path scope '${scope}' holds a glob character (*, ?, [ or ]). Scopes are literal repository-relative prefixes: ` + "'src' reserves everything under src/, and 'src/**' would reserve nothing", {
-    scope,
+  try {
+    const top = wholeRepository ? options.top_level?.() ?? [] : [];
+    const listed = wholeRepository ? top.length > 0 && !top.some((item) => PATH_SCOPE_GLOB.test(item)) : !prefixes.includes("");
+    if (listed) {
+      const all = normalizePathScopes([...top, ...prefixes.filter((item) => item !== "")]);
+      literal = all.filter((item) => !all.some((other) => item.startsWith(`${other}/`)));
+    }
+  } catch {}
+  const say = wholeRepository ? 'For the whole repository, list its top-level paths, such as ["src", "tests", "README.md"]; the root itself cannot be reserved.' : literal ? `Send the literal scopes ${JSON.stringify(literal)} instead, or the exact files the pattern meant.` : 'Name the literal directory or files each pattern meant, such as ["src", "README.md"].';
+  return new CollabError("invalid_path_scope", `Path scope '${globs[0]}' holds a glob character (*, ?, { or }). Scopes are literal repository-relative prefixes: ` + "'src' reserves everything under src/, and 'src/**' would reserve nothing", {
+    scope: globs[0],
     ...literal ? { literal_path_scopes: literal } : {},
-    remedy: literal && options.ready ? options.ready(literal) : { say: `${say} Nothing was written.` }
+    remedy: wholeRepository && literal && options.ready ? options.ready(literal) : { say: `${say} Nothing was written.` }
   });
 }
 function literalPathPrefix(scope) {

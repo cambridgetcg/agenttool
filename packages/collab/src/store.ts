@@ -8529,60 +8529,64 @@ export function normalizePathScopes(scopes: string[]): string[] {
 }
 
 /**
- * Characters a glob would read as a pattern. Path scopes are literal
- * prefixes, so `src/**` reserves only a path literally named `**` under src
- * and conflicts with nothing a session edits.
+ * Characters that mean a pattern was sent. Path scopes are literal prefixes,
+ * so `src/**` reserves only a path literally named `**` under src and
+ * conflicts with nothing a session edits. `[` and `]` are not among them: real
+ * paths hold them (`app/[id]`), and as a literal prefix they reserve exactly that.
  */
-const PATH_SCOPE_GLOB = /[*?[\]]/;
+const PATH_SCOPE_GLOB = /[*?{}]/;
 
-/** How a caller turns the refusal's literal scopes into a ready call for its own tool. */
+/** The only patterns that mean the whole repository, and nothing narrower. */
+const WHOLE_REPOSITORY_GLOB = /^(\*|\*\*|\*\*\/\*)$/;
+
+/** How a caller turns a whole-repository pattern's literal scopes into a ready call for its own tool. */
 export interface GlobPathScopeRemedy {
   ready?: (scopes: string[]) => { tool: string; input: Record<string, unknown> };
-  /** A repository's top-level paths, read only for a whole-repository pattern. */
+  /** A repository's top-level paths, read only when every pattern is the whole repository. */
   top_level?: () => string[] | null;
 }
 
 /**
  * The refusal for a new task's normalized path scopes when one holds a glob
- * character, naming the literal prefixes that would reserve what it meant;
- * null when none does. New input only: it runs where a task is first written,
- * after the idempotency receipt is read, so a recorded create still replays
- * and a stored scope is read, claimed, recovered and reviewed unchanged.
+ * character; null when none does. Scopes whose only patterns are `*`, `**` or
+ * `**\/*` mean the whole repository, so its top-level paths make a ready
+ * call. Any other pattern gets a remedy that names the literal directory it
+ * is under and leaves the choice to the caller: reserving that directory may
+ * be more than the pattern meant. New input only: it runs where a task is
+ * first written, after the idempotency receipt is read, so a recorded create
+ * still replays and a stored scope is read, claimed, recovered and reviewed
+ * unchanged.
  */
 export function globPathScopeRefusal(scopes: readonly string[], options: GlobPathScopeRemedy = {}): CollabError | null {
-  const scope = scopes.find((item) => PATH_SCOPE_GLOB.test(item));
-  if (scope === undefined) return null;
-  // '*' and '**' first mean the whole repository. Another pattern in the first
-  // segment ('*.md') names top-level paths only its caller can list.
-  const unlisted = scopes.some((item) => PATH_SCOPE_GLOB.test(item) && literalPathPrefix(item) === "" && !/^\*+(\/|$)/.test(item));
+  const globs = scopes.filter((item) => PATH_SCOPE_GLOB.test(item));
+  if (globs.length === 0) return null;
+  const wholeRepository = globs.every((item) => WHOLE_REPOSITORY_GLOB.test(item));
   const prefixes = scopes.map((item) => PATH_SCOPE_GLOB.test(item) ? literalPathPrefix(item) : item);
-  const wholeRepository = prefixes.includes("") && !unlisted;
   let literal: string[] | null = null;
-  if (!unlisted) {
-    try {
-      const top = wholeRepository ? options.top_level?.() ?? [] : [];
-      // Every top-level path, or no list: part of them would not be the whole repository.
-      if (!wholeRepository || (top.length > 0 && !top.some((item) => PATH_SCOPE_GLOB.test(item)))) {
-        const all = normalizePathScopes([...top, ...prefixes.filter((item) => item !== "")]);
-        literal = all.filter((item) => !all.some((other) => item.startsWith(`${other}/`)));
-      }
-    } catch {
-      // Too many or unusable paths: the remedy says how to choose them instead.
+  try {
+    const top = wholeRepository ? options.top_level?.() ?? [] : [];
+    // Every top-level path, or no list: part of them would not be the whole repository.
+    const listed = wholeRepository ? top.length > 0 && !top.some((item) => PATH_SCOPE_GLOB.test(item)) : !prefixes.includes("");
+    if (listed) {
+      const all = normalizePathScopes([...top, ...prefixes.filter((item) => item !== "")]);
+      literal = all.filter((item) => !all.some((other) => item.startsWith(`${other}/`)));
     }
+  } catch {
+    // Too many or unusable paths: the remedy says how to choose them instead.
   }
-  const say = literal
-    ? `Send the literal scopes ${JSON.stringify(literal)} instead.`
-    : wholeRepository
-      ? "For the whole repository, list its top-level paths, such as [\"src\", \"tests\", \"README.md\"]; the root itself cannot be reserved."
-      : "List the literal paths the pattern meant, such as [\"README.md\", \"src\"].";
+  const say = wholeRepository
+    ? "For the whole repository, list its top-level paths, such as [\"src\", \"tests\", \"README.md\"]; the root itself cannot be reserved."
+    : literal
+      ? `Send the literal scopes ${JSON.stringify(literal)} instead, or the exact files the pattern meant.`
+      : "Name the literal directory or files each pattern meant, such as [\"src\", \"README.md\"].";
   return new CollabError(
     "invalid_path_scope",
-    `Path scope '${scope}' holds a glob character (*, ?, [ or ]). Scopes are literal repository-relative prefixes: `
+    `Path scope '${globs[0]!}' holds a glob character (*, ?, { or }). Scopes are literal repository-relative prefixes: `
       + "'src' reserves everything under src/, and 'src/**' would reserve nothing",
     {
-      scope,
+      scope: globs[0]!,
       ...(literal ? { literal_path_scopes: literal } : {}),
-      remedy: literal && options.ready ? options.ready(literal) : { say: `${say} Nothing was written.` },
+      remedy: wholeRepository && literal && options.ready ? options.ready(literal) : { say: `${say} Nothing was written.` },
     },
   );
 }
