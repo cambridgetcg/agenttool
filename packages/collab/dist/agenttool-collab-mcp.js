@@ -1,17 +1,13 @@
 #!/usr/bin/env bun
 // @bun
 var __defProp = Object.defineProperty;
-var __returnValue = (v) => v;
-function __exportSetter(name, newValue) {
-  this[name] = __returnValue.bind(null, newValue);
-}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: __exportSetter.bind(all, name)
+      set: (newValue) => all[name] = () => newValue
     });
 };
 
@@ -26712,7 +26708,7 @@ var require_formats = /* @__PURE__ */ __commonJSMin((exports) => {
   }
   const TIME = /^(\d\d):(\d\d):(\d\d(?:\.\d+)?)(z|([+-])(\d\d)(?::?(\d\d))?)?$/i;
   function getTime(strictTimeZone) {
-    return function time3(str) {
+    return function time(str) {
       const matches = TIME.exec(str);
       if (!matches)
         return false;
