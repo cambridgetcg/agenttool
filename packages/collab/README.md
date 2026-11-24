@@ -596,9 +596,10 @@ that process holds is attested in `session_parent_attestations` with basis
 `same_mcp_process`, and shares that parent's consent voice and ballot unit. A
 Claude Code subagent shares its parent's MCP process and therefore its session,
 unless it starts its own `binding_key` slot or its agent definition starts its
-own collab server. Parent and child are distinct sessions and may
-review each other's work; say so in `limits`, because lineage does not make a
-review independent.
+own collab server. A child with its own session and its parent are distinct
+sessions and may review each other's work; say so in `limits`, because lineage
+does not make a review independent. A subagent speaking through its parent's
+session is that session, so neither can review the other's work.
 
 ### A host that cannot commit
 

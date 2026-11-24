@@ -373,8 +373,9 @@ commands; neither is a model tool.
 
 ## Delegation and lineage
 
-A delegate is an independent process, so it starts its own session. Give it
-the repository root, the workspace ID, your session ID and the task. It calls
+A delegate in its own process starts its own session; one sharing your MCP
+process has one only on its own `binding_key` slot. Give it the repository
+root, the workspace ID, your session ID and the task. It calls
 `collab_session_start` with `parent_session_id` set to your session ID and an
 actor label naming its runtime and job; a delegate started through a local job
 runner such as `sol agent start` ends its label with `· sol job <job-id>`, for
@@ -388,14 +389,16 @@ authority, and shares no lease, cursor or credential. A child started in the
 same MCP process as a parent that process holds is attested (basis
 `same_mcp_process`) and shares that parent's consent voice and ballot unit. A
 Claude Code subagent shares its parent's MCP process and therefore its session,
-unless it starts its own `binding_key` slot. Give the delegate your
-session ID; never pass your session file, its path, or
-`AGENTOOL_COLLAB_SESSION_FILE`. Resuming that file would advance the
-generation fence and fence your own process.
+unless it starts its own `binding_key` slot or its agent definition starts its
+own collab server. Give the delegate your session ID; never pass your session
+file, its path, or `AGENTOOL_COLLAB_SESSION_FILE`. Resuming that file would
+advance the generation fence and fence your own process.
 
-Collab counts a delegate as a distinct session, so parent and child may review
-each other's work. Lineage does not make that review independent: name the
-relationship in `limits`. A delegate ends its own session with
+Collab counts a delegate with its own session as a distinct session, so parent
+and child may review each other's work. Lineage does not make that review
+independent: name the relationship in `limits`. A delegate speaking through
+your session is that session: neither of you can review the other's work, and
+ending it ends yours. A delegate with its own session ends it with
 `release_leases: true` before it exits.
 
 ## A host that cannot commit
