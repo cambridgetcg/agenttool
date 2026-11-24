@@ -46859,8 +46859,46 @@ Legacy session tools: ${legacyInstructions}`
         slot = { key: key2, binding: null };
         slots.set(key2, slot);
       }
-      return requestSlot.run(slot, () => callback(args, ctx));
+      const bound = slot.binding;
+      const result = await requestSlot.run(slot, () => callback(args, ctx));
+      return bound ? freeEndedSlot(slot, bound, result, isNoteVerb(name)) : result;
     })(), () => store2.observedAt()));
+  };
+  const freeEndedSlot = (slot, bound, result, note) => {
+    if (!isRecord(result) || result.isError !== true || slot.binding !== bound)
+      return result;
+    const payload = result.structuredContent;
+    if (!isRecord(payload) || (note ? payload.code : payload.error) !== "session_auth_failed")
+      return result;
+    const credential = bound.handle.credential;
+    let current;
+    try {
+      current = store2.getCoordinationSession(credential.session_id);
+    } catch {
+      return result;
+    }
+    if (!current)
+      return result;
+    const ended = current.status === "ended";
+    if (!ended && current.generation === credential.generation)
+      return result;
+    slot.binding = null;
+    if (ended)
+      options.host_binding?.forget(credential.session_id);
+    const keyed = slot.key ? ` with binding_key ${slot.key}` : "";
+    const what = ended ? `Session ${credential.session_id} was ended outside this process` : `Session ${credential.session_id} was resumed by another process`;
+    const say = note ? `${what}, so this slot no longer holds it: the slot is free, and collab_arrive${keyed} starts a new session on it.` : `${what}, so this slot no longer holds it: the slot is free, and collab_session_start${keyed} starts a new session on it.`;
+    const freed = {
+      ...payload,
+      slot_freed: true,
+      bound_session: { id: credential.session_id, state: ended ? "ended" : "resumed_elsewhere" },
+      remedy: note ? { say } : say
+    };
+    return {
+      ...result,
+      structuredContent: freed,
+      content: [{ type: "text", text: JSON.stringify(freed, null, 2) }]
+    };
   };
   const waitShutdown = new AbortController;
   const waits = { active: 0, max: WAITS_PER_ENDPOINT };

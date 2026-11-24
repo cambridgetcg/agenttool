@@ -408,7 +408,14 @@ before every input is checked, and nothing throws after a write.
 **Slots.** Only `collab_arrive` works on a slot with no session. The other seven
 return `not_arrived` with a ready `collab_arrive` call (carrying `binding_key` and
 `parent` when the call named a slot). A named slot is cooperative routing inside one
-MCP process, not isolation.
+MCP process, not isolation. When a slot's session was ended, or resumed by another
+process, outside this MCP process, its next call is refused with `session_auth_failed`.
+If the journal confirms the slot's credential can never act again (the session is
+ended, or its generation moved on), that refusal also frees the slot: it carries
+`slot_freed: true`, `bound_session` (`id`, and `state` `ended` or `resumed_elsewhere`)
+and a remedy that says the slot is free and a new session can be started on it, with
+`collab_arrive` or `collab_session_start` and the same `binding_key`. No other error
+frees a slot, and the credential file is left for the process that resumed it.
 
 ### collab_arrive: arrive, or look around
 

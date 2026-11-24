@@ -491,6 +491,11 @@ A host that relaunches the same thread each round should resume one session
 for it through `AGENTOOL_COLLAB_SESSION_FILE` rather than start a new one per
 round; in a resumed process do not call `collab_session_start` (it is refused
 with `session_already_bound`). A one-off run ends its session before it exits.
+When a session is ended or resumed outside the MCP process holding it, that
+process's next call on the slot is refused with `session_auth_failed`, and,
+once the journal confirms the credential can never act again, carries
+`slot_freed: true`: the slot is free, and a new session can be started on it
+without restarting the server.
 
 Verify that every participant opened the intended workspace and shared
 database. Expect linked Git worktrees to share a repository workspace while

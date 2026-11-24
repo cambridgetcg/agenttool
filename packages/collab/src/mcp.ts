@@ -253,9 +253,59 @@ export function buildCollabMcpServer(
         slot = { key, binding: null };
         slots.set(key, slot);
       }
-      return requestSlot.run(slot, () => callback(args, ctx));
+      const bound = slot.binding;
+      const result = await requestSlot.run(slot, () => callback(args, ctx));
+      return bound ? freeEndedSlot(slot, bound, result, isNoteVerb(name)) : result;
     })(), () => store.observedAt()));
   }) as McpServer["registerTool"];
+
+  /**
+   * A slot whose session was ended, or resumed by another process, outside
+   * this process would otherwise stay wedged: every call fails with
+   * session_auth_failed and a new start is refused as session_already_bound
+   * until the MCP restarts. Only on a session_auth_failed result, only while
+   * the slot still holds the binding the call ran with, and only when the
+   * store confirms that credential can never act again (the session is ended,
+   * or its generation moved on) is the slot cleared, and the refusal's remedy
+   * says so. Any other error, or an unconfirmed one, leaves the binding as it
+   * was. The credential file is left alone: a process that resumed the
+   * session reads it. An ended session's host binding goes, as on any end.
+   */
+  const freeEndedSlot = <R>(slot: Slot, bound: BoundSession, result: R, note: boolean): R => {
+    if (!isRecord(result) || result.isError !== true || slot.binding !== bound) return result;
+    const payload = result.structuredContent;
+    if (!isRecord(payload) || (note ? payload.code : payload.error) !== "session_auth_failed") return result;
+    const credential = bound.handle.credential;
+    let current: ReturnType<CollabStore["getCoordinationSession"]>;
+    try {
+      current = store.getCoordinationSession(credential.session_id);
+    } catch {
+      return result;
+    }
+    if (!current) return result;
+    const ended = current.status === "ended";
+    if (!ended && current.generation === credential.generation) return result;
+    slot.binding = null;
+    if (ended) options.host_binding?.forget(credential.session_id);
+    const keyed = slot.key ? ` with binding_key ${slot.key}` : "";
+    const what = ended
+      ? `Session ${credential.session_id} was ended outside this process`
+      : `Session ${credential.session_id} was resumed by another process`;
+    const say = note
+      ? `${what}, so this slot no longer holds it: the slot is free, and collab_arrive${keyed} starts a new session on it.`
+      : `${what}, so this slot no longer holds it: the slot is free, and collab_session_start${keyed} starts a new session on it.`;
+    const freed: Record<string, unknown> = {
+      ...payload,
+      slot_freed: true,
+      bound_session: { id: credential.session_id, state: ended ? "ended" : "resumed_elsewhere" },
+      remedy: note ? { say } : say,
+    };
+    return {
+      ...result,
+      structuredContent: freed,
+      content: [{ type: "text" as const, text: JSON.stringify(freed, null, 2) }],
+    } as R;
+  };
 
   const waitShutdown = new AbortController();
   // One count for collab_events_wait and collab_inbox's wait together.
