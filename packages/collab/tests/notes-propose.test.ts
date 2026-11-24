@@ -420,6 +420,10 @@ describe("collab_note decide", () => {
   test("a rejection rings every session that decided on the proposal before it, as well as the author", async () => {
     const { j, a, b, c, sb, sc, id } = await agreedProposal();
     await ok(sb, "collab_note", { act: "decide", text: "We keep trailing tabs.", re: id });
+    // Charlie only cites the proposal in a plain note: that is no decision.
+    const cited = await ok(sc, "collab_note", { text: "Reading this before I start.", evidence: [`report:${id}`] });
+    expect(j.report(cited.ids.report).kind).not.toBe("decision");
+    expect(JSON.parse(j.report(cited.ids.report).evidence_refs_json)).toContain(`report:${id}`);
     const anchor = () => {
       const workspace = j.store.getWorkspace(a.workspace.id)!;
       return { epoch_id: workspace.epoch_id, sequence: workspace.event_head_sequence, hash: workspace.event_head_hash };
@@ -432,7 +436,7 @@ describe("collab_note decide", () => {
     const before = anchor();
     rejectAtTerminal(j, id, "Not this week.");
     const rejection = j.store.eventsSince(a.workspace.id, 0, 500).events.filter((event) => event.type === "proposal.rejected").at(-1)!;
-    // The author and the decider are named; charlie supported but never decided.
+    // The author and the decider are named; charlie supported and cited the proposal but never decided.
     expect([a, b, c].filter((handle) => j.store.eventAddressesSession(rejection, handle.session.id)).map((handle) => handle.session.actor))
       .toEqual(["alpha", "bravo"]);
     expect(waitAddressed(b, before).status).toBe("ready");
