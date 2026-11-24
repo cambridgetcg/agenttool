@@ -506,8 +506,8 @@ collab_inbox {"since": 0, "include": "all"}
   handle, act, from, to, re, at, statement, text, why, evidence, why_you}`; evidence
   items carry `observed` and, for files the server hashed, `now`. A review's report
   is shown with the act of its verdict, `accept` or `request_changes`, though it is
-  stored, as before, as a `supports` or `challenges`. A completion's item, and its
-  report in a thread, carry `changes`: what its event recorded about the changed paths
+  stored, as before, as a `supports` or `challenges`. A completion's item when it is
+  addressed to you, and its report in a thread, carry `changes`: what its event recorded about the changed paths
   (README "Changed paths and reviewer relation"), when it recorded any.
 - **One line per thing.** A look-back, and a pass with `include: "all"`, read as a
   record rather than a log: cited evidence and attached artifacts are left out, since

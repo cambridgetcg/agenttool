@@ -68,7 +68,8 @@ and inspect existing work first.
    `accept` or `request_changes`, a summary, evidence, and your own
    `confidence`, `confidence_basis` and `limits`. Read `outside_scopes` in the
    completion event (`collab_events_since` or `collab_next`), or as `changes` on
-   the completion in `collab_inbox`. It covers only changes since the latest
+   the completion's item in `collab_inbox` when it is addressed to you (otherwise
+   `collab_inbox {about: <task>}`). It covers only changes since the latest
    claim, takeover or handoff, so an empty list does not cover earlier rounds:
    read the task's earlier completion events too. The review records your `reviewer_relation` to the
    reporter (`same_voice`, `declared_parent`, `declared_child`,

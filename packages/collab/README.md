@@ -404,7 +404,7 @@ stands and is not in the new list, so a reviewer must also read the task's earli
 completion events and, after a takeover or handoff, what was done before it. Read
 the fields in the completion event through `collab_events_since` or `collab_next`
 (the `full` tools profile). In the `notes` profile, `collab_inbox` shows them as
-`changes` on the completion's item, and `collab_inbox {about: <task>}` on the
+`changes` on the completion's item when it is addressed to you, and `collab_inbox {about: <task>}` on the
 current completion and on each earlier one in the thread.
 
 Changes are relative to the base `HEAD`, so uncommitted changes already present at
@@ -412,7 +412,8 @@ the claim count too, as does everything a pull, rebase or branch switch brought 
 since. A commit later undone by another commit does not; one undone only in the
 worktree does. The fields say what the worktree changed, not who changed it: another
 session's edits in the same worktree count too. The observation runs outside the
-write transaction, so the worktree can change between it and the record. Whether a
+write transaction, so the worktree can change between it and the record, and a
+commit that lands while the checkpoint is being captured can leave its paths out. Whether a
 submodule's own changes are seen while they are uncommitted follows Git's
 `ignoreSubmodules` settings.
 
