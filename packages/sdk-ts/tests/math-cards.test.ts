@@ -510,22 +510,28 @@ describe("MathCardsClient direct transport over split and stalled bodies", () =>
   );
 
   test.each([
-    ["before the response head", false],
-    ["mid-body", true],
+    ["before the response head", "nothing"],
+    ["right after the response head", "head"],
+    ["mid-body (content-length framing)", "content-length"],
+    ["mid-body (chunked framing)", "chunked"],
   ] as const)(
     "rejects within its own timeout when the server stalls %s",
-    async (_where, sendPartOfBody) => {
+    async (_where, sent) => {
       const body = responseBytes();
       const { error, elapsed } = await withRawServer(
         async (socket) => {
-          if (!sendPartOfBody) return;
+          if (sent === "nothing") return;
           write(socket, head("200 OK", [
             "content-type: application/json",
-            `content-length: ${body.byteLength}`,
+            sent === "chunked"
+              ? "transfer-encoding: chunked"
+              : `content-length: ${body.byteLength}`,
           ]));
+          // The rest of the body never comes; the socket stays open.
+          if (sent === "head") return;
           await sleep(PIECE_DELAY_MS);
-          // The rest of the declared body never comes; the socket stays open.
-          write(socket, body.subarray(0, 1024));
+          const part = body.subarray(0, 1024);
+          write(socket, sent === "chunked" ? chunkFrame(part) : part);
         },
         async (baseUrl) => {
           const started = performance.now();
