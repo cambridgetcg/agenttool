@@ -199,7 +199,8 @@ describe("current outward operational claims", () => {
     expect(map).not.toMatch(/reference implementation ~80% complete/i);
     expect(map).toContain("](WAKE.md)");
     expect(read("docs/WAKE.md")).toMatch(/GET \/v1\/wake` is an authenticated, project-scoped/is);
-    expect(read("api/src/index.ts")).toContain('app.use("/v1/wake", authMiddleware)');
+    // The wildcard also covers bare /v1/wake (assembled-app check:
+    // tests/middleware-mounted-once.test.ts).
     expect(read("api/src/index.ts")).toContain('app.use("/v1/wake/*", authMiddleware)');
     expect(webSurface).not.toContain("(18/18 pass)");
 
