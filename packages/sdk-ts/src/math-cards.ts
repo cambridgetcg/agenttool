@@ -11,7 +11,7 @@
 
 // The explicit package subpath prevents Bun from substituting its global
 // `undici` compatibility shim, which inherits HTTP(S)_PROXY.
-import { Agent as DirectAgent, fetch as directFetch } from "undici/index.js";
+import { Agent as DirectAgent, request as directRequest } from "undici/index.js";
 
 import { errorFromBody } from "./_http.js";
 import { AgentToolError } from "./errors.js";
@@ -1187,75 +1187,88 @@ function assertAssessResponse(value: unknown): asserts value is MathCardAssessRe
   }
 }
 
-function mediaType(headers: Headers): string {
-  return headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+type DirectHeaders = Record<string, string | string[] | undefined>;
+
+/** The parts of an undici `request()` response this client reads. */
+interface DirectResponse {
+  readonly statusCode: number;
+  readonly headers: DirectHeaders;
+  readonly body: AsyncIterable<unknown> & {
+    on(event: "error", listener: () => void): unknown;
+    destroy(error?: Error): unknown;
+  };
+}
+
+/** One header as `Headers.get()` reads it: repeated lines joined by ", ". */
+function headerValue(headers: DirectHeaders, name: string): string | undefined {
+  const target = name.toLowerCase();
+  for (const [key, raw] of Object.entries(headers)) {
+    if (key.toLowerCase() !== target) continue;
+    return Array.isArray(raw) ? raw.join(", ") : raw;
+  }
+  return undefined;
+}
+
+function mediaType(headers: DirectHeaders): string {
+  return headerValue(headers, "content-type")?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
 }
 
 function isJsonMediaType(value: string): boolean {
   return value === "application/json" || JSON_SUFFIX_MEDIA_TYPE.test(value);
 }
 
-async function cancelBody(response: Response): Promise<void> {
+function cancelBody(response: DirectResponse): void {
   try {
-    const cancellation = response.body?.cancel();
-    void cancellation?.catch(() => undefined);
+    response.body.on("error", () => undefined);
+    response.body.destroy();
   } catch {
     // Cleanup failure must not displace the deterministic protocol error.
   }
 }
 
 async function readBoundedBytes(
-  response: Response,
+  response: DirectResponse,
   maximumBytes: number,
   timeoutSignal: AbortSignal,
 ): Promise<Uint8Array> {
-  const contentLength = response.headers.get("content-length");
-  if (contentLength !== null) {
+  const contentLength = headerValue(response.headers, "content-length");
+  if (contentLength !== undefined) {
     if (!/^(?:0|[1-9][0-9]*)$/u.test(contentLength)) {
-      await cancelBody(response);
-      invalidResponse("$response.headers.content-length", "invalid decimal", response.status);
+      cancelBody(response);
+      invalidResponse("$response.headers.content-length", "invalid decimal", response.statusCode);
     }
     const declared = Number(contentLength);
     if (!Number.isSafeInteger(declared)) {
-      await cancelBody(response);
-      invalidResponse("$response.headers.content-length", "unsafe size", response.status);
+      cancelBody(response);
+      invalidResponse("$response.headers.content-length", "unsafe size", response.statusCode);
     }
     if (declared > maximumBytes) {
-      await cancelBody(response);
+      cancelBody(response);
       throw mathCardsError(
         "Math Card response exceeded the configured limit.",
         "math_card_response_too_large",
         "Use the bounded assessment endpoint or raise maxResponseBytes deliberately.",
-        { status: response.status, details: { max_response_bytes: maximumBytes } },
+        { status: response.statusCode, details: { max_response_bytes: maximumBytes } },
       );
     }
   }
-  if (response.body === null) return new Uint8Array();
 
-  let reader: ReadableStreamDefaultReader<Uint8Array>;
-  try {
-    reader = response.body.getReader();
-  } catch {
-    invalidResponse("$response.body", "unreadable stream", response.status);
-  }
   const chunks: Uint8Array[] = [];
   let total = 0;
   try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    for await (const value of response.body) {
+      if (!(value instanceof Uint8Array)) {
+        cancelBody(response);
+        invalidResponse("$response.body", "unreadable stream", response.statusCode);
+      }
       total += value.byteLength;
       if (total > maximumBytes) {
-        try {
-          await reader.cancel();
-        } catch {
-          // Preserve the size error.
-        }
+        cancelBody(response);
         throw mathCardsError(
           "Math Card response exceeded the configured limit.",
           "math_card_response_too_large",
           "Use the bounded assessment endpoint or raise maxResponseBytes deliberately.",
-          { status: response.status, details: { max_response_bytes: maximumBytes } },
+          { status: response.statusCode, details: { max_response_bytes: maximumBytes } },
         );
       }
       chunks.push(value);
@@ -1273,10 +1286,8 @@ async function readBoundedBytes(
       "Math Card response body could not be read.",
       "math_card_invalid_response",
       "Use an endpoint that returns one complete bounded JSON envelope.",
-      { status: response.status },
+      { status: response.statusCode },
     );
-  } finally {
-    reader.releaseLock();
   }
 
   const result = new Uint8Array(total);
@@ -1301,19 +1312,26 @@ function decodeErrorJson(bytes: Uint8Array): unknown {
   }
 }
 
-interface DirectResponse {
-  response: Response;
+interface DirectExchange {
+  response: DirectResponse;
   close: () => Promise<void>;
 }
 
+/**
+ * One POST over a one-shot direct undici dispatcher. It uses undici's
+ * `request()`, which never follows redirects, rather than undici's `fetch()`:
+ * under Bun 1.3.x the latter could stall forever reading a response body
+ * that arrived in more than one socket read, past its AbortSignal timeout.
+ * The signal still bounds the whole exchange, body included.
+ */
 async function directPost(
   url: string,
   body: string,
   signal: AbortSignal,
-): Promise<DirectResponse> {
+): Promise<DirectExchange> {
   const dispatcher = new DirectAgent({ connections: 1, pipelining: 0 });
   try {
-    const response = await directFetch(url, {
+    const response = await directRequest(url, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -1321,15 +1339,14 @@ async function directPost(
       },
       body,
       signal,
-      redirect: "manual",
       dispatcher,
-    });
+    }) as DirectResponse;
     return {
-      response: response as unknown as Response,
+      response,
       close: () => dispatcher.close(),
     };
   } catch (error) {
-    void dispatcher.destroy();
+    void dispatcher.destroy().catch(() => undefined);
     throw error;
   }
 }
@@ -1382,7 +1399,7 @@ export class MathCardsClient {
     assertCreateMathCardInput(wire);
 
     const timeoutSignal = AbortSignal.timeout(this.options.timeoutMs);
-    let response: Response;
+    let response: DirectResponse;
     let closeTransport: () => Promise<void>;
     try {
       // The explicit one-shot undici dispatcher opens a direct origin
@@ -1405,13 +1422,14 @@ export class MathCardsClient {
     }
 
     try {
-      if (response.status >= 300 && response.status < 400) {
-        await cancelBody(response);
+      const status = response.statusCode;
+      if (status >= 300 && status < 400) {
+        cancelBody(response);
         throw mathCardsError(
           "Math Card endpoint refused an HTTP redirect.",
           "math_card_redirect_refused",
           "Use the exact AgentTool API origin; public assessment never follows redirects.",
-          { status: response.status },
+          { status },
         );
       }
 
@@ -1420,28 +1438,29 @@ export class MathCardsClient {
         this.options.maxResponseBytes,
         timeoutSignal,
       );
-      if (response.status >= 400) {
+      if (status >= 400) {
+        const headers = response.headers;
         throw errorFromBody(
           decodeErrorJson(bytes),
-          response.status,
+          status,
           "math_cards.assess",
-          response.headers,
+          { get: (name) => headerValue(headers, name) ?? null },
           { hint: "Correct the closed Math Card input and retry deliberately." },
         );
       }
-      if (response.status !== 200) {
+      if (status !== 200) {
         throw mathCardsError(
-          `Math Card endpoint returned unexpected HTTP ${response.status}.`,
+          `Math Card endpoint returned unexpected HTTP ${status}.`,
           "math_card_http_error",
           "Use the canonical endpoint, which returns HTTP 200 for every valid assessment.",
-          { status: response.status },
+          { status },
         );
       }
       if (!isJsonMediaType(mediaType(response.headers))) {
         invalidResponse(
           "$response.headers.content-type",
           "expected application/json",
-          response.status,
+          status,
         );
       }
 
@@ -1449,7 +1468,7 @@ export class MathCardsClient {
       try {
         decoded = decodeJson(bytes);
       } catch {
-        invalidResponse("$response.body", "expected UTF-8 JSON", response.status);
+        invalidResponse("$response.body", "expected UTF-8 JSON", status);
       }
       assertAssessResponse(decoded);
       return deepFreeze(decoded);

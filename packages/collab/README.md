@@ -1,6 +1,6 @@
 # @agenttool/collab
 
-> **Compass:** Collaboration channels (`docs/COLLABORATION-CHANNELS.md` in the private source repository).
+> **Compass:** Collaboration channels (`docs/COLLABORATION-CHANNELS.md` in the development repository `cambridgetcg/agenttool`, public since 2026-10-28).
 > **Type:** reference · **Purpose:** local coordination and upgrade boundaries.
 > **Evidence:** `src/{store,mcp,repository,actor-default}.ts`; `tests/{session-fit,repository,migration-v2,mcp}.test.ts`.
 > **Implements:** Local observation and coordination, not host lifecycle or remote delivery.
@@ -26,7 +26,7 @@ Enabling the `notes` profile (`AGENTOOL_COLLAB_TOOLS=notes`) in a host's MCP
 configuration is a host step for the owner; this build does not take it. How agents
 use the verbs (the note, consensus, the ballot, identity, storage and the profiles) is
 in [PROTOCOL.md](PROTOCOL.md). The next npm release goes through the
-[public staged release path](https://docs.agenttool.dev/NPM-RELEASES.md#public-release-path-from-2026-10-12);
+[public staged release path](https://docs.agenttool.dev/NPM-RELEASES.md);
 its version is not chosen here.
 This source is not evidence of publication or native-harness activation;
 verify exact release receipts separately.

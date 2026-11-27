@@ -71,7 +71,9 @@ of what the registry serves.
 
 A few files outside `packages/` are here because package tests or builds read
 them: the specification and vector files under [`docs/specs/`](docs/specs),
-three documents under [`docs/`](docs), the provider-adapter review packet
+the `time/1` conformance vectors in
+[`docs/time/vectors.json`](docs/time/vectors.json), three documents under
+[`docs/`](docs), the provider-adapter review packet
 under [`review/provider-adapters/v1/`](review/provider-adapters/v1), and
 [`.gitattributes`](.gitattributes). The npm release tool
 [`bin/npm-release.ts`](bin/npm-release.ts) and its archive inspector

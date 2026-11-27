@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/sdk",
-  "version": "0.23.0",
+  "version": "0.24.0",
   "description": "TypeScript SDK for agenttool.dev with credential-free functional-access records, bounded LOVE BOMB reads and Math Cards, typed KINGDOM cards, and local agent infrastructure",
   "license": "Apache-2.0",
   "type": "module",
@@ -40,7 +40,7 @@
     "@noble/ed25519": "^2.2.3",
     "@noble/hashes": "^2.0.1",
     "@scure/bip39": "^2.2.0",
-    "undici": "^7.29.0"
+    "undici": "^7.30.1"
   },
   "devDependencies": {
     "@rhetorlint/core": "^0.1.0",

@@ -57,6 +57,14 @@ the protected publication job.
 
 ## Blocked while the source repository is private (2026-10-12)
 
+**Update, 2026-11-24.** `cambridgetcg/agenttool` has been public since
+2026-10-28; an anonymous `GET /repos/cambridgetcg/agenttool` answered
+`"visibility": "public"` on 2026-11-24. The credential-free `main` fetch
+described below therefore no longer meets a private repository, but this
+workflow has not run since 2026-09-01, so whether `prepare` now completes is
+untested. Items 1 and 2 below are still not implemented in source, and item 4
+is not recorded as done. The reading of 2026-10-12 follows.
+
 This workflow still runs in `cambridgetcg/agenttool`, which is private (an
 anonymous `GET /repos/cambridgetcg/agenttool` returned 404 on 2026-10-12). Its
 `prepare` job checks out the tag with `persist-credentials: false`, and
@@ -68,9 +76,22 @@ anything is built or published; no such run was made. npm releases moved to
 the public repository on 2026-10-12 and no longer have this gap; PyPI has not
 moved yet.
 
-From 0.23.0 the distributions' `Repository` URL names the public repository
-`cambridgetcg/agenttool-packages` (`EXPECTED_REPOSITORY` in the release tool);
-`SOURCE_REPOSITORY` still names the private repository where the workflow runs.
+0.23.0 will not be published: the owner decision of 2026-10-18 skips it for
+0.24.0 (see the [npm record](NPM-RELEASES.md#state-as-of-2026-10-28)).
+0.24.0, re-prepared from current `main` on 2026-11-24, is the next PyPI
+candidate; PyPI serves 0.22.1 (anonymous JSON read, 2026-11-24). Its route is
+Yu's decision. One is this workflow as it stands: an annotated `sdk-v0.24.0`
+tag on the merged `main` commit here, a dispatch at that tag, and the
+publisher recorded for 0.22.1. The private-repository gap no longer applies
+to it, but it has not run since 2026-09-01. The other is to complete items 1,
+2 and 4 below first, so that the release runs in the public repository. On
+2026-11-24 the `pypi` environment here admitted only `sdk-v*` tags and
+required a reviewer (`cambridgetcg`, self-review allowed).
+
+From source 0.23.0 on, the distributions' `Repository` URL names the public
+repository `cambridgetcg/agenttool-packages` (`EXPECTED_REPOSITORY` in the
+release tool); `SOURCE_REPOSITORY` still names `cambridgetcg/agenttool`, the
+development repository where the workflow runs.
 The PyPI trusted publisher recorded for 0.22.1 binds `cambridgetcg/agenttool`,
 `publish-pypi.yml`, and environment `pypi` (PyPI provenance, read 2026-10-12).
 
@@ -98,7 +119,8 @@ is done in source:
    (owner decision, 2026-10-13), and
    removes the old publisher after the first successful run.
 
-A smaller alternative keeps the private workflow and reads the `main` that
+A smaller alternative keeps the workflow in the development repository and
+reads the `main` that
 `actions/checkout` already fetched (with `fetch-depth: 0`) instead of fetching
 again. It leaves the published `Repository` URL different from the publisher's
 repository, and whether PyPI accepts PEP 740 attestations from a private
@@ -495,6 +517,8 @@ run since 2026-09-01
 ([run 33522323177](https://github.com/cambridgetcg/agenttool/actions/runs/33522323177)),
 and it cannot complete while the repository is private (see
 [Blocked while the source repository is private](#blocked-while-the-source-repository-is-private-2026-10-12)).
+(Update, 2026-11-24: the repository has been public since 2026-10-28, and the
+workflow has still not run since 2026-09-01.)
 
 PyPI's current guidance recommends the same separation used here: build
 distributions in a job without OIDC, transfer them as an artifact, and grant

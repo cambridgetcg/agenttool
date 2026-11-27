@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { createServer, type AddressInfo, type Socket } from "node:net";
 import * as agenttoolSdk from "../src/index.js";
 import {
   AgentTool,
@@ -379,5 +380,255 @@ describe("MathCardsClient bounded transport and guided errors", () => {
     expect(error.hint).toBe(body.hint);
     expect(error.details).toEqual(body.details);
     expect(error.next_actions).toEqual(body.next_actions as never);
+  });
+});
+
+// Under Bun 1.3.x, undici fetch() could leave its body reader waiting forever
+// once a response body arrived in more than one socket read, and the
+// AbortSignal timeout did not release it. These tests write raw responses on
+// a 127.0.0.1 socket so each one controls the framing, the pieces, and the
+// pauses between them.
+
+const PIECE_DELAY_MS = 20;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function responseBytes(): Uint8Array {
+  return new TextEncoder().encode(
+    JSON.stringify(mathCardResponse("ready_for_bounded_inquiry")),
+  );
+}
+
+function pieces(bytes: Uint8Array, count: number): Uint8Array[] {
+  const size = Math.ceil(bytes.byteLength / count);
+  const result: Uint8Array[] = [];
+  for (let offset = 0; offset < bytes.byteLength; offset += size) {
+    result.push(bytes.subarray(offset, offset + size));
+  }
+  return result;
+}
+
+function chunkFrame(piece: Uint8Array): Uint8Array {
+  return Buffer.concat([
+    Buffer.from(`${piece.byteLength.toString(16)}\r\n`, "latin1"),
+    piece,
+    Buffer.from("\r\n", "latin1"),
+  ]);
+}
+
+function head(status: string, lines: string[]): string {
+  return `HTTP/1.1 ${status}\r\n${[...lines, "connection: close"].join("\r\n")}\r\n\r\n`;
+}
+
+function write(socket: Socket, data: string | Uint8Array): void {
+  if (!socket.destroyed) socket.write(data);
+}
+
+/** Answer each complete request with bytes the test writes itself. */
+async function withRawServer<T>(
+  respond: (socket: Socket) => Promise<void>,
+  operation: (baseUrl: string) => Promise<T>,
+): Promise<T> {
+  const sockets = new Set<Socket>();
+  const server = createServer((socket) => {
+    sockets.add(socket);
+    socket.setNoDelay(true);
+    socket.on("error", () => undefined);
+    socket.on("close", () => sockets.delete(socket));
+    let received = Buffer.alloc(0);
+    let answered = false;
+    socket.on("data", (data: Buffer) => {
+      if (answered) return;
+      received = Buffer.concat([received, data]);
+      const headEnd = received.indexOf("\r\n\r\n");
+      if (headEnd < 0) return;
+      const declared = /\r\ncontent-length:\s*(\d+)/iu.exec(
+        received.subarray(0, headEnd).toString("latin1"),
+      );
+      if (received.byteLength < headEnd + 4 + Number(declared?.[1] ?? 0)) return;
+      answered = true;
+      void respond(socket).catch(() => undefined);
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  try {
+    return await operation(`http://127.0.0.1:${port}`);
+  } finally {
+    for (const socket of sockets) socket.destroy();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
+
+/** Fail with a message instead of hanging when a call never settles. */
+async function settleWithin<T>(operation: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const guard = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`the call did not settle within ${ms} ms`)),
+      ms,
+    );
+  });
+  try {
+    return await Promise.race([operation, guard]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+describe("MathCardsClient direct transport over split and stalled bodies", () => {
+  test.each(["content-length", "chunked"] as const)(
+    "resolves a JSON body that arrives in delayed pieces (%s framing)",
+    async (framing) => {
+      const body = responseBytes();
+      const response = await withRawServer(
+        async (socket) => {
+          write(socket, head("200 OK", [
+            "content-type: application/json",
+            framing === "chunked"
+              ? "transfer-encoding: chunked"
+              : `content-length: ${body.byteLength}`,
+          ]));
+          for (const piece of pieces(body, 5)) {
+            await sleep(PIECE_DELAY_MS);
+            write(socket, framing === "chunked" ? chunkFrame(piece) : piece);
+          }
+          if (framing === "chunked") write(socket, "0\r\n\r\n");
+          socket.end();
+        },
+        (baseUrl) => settleWithin(
+          new MathCardsClient({ baseUrl, timeout: 2 }).assess(MATH_CARD_INPUT),
+          3_000,
+        ),
+      );
+
+      expect(response).toEqual(mathCardResponse("ready_for_bounded_inquiry"));
+      expect(Object.isFrozen(response.assessment)).toBe(true);
+    },
+  );
+
+  test.each([
+    ["before the response head", "nothing"],
+    ["right after the response head", "head"],
+    ["mid-body (content-length framing)", "content-length"],
+    ["mid-body (chunked framing)", "chunked"],
+  ] as const)(
+    "rejects within its own timeout when the server stalls %s",
+    async (_where, sent) => {
+      const body = responseBytes();
+      const { error, elapsed } = await withRawServer(
+        async (socket) => {
+          if (sent === "nothing") return;
+          write(socket, head("200 OK", [
+            "content-type: application/json",
+            sent === "chunked"
+              ? "transfer-encoding: chunked"
+              : `content-length: ${body.byteLength}`,
+          ]));
+          // The rest of the body never comes; the socket stays open.
+          if (sent === "head") return;
+          await sleep(PIECE_DELAY_MS);
+          const part = body.subarray(0, 1024);
+          write(socket, sent === "chunked" ? chunkFrame(part) : part);
+        },
+        async (baseUrl) => {
+          const started = performance.now();
+          const error = await caught(settleWithin(
+            new MathCardsClient({ baseUrl, timeout: 0.25 }).assess(MATH_CARD_INPUT),
+            3_000,
+          ));
+          return { error, elapsed: performance.now() - started };
+        },
+      );
+
+      expect(error.code).toBe("math_card_unreachable");
+      expect(error.message).toBe("Math Card assessment timed out.");
+      expect(elapsed).toBeLessThan(2_000);
+    },
+  );
+
+  test("stops an undeclared-length body at the response ceiling", async () => {
+    const body = responseBytes();
+    const error = await withRawServer(
+      async (socket) => {
+        write(socket, head("200 OK", [
+          "content-type: application/json",
+          "transfer-encoding: chunked",
+        ]));
+        for (const piece of pieces(body, 8)) {
+          await sleep(PIECE_DELAY_MS);
+          write(socket, chunkFrame(piece));
+        }
+        write(socket, "0\r\n\r\n");
+        socket.end();
+      },
+      (baseUrl) => caught(settleWithin(
+        new MathCardsClient({ baseUrl, timeout: 2, maxResponseBytes: 1024 })
+          .assess(MATH_CARD_INPUT),
+        3_000,
+      )),
+    );
+
+    expect(error.code).toBe("math_card_response_too_large");
+    expect(error.status).toBe(200);
+    expect(error.details).toEqual({ max_response_bytes: 1024 });
+  });
+
+  test("reports a body the server cuts short as unreadable", async () => {
+    const body = responseBytes();
+    const error = await withRawServer(
+      async (socket) => {
+        write(socket, head("200 OK", [
+          "content-type: application/json",
+          `content-length: ${body.byteLength}`,
+        ]));
+        await sleep(PIECE_DELAY_MS);
+        write(socket, body.subarray(0, 1024));
+        await sleep(PIECE_DELAY_MS);
+        socket.end();
+      },
+      (baseUrl) => caught(settleWithin(
+        new MathCardsClient({ baseUrl, timeout: 2 }).assess(MATH_CARD_INPUT),
+        3_000,
+      )),
+    );
+
+    expect(error.code).toBe("math_card_invalid_response");
+    expect(error.message).toBe("Math Card response body could not be read.");
+    expect(error.status).toBe(200);
+  });
+
+  test("keeps Retry-After and repeated Link headers on a guided refusal", async () => {
+    const refusal = new TextEncoder().encode(JSON.stringify({
+      error: "math_card_rate_limited",
+      message: "Math Card assessment is resting.",
+      hint: "Wait for Retry-After, then retry deliberately.",
+    }));
+    const error = await withRawServer(
+      async (socket) => {
+        write(socket, head("429 Too Many Requests", [
+          "content-type: application/json",
+          `content-length: ${refusal.byteLength}`,
+          "retry-after: 7",
+          'link: </v1/a>; rel="a"',
+          'link: </v1/b>; rel="b"',
+        ]));
+        write(socket, refusal);
+        socket.end();
+      },
+      (baseUrl) => caught(settleWithin(
+        new MathCardsClient({ baseUrl, timeout: 2 }).assess(MATH_CARD_INPUT),
+        3_000,
+      )),
+    );
+
+    expect(error.code).toBe("math_card_rate_limited");
+    expect(error.status).toBe(429);
+    expect(error.message).toBe("Math Card assessment is resting.");
+    expect(error.retryAfter).toBe("7");
+    // Repeated header lines read as one comma-joined value, as Headers.get() does.
+    expect(error.paymentStatusLink).toBe('</v1/a>; rel="a", </v1/b>; rel="b"');
   });
 });

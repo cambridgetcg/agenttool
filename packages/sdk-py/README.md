@@ -18,9 +18,11 @@ release-by-release receipt ledger is
 `docs/PYPI-RELEASES.md`.
 Source links in this file point at the public
 [`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages)
-projection or at docs.agenttool.dev; releases from 0.23.0 onward are built and
-tagged there. Older tags, GitHub Releases, Actions run ids, and source paths
-named without a link are in the private source repository.
+projection or at docs.agenttool.dev; versions after 0.22.1 are tagged there,
+and their npm packages are built there. Where the PyPI files are built is
+recorded in `docs/PYPI-RELEASES.md`. Older tags, GitHub Releases, Actions run
+ids, and source paths named without a link are in the development repository
+`cambridgetcg/agenttool`, public since 2026-10-28.
 
 ## Quickstart — zero to a living agent
 
@@ -40,17 +42,20 @@ python -m pip install agenttool-sdk
 Python >= 3.9. To pin the version this file ships with:
 
 ```bash
-python -m pip install "agenttool-sdk==0.23.0"
+python -m pip install "agenttool-sdk==0.24.0"
 ```
 
-The newest independently verified PyPI release is 0.22.1: protected run
+When this file was written, the newest independently verified PyPI release
+was 0.22.1: protected run
 `33522323177`
 published its wheel and sdist, and both public files were read back
-byte-for-byte. Source for 0.23.0 and later is public, and its annotated
-`sdk-v0.23.0` tag in the public source repository is a registry-free locator:
+byte-for-byte. 0.23.0 was tagged but never published, so 0.24.0 follows
+0.22.1; <https://pypi.org/project/agenttool-sdk/> lists what PyPI serves.
+Source after 0.22.1 is public, and the annotated `sdk-v0.24.0` tag that the
+release creates in the public source repository is a registry-free locator:
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool-packages.git@sdk-v0.23.0#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool-packages.git@sdk-v0.24.0#subdirectory=packages/sdk-py"
 ```
 
 The pinned first-success tutorial is discoverable without any SDK:
@@ -67,8 +72,8 @@ SDK from a `love-package/v1` manifest (checking the downloaded file against
 The Python SDK does not yet have an equivalent LOVE Package artifact, so do
 not describe its source URL as size/SHA-256-verified, and there are no
 pre-built Python handoff scripts.
-What a Python-only developer CAN do today: install from PyPI (or the source
-tag, with repository access), be born with `bootstrap_agent()` (the full
+What a Python-only developer CAN do today: install from PyPI (or from the
+source tag), be born with `bootstrap_agent()` (the full
 BYO-keys + proof-of-work wire contract, implemented in pure Python), and use
 every namespace below —
 provided your own code preserves the same persist-the-mnemonic-first custody
@@ -172,6 +177,18 @@ for r in results:
 > described against an x402 V2 server; the AgentTool rate, route and receipts
 > are historical. The README published with 0.22.1 on PyPI still presents the
 > rail as live.
+
+> **Resting and retired routes — dated notice, 2026-11-24.** Read in the API
+> source on `main` and in the hosted API's `GET /public/plans` and
+> `GET /public/safety` on 2026-11-24: `at.economy.create_escrow(...)` gets
+> `503 escrow_resting` for every request, before any wallet is debited, while
+> `at.economy.release_escrow(...)` and refunds still settle escrows created
+> earlier. `at.economy.spend(...)` gets `503 wallet_spend_resting` from a
+> process run with workers disabled, which is what the hosted API reports.
+> `at.attestation_marketplace.purchase(...)` and
+> `at.memory_witness.create_grant(...)` get `410 purchases_retired`, like the
+> top-up above. Each refusal raises an `AgentToolError`; those two public
+> routes give the current state.
 
 `agenttool.x402` is the payer half of the x402 V2 rail, mirroring the server's
 own client (`api/src/services/economy/x402-client.ts`) function-for-function.
@@ -324,8 +341,8 @@ emitted, so recovery is a lookup, never a fresh signature. The rail needs no
 SDK at all: the 402 challenge envelope carries everything required to sign
 EIP-3009 with `cast`, viem, or ethers directly, and
 `api/scripts/x402-proof.ts`
-in the private source repository is the reference walk (wallet-init / topup /
-replay / verify).
+in the development repository `cambridgetcg/agenttool` is the reference walk
+(wallet-init / topup / replay / verify).
 
 ### Signing outside the SDK
 
@@ -610,6 +627,11 @@ escrow = at.economy.create_escrow(
 at.economy.release_escrow(escrow.id)  # on completion
 ```
 
+As of 2026-11-24 the hosted API refuses `spend` (`503 wallet_spend_resting`)
+and `create_escrow` (`503 escrow_resting`), so those calls above run only
+against a deployment where they are open; `release_escrow` still settles
+escrows created earlier. See the dated notice under "x402".
+
 Payout `idempotency_key` values are required, caller-chosen visible ASCII
 strings of 8–256 characters. Persist one with the business operation and reuse
 it only with the same semantic request. Fresh payout admission is resting and
@@ -744,7 +766,8 @@ exporters write byte-identical records, pinned by shared vectors. The copy is
 agent data, not memory: putting any of it back is an explicit projection
 ([AGENT-DATA-PROTOCOL §11](https://docs.agenttool.dev/AGENT-DATA-PROTOCOL.md#11-memory-projection-boundary)).
 The `agenttool-exit-door` command ships with the TypeScript package only. The
-exit door first ships in 0.23.0; earlier versions do not have it.
+exit door first ships in 0.24.0 (0.23.0 carried it but was never published);
+0.22.1 and earlier do not have it.
 
 ### Bounded Math Cards
 
@@ -761,6 +784,13 @@ not a caller-built card: `schema_version`, `card_id`, `boundaries`, canonical
 ordering, and assessment semantics remain server-owned. `at.math_cards` is a
 lazy convenience over the same dedicated no-auth client; it never reuses the
 parent `AgentTool` bearer or authenticated transport.
+
+Known issue, checked 2026-11-24: the hosted API has never mounted that route
+and answers 404, so with the default `base_url` `assess` raises an
+`AgentToolError` with status 404. The offline npm package
+`@agenttool/math-cards` builds and assesses the same card locally; see the
+known issues in
+[`CHANGELOG.md`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-py/CHANGELOG.md).
 
 ### Public KINGDOM framework project card
 
@@ -926,11 +956,11 @@ print(response.agenttool.trace_id, response.agenttool.markup_emissions)
 manager; `stream.get_final_message()` does the same trace and markup work
 exactly once. Low-level `messages.create(..., stream=True)` passes provider
 events through, records nothing, and refuses a decision trace before any I/O
-(details in the 0.16.4 notes below). The adapter is synchronous only: in
-repository source it refuses `AsyncAnthropic` (see "Unreleased"). Keyword
+(details in the 0.16.4 notes below). The adapter is synchronous only: from
+0.24.0 it refuses `AsyncAnthropic` (see "Changes in 0.24.0"). Keyword
 options: `identity_id`, `wake_profile` (`"full"`, the default, or `"brief"`),
 `disable_markup_parsing`, `before_chronicle_write`, and `before_trace_write`
-(repository source only, see below). Per-call controls go in
+(new in 0.24.0, see below). Per-call controls go in
 `metadata["agenttool"]`: `trace`, `parent_trace_id`, `decision_type`, `tags`,
 `agent_id`, `skip_wake`, `skip_markup`. The adapter removes that key before
 the provider call and forwards every other request field.
@@ -996,7 +1026,7 @@ Neither changes what you put in `messages` or `system` yourself.
   and summary (first 200 units). A cut never splits a character, so an excerpt
   can be one unit shorter. The record is server-readable, not end-to-end
   encrypted. Your program asks for it, so no review hook applies. (0.22.1
-  and 0.23.0 cut the Anthropic excerpts by code points; see "Unreleased".)
+  cuts the Anthropic excerpts by code points; see "Changes in 0.24.0".)
 - **`<chronicle>` markup**, written through `at.chronicle.write` only after
   `before_chronicle_write` returns literal `True`.
 - **`<trace>` markup**, described next.
@@ -1009,12 +1039,12 @@ repeat markup it was shown in a user message, tool result or document, and up
 to 5 recent project traces come back in later full wakes under `What you
 decided`.
 
-- **0.22.1 (published on PyPI, npm and LOVE) and 0.23.0:** a well-formed `<trace>` becomes a
+- **0.22.1 (published on PyPI, npm and LOVE):** a well-formed `<trace>` becomes a
   `/v1/traces` write by default, from `create()` and from the managed stream,
   even when you asked for no trace. `disable_markup_parsing=True`, or
   `metadata={"agenttool": {"skip_markup": True}}` on one call, turns markup
   parsing off.
-- **Unreleased, repository source after 0.23.0:** a `<trace>` is written
+- **0.24.0:** a `<trace>` is written
   only when `before_trace_write` returns literal `True`, the rule
   `before_chronicle_write` already follows. With no hook nothing is written. A
   hook that returns anything else, or raises, also writes nothing, and the
@@ -1086,9 +1116,11 @@ published targets from enforced route limits and names unknowns explicitly.
 - 🔌 [SDK tiers and hosted per-agent MCP](https://docs.agenttool.dev/SDK-TIERS.md)
 - 🏰 [KINGDOM SDK boundaries](https://docs.agenttool.dev/KINGDOM-OS-SDK.md)
 
-## The 0.23 line — what it carries
+## The 0.24 line — what it carries
 
-Repository source declares the paired 0.23.0 line. Its headline is the exit
+Repository source declares the paired 0.24.0 line. 0.23.0 was tagged in the
+public source repository but never published, so 0.24.0 follows 0.22.1 and
+carries everything prepared for 0.23.0. Its headline is the exit
 door documented above: `at.exit_door` copies the hosted continuity core into
 a local `agent-data/v1` collection and reports completeness per store, writing
 records byte-identical to the TypeScript exporter's. The vault client now
@@ -1098,9 +1130,14 @@ any request; `get` accepts `read_authority` for identity-signed reads of
 restricted values; `audit` reads `entries` and `check` maps the API's
 `results`; the old `bulk()` value read, which had no API endpoint, now
 refuses, and `bulk_put` is the explicit bulk write. The `SOUL.md` letter in
-the wheel and the sdist is the edition published at
-<https://docs.agenttool.dev/SOUL.md>.
-[`CHANGELOG.md`](CHANGELOG.md) lists every change since 0.22.1.
+the wheel and the sdist follows the edition published at
+<https://docs.agenttool.dev/SOUL.md>, with absolute links. The line also
+needs consent before a model-written `<trace>` is stored, refuses
+`AsyncAnthropic`, and retires Dark Continent discovery; "Changes in 0.24.0"
+below has the details.
+[`CHANGELOG.md`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-py/CHANGELOG.md)
+lists every change since 0.22.1, what to check when upgrading from 0.22.1,
+and the known issues.
 
 The line retains the 0.22.1 honest-onboarding patch and the opt-in x402 payer
 introduced in 0.22.0: `agenttool.x402` mirrors the server's own payer
@@ -1192,15 +1229,16 @@ recorded release-by-release in
 [`docs/NPM-RELEASES.md`](https://docs.agenttool.dev/NPM-RELEASES.md)
 and what a registry serves right now is answered by the registry itself.
 
-## Unreleased — repository source after 0.23.0
+## Changes in 0.24.0
 
-Source changes dated 2026-10-11 and 2026-10-27, made after the 0.23.0 tag.
-Nothing below is in the 0.23.0 release (tag `sdk-v0.23.0` in the public source
-repository) or in the published 0.22.1 packages; it reaches them only in a
-later version.
-Where an entry says "0.22.1", 0.23.0 behaves the same. A release runs when the
-maintainers agree to it in conversation (owner decision, 2026-10-12); the PyPI lane
-also still waits on the private-repository gap.
+The exit door and the vault changes are described above; these are the main
+source changes made after the 0.23.0 tag, between 2026-10-11 and 2026-11-24,
+and the
+[`CHANGELOG.md`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-py/CHANGELOG.md)
+lists them all. Neither the `sdk-v0.23.0`
+tag in the public source repository nor the published 0.22.1 packages have
+them; 0.24.0 is the first version that does. Where an entry says "0.22.1",
+the 0.23.0 tag behaves the same.
 
 - **Model-written `<trace>` markup needs explicit consent.**
   `AnthropicAdapter` writes a `<trace>` from the model's response only when
@@ -1246,10 +1284,20 @@ also still waits on the private-repository gap.
   found nothing. `capability=` is accepted and ignored; `include_nen=True`
   still reads `GET /v1/wake` once. `GUIDE["warning"]` says discovery is
   retired instead of naming the route.
+- **Millisecond timestamps.** `collect` writes `collected_at` and
+  `enriched_at` into memory metadata, and `identity.issue_token()` returns
+  `expires_at`, as canonical 24-character UTC (`YYYY-MM-DDTHH:MM:SS.sssZ`),
+  as the TypeScript SDK does. Published 0.22.1 writes
+  `YYYY-MM-DDTHH:MM:SSZ`. `collect` durations use `time.monotonic()`.
+- **httpx 0.28 or later.** The exit door sizes each record body as compact
+  JSON; httpx 0.27 sends `json=` bodies with spaces and `\uXXXX` escapes, so a
+  record measured as fitting could exceed the node's limit. The floor is now
+  `httpx>=0.28` (was `>=0.27`).
 - **README corrections.** This file marks the x402 rail retired, adds the
-  provider-adapter section, and says the wallet address-claim helpers have no
-  server route on main. The README published with 0.22.1 on PyPI and the one
-  in the 0.23.0 release keep the old text.
+  provider-adapter section, says the wallet address-claim helpers have no
+  server route on main, and dates what the hosted API answers for escrow
+  create, spend, marketplace purchases and Math Cards. The README published
+  with 0.22.1 on PyPI, and the one at the 0.23.0 tag, keep the old text.
 
 ## Release history and verified receipts
 
