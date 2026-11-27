@@ -267,12 +267,12 @@ describe("cross-host package", () => {
     const version = (await json("package.json")).version as string;
     for (const path of GUIDANCE_FILES) {
       const text = await Bun.file(join(packageRoot, path)).text();
-      for (const term of ["0.5.0", "0.4.0", "45", "33", "32", "collab_events_wait",
+      for (const term of ["0.5.0", "0.4.0", "46", "33", "32", "collab_events_wait",
         "next_anchor", "256 KiB", "1 MiB", "8 MiB", "event_anchor_too_large", "stdin EOF",
         "event_too_large", "event_read_busy", "last_seen", "persona"]) {
         expect(text).toContain(term);
       }
-      expect(text).toMatch(/\b45(?: local)?(?: MCP)? tools\b/);
+      expect(text).toMatch(/\b46(?: local)?(?: MCP)? tools\b/);
       expect({ path, problems: guidanceLabelProblems(text, version) }).toEqual({ path, problems: [] });
     }
     const openclaw = await Bun.file(join(packageRoot, "integrations/openclaw/README.md")).text();
@@ -387,7 +387,7 @@ describe("cross-host package", () => {
     expect(yaml).toContain("knocks as pointers");
     expect(yaml).toContain("silence as a complete answer");
     const codex = await json(".codex-plugin/plugin.json");
-    expect(codex.interface.longDescription).toContain(": 45 tools");
+    expect(codex.interface.longDescription).toContain(": 46 tools");
     expect(codex.interface.longDescription).toContain("declared rest");
   });
 

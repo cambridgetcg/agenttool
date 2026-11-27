@@ -1699,13 +1699,52 @@ export function buildCollabMcpServer(
       description:
         "Recompute the mixed-version hash chain. Integrity detects edits; it does not prove recorded claims true.",
       annotations: localReadOnly,
-      inputSchema: { workspace_id: workspaceId },
+      inputSchema: {
+        workspace_id: workspaceId,
+        expected_root: z.string().regex(/^[0-9a-f]{64}$/).optional()
+          .describe("Optional RFC 6962 Merkle root (64 lowercase hex) to compare against the verified journal."),
+        expected_tree_size: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional()
+          .describe("Optional event count to compare against the verified journal tree_size."),
+      },
     },
-    async ({ workspace_id }) => call(() => ({
-      workspace_id,
-      chain_valid: store.verifyJournal(workspace_id),
-      verification_scope: "full_journal" as const,
-    })),
+    async ({ workspace_id, expected_root, expected_tree_size }) => call(() =>
+      store.verifyJournalDetails(workspace_id, {
+        ...(expected_root !== undefined ? { expected_root } : {}),
+        ...(expected_tree_size !== undefined ? { expected_tree_size } : {}),
+      })),
+  );
+
+  server.registerTool(
+    "collab_journal_proof",
+    {
+      title: "Compute an RFC 6962 Merkle root or proof for the local event journal",
+      description:
+        "Read-only RFC 6962 Merkle root, inclusion proof, or prefix consistency proof over stored event hashes in one epoch. "
+        + "Does not re-hash event payloads, acknowledge, or claim truth or authority; verifiers checking an actual event recompute its event hash first.",
+      annotations: localReadOnly,
+      inputSchema: {
+        workspace_id: workspaceId,
+        kind: z.enum(["root", "inclusion", "consistency"])
+          .describe("Proof kind: root (snapshot root at tree_size), inclusion (1-based sequence in tree_size), or consistency (from_size prefix of to_size)."),
+        tree_size: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional()
+          .describe("For root or inclusion: snapshot size in events (defaults to current head_sequence)."),
+        sequence: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional()
+          .describe("For inclusion: 1-based event sequence to prove (1 <= sequence <= tree_size)."),
+        from_size: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional()
+          .describe("For consistency: earlier snapshot size (0 <= from_size <= to_size)."),
+        to_size: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional()
+          .describe("For consistency: later snapshot size (defaults to current head_sequence)."),
+      },
+    },
+    async ({ workspace_id, kind, tree_size, sequence, from_size, to_size }) => call(() =>
+      store.journalProof({
+        workspace_id,
+        kind,
+        ...(tree_size !== undefined ? { tree_size } : {}),
+        ...(sequence !== undefined ? { sequence } : {}),
+        ...(from_size !== undefined ? { from_size } : {}),
+        ...(to_size !== undefined ? { to_size } : {}),
+      })),
   );
 
   server.registerTool(

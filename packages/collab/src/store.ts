@@ -11,6 +11,11 @@ import {
 import { dirname, isAbsolute, join, posix, resolve } from "node:path";
 import { canonicalJson } from "./canonical.js";
 import { CollabError } from "./errors.js";
+import {
+  journalMerkleRoot,
+  proveJournalConsistency,
+  proveJournalInclusion,
+} from "./merkle.js";
 import { NOTE_FORMAT } from "./note.js";
 import { validateSeatRef } from "./seat-ref.js";
 import {
@@ -62,6 +67,10 @@ import {
   type HeartbeatSessionInput,
   type JoinSessionInput,
   type JournalPage,
+  type JournalProofInput,
+  type JournalProofResult,
+  type JournalVerifyInput,
+  type JournalVerifyResult,
   type KnockDelivery,
   type LeaseTaskInput,
   type MutationContext,
@@ -6345,6 +6354,231 @@ export class CollabStoreCore {
       return this.verifyJournalRows(workspaceId);
     });
     return audit.deferred();
+  }
+
+  verifyJournalDetails(workspaceId: string, expected: JournalVerifyInput = {}): JournalVerifyResult {
+    if (expected.expected_root !== undefined && !/^[0-9a-f]{64}$/.test(expected.expected_root)) {
+      throw new CollabError("invalid_expected_root", "expected_root must be 64 lowercase hexadecimal characters");
+    }
+    if (
+      expected.expected_tree_size !== undefined
+      && (!Number.isSafeInteger(expected.expected_tree_size) || expected.expected_tree_size < 0)
+    ) {
+      throw new CollabError("invalid_expected_tree_size", "expected_tree_size must be a non-negative safe integer");
+    }
+    const audit = this.db.transaction((): JournalVerifyResult => {
+      const workspace = this.requireWorkspace(workspaceId);
+      const rows = this.db.query(`
+        SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
+          session_id, occurred_at, payload_json, prev_hash, hash
+        FROM events WHERE workspace_id = ? ORDER BY sequence
+      `).all(workspaceId) as EventRow[];
+      let expectedSequence = 1;
+      let previous = GENESIS_HASH;
+      let chainValid = true;
+      const eventHashes: string[] = [];
+      try {
+        for (const row of rows) {
+          const event = eventFromRow(row);
+          if (
+            event.epoch_id !== workspace.epoch_id
+            || event.sequence !== expectedSequence
+            || event.prev_hash !== previous
+            || event.hash !== eventHash(event)
+          ) {
+            chainValid = false;
+            break;
+          }
+          eventHashes.push(event.hash);
+          previous = event.hash;
+          expectedSequence += 1;
+        }
+      } catch {
+        chainValid = false;
+      }
+      if (chainValid && (workspace.event_head_sequence !== rows.length || workspace.event_head_hash !== previous)) {
+        chainValid = false;
+      }
+      const merkleRoot = chainValid ? journalMerkleRoot(workspace.epoch_id, eventHashes) : null;
+      const result: JournalVerifyResult = {
+        workspace_id: workspace.id,
+        chain_valid: chainValid,
+        verification_scope: "full_journal",
+        epoch_id: workspace.epoch_id,
+        tree_size: rows.length,
+        merkle_root: merkleRoot,
+      };
+      if (expected.expected_root !== undefined) {
+        result.expected_root = expected.expected_root;
+        result.root_matches = chainValid && merkleRoot === expected.expected_root;
+      }
+      if (expected.expected_tree_size !== undefined) {
+        result.expected_tree_size = expected.expected_tree_size;
+        result.tree_size_matches = chainValid && rows.length === expected.expected_tree_size;
+      }
+      return result;
+    });
+    return audit.deferred();
+  }
+
+  journalProof(input: JournalProofInput): JournalProofResult {
+    const read = this.db.transaction((): JournalProofResult => {
+      const workspace = this.requireWorkspace(input.workspace_id);
+      const headSeq = workspace.event_head_sequence;
+
+      let targetSize: number;
+      let sequence: number | null = null;
+      let fromSize: number | null = null;
+
+      if (input.kind === "root") {
+        if (input.sequence !== undefined || input.from_size !== undefined || input.to_size !== undefined) {
+          throw new CollabError(
+            "invalid_proof_request",
+            "kind 'root' accepts only workspace_id and optional tree_size",
+          );
+        }
+        targetSize = input.tree_size ?? headSeq;
+        if (!Number.isSafeInteger(targetSize) || targetSize < 0 || targetSize > headSeq) {
+          throw new CollabError(
+            "tree_size_out_of_range",
+            `tree_size must be an integer between 0 and head_sequence (${headSeq})`,
+            { head_sequence: headSeq },
+          );
+        }
+      } else if (input.kind === "inclusion") {
+        if (input.from_size !== undefined || input.to_size !== undefined) {
+          throw new CollabError(
+            "invalid_proof_request",
+            "kind 'inclusion' accepts workspace_id, sequence, and optional tree_size",
+          );
+        }
+        targetSize = input.tree_size ?? headSeq;
+        if (!Number.isSafeInteger(targetSize) || targetSize < 1 || targetSize > headSeq) {
+          throw new CollabError(
+            "tree_size_out_of_range",
+            `tree_size for inclusion must be an integer between 1 and head_sequence (${headSeq})`,
+            { head_sequence: headSeq },
+          );
+        }
+        if (
+          input.sequence === undefined
+          || !Number.isSafeInteger(input.sequence)
+          || input.sequence < 1
+          || input.sequence > targetSize
+        ) {
+          throw new CollabError(
+            "sequence_out_of_range",
+            `sequence must be an integer between 1 and tree_size (${targetSize})`,
+            { tree_size: targetSize, head_sequence: headSeq },
+          );
+        }
+        sequence = input.sequence;
+      } else if (input.kind === "consistency") {
+        if (input.sequence !== undefined || input.tree_size !== undefined) {
+          throw new CollabError(
+            "invalid_proof_request",
+            "kind 'consistency' accepts workspace_id, from_size, and optional to_size",
+          );
+        }
+        targetSize = input.to_size ?? headSeq;
+        if (!Number.isSafeInteger(targetSize) || targetSize < 0 || targetSize > headSeq) {
+          throw new CollabError(
+            "tree_size_out_of_range",
+            `to_size must be an integer between 0 and head_sequence (${headSeq})`,
+            { head_sequence: headSeq },
+          );
+        }
+        if (
+          input.from_size === undefined
+          || !Number.isSafeInteger(input.from_size)
+          || input.from_size < 0
+          || input.from_size > targetSize
+        ) {
+          throw new CollabError(
+            "invalid_proof_request",
+            `from_size must be an integer between 0 and to_size (${targetSize})`,
+            { to_size: targetSize, head_sequence: headSeq },
+          );
+        }
+        fromSize = input.from_size;
+      } else {
+        throw new CollabError("invalid_proof_request", `Unsupported proof kind: ${String(input.kind)}`);
+      }
+
+      const rows = targetSize === 0
+        ? []
+        : this.db.query(`
+            SELECT epoch_id, sequence, hash
+            FROM events
+            WHERE workspace_id = ? AND sequence <= ?
+            ORDER BY sequence
+          `).all(workspace.id, targetSize) as Array<{ epoch_id: string; sequence: number; hash: string }>;
+
+      if (rows.length !== targetSize) {
+        throw new CollabError(
+          "database_journal_invalid",
+          "Workspace event sequence is not contiguous up to requested tree_size",
+          { workspace_id: workspace.id, expected: targetSize, found: rows.length },
+        );
+      }
+      const eventHashes: string[] = new Array(targetSize);
+      for (let i = 0; i < targetSize; i += 1) {
+        const row = rows[i]!;
+        if (
+          row.sequence !== i + 1
+          || row.epoch_id !== workspace.epoch_id
+          || !/^[0-9a-f]{64}$/.test(row.hash)
+        ) {
+          throw new CollabError(
+            "database_journal_invalid",
+            "Workspace event row failed epoch, sequence, or hash invariant",
+            { workspace_id: workspace.id, sequence: i + 1 },
+          );
+        }
+        eventHashes[i] = row.hash;
+      }
+      const headHash = targetSize === 0 ? GENESIS_HASH : eventHashes[targetSize - 1]!;
+      if (targetSize === headSeq && headHash !== workspace.event_head_hash) {
+        throw new CollabError(
+          "database_journal_invalid",
+          "Workspace head hash does not match the last stored event hash",
+          { workspace_id: workspace.id },
+        );
+      }
+
+      if (input.kind === "root") {
+        return {
+          workspace_id: workspace.id,
+          kind: "root",
+          epoch_id: workspace.epoch_id,
+          tree_size: targetSize,
+          root: journalMerkleRoot(workspace.epoch_id, eventHashes),
+          head_hash: headHash,
+          head_sequence: headSeq,
+        };
+      }
+      if (input.kind === "inclusion") {
+        const proof = proveJournalInclusion(workspace.epoch_id, eventHashes, sequence!, targetSize);
+        return {
+          workspace_id: workspace.id,
+          kind: "inclusion",
+          ...proof,
+          head_hash: headHash,
+          head_sequence: headSeq,
+        };
+      }
+      const proof = proveJournalConsistency(workspace.epoch_id, eventHashes, fromSize!, targetSize);
+      return {
+        workspace_id: workspace.id,
+        kind: "consistency",
+        ...proof,
+        tree_size: targetSize,
+        root: proof.to_root,
+        head_hash: headHash,
+        head_sequence: headSeq,
+      };
+    });
+    return read.deferred();
   }
 
   private verifyJournalRows(workspaceId: string): boolean {

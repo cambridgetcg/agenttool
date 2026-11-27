@@ -775,3 +775,76 @@ export interface NextCollabState {
   reports: CollabReport[];
   events: JournalPage;
 }
+
+export interface JournalVerifyInput {
+  expected_root?: string;
+  expected_tree_size?: number;
+}
+
+export interface JournalVerifyResult {
+  workspace_id: string;
+  chain_valid: boolean;
+  verification_scope: "full_journal";
+  epoch_id: string;
+  tree_size: number;
+  merkle_root: string | null;
+  expected_root?: string;
+  root_matches?: boolean;
+  expected_tree_size?: number;
+  tree_size_matches?: boolean;
+}
+
+export type JournalProofKind = "root" | "inclusion" | "consistency";
+
+export interface JournalProofInput {
+  workspace_id: string;
+  kind: JournalProofKind;
+  tree_size?: number;
+  sequence?: number;
+  from_size?: number;
+  to_size?: number;
+}
+
+export interface JournalRootProofResult {
+  workspace_id: string;
+  kind: "root";
+  epoch_id: string;
+  tree_size: number;
+  root: string;
+  head_hash: string;
+  head_sequence: number;
+}
+
+export interface JournalInclusionProofResult {
+  workspace_id: string;
+  kind: "inclusion";
+  epoch_id: string;
+  sequence: number;
+  event_hash: string;
+  leaf_hash: string;
+  tree_size: number;
+  root: string;
+  head_hash: string;
+  head_sequence: number;
+  path: string[];
+}
+
+export interface JournalConsistencyProofResult {
+  workspace_id: string;
+  kind: "consistency";
+  epoch_id: string;
+  from_size: number;
+  to_size: number;
+  tree_size: number;
+  from_root: string;
+  to_root: string;
+  root: string;
+  head_hash: string;
+  head_sequence: number;
+  path: string[];
+}
+
+export type JournalProofResult =
+  | JournalRootProofResult
+  | JournalInclusionProofResult
+  | JournalConsistencyProofResult;

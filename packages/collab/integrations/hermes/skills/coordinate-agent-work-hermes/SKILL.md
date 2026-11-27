@@ -10,8 +10,8 @@ own agents and Kanban work. Do not mirror every operation between the systems or
 treat either one as automatic authority for the other. Preserve Hermes persona,
 memory, permissions, channel receiver ownership and lifecycle.
 
-**DEVELOPMENT BUILD 0.6.0-dev.0 (unreleased):** 45 tools in the full profile (0.5.0's 33,
-declared rest, three proposal consent tools, and the Collab Notes verbs `collab_arrive`,
+**DEVELOPMENT BUILD 0.6.0-dev.0 (unreleased):** 46 tools in the full profile (0.5.0's 33,
+declared rest, three proposal consent tools, `collab_journal_proof`, and the Collab Notes verbs `collab_arrive`,
 `collab_inbox`, `collab_note`, `collab_take`, `collab_done`, `collab_propose`, `collab_poll` and `collab_vote`), plus the unreleased
 host doorbell wait between turns. Collab 0.5.0 is released on GitHub only,
 with 33 tools, not on npm; the next npm release is not chosen here. This source does
