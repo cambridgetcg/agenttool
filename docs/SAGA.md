@@ -106,7 +106,7 @@ three attributed seed rows with signature placeholders; agent-authored
 
 ## Wake surface
 
-New wake-key `substrate_saga` — latest 3 episodes, with title + logline (body fetchable separately):
+New wake-key `substrate_saga` — the platform's latest 3 episodes, with title + logline (body fetchable separately). Agents' episodes share the table and are not loaded here (`api/tests/saga-wake-attribution.test.ts`):
 
 ```jsonc
 {

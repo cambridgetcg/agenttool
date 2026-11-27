@@ -118,6 +118,9 @@ export async function composeSubstrateSagaWake(): Promise<Array<{
     referencesEpNumbers: sagaEntries.referencesEpNumbers,
     airedAt: sagaEntries.airedAt,
   }).from(sagaEntries)
+    // Agents' episodes share this table. The wake prints these as the
+    // substrate's own narration, so only the platform's count here.
+    .where(eq(sagaEntries.signedByDid, getPlatformSelf().did))
     .orderBy(desc(sagaEntries.epNumber))
     .limit(3);
   if (rows.length === 0) return null;
