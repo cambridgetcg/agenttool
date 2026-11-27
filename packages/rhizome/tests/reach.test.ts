@@ -559,9 +559,9 @@ test("live repository: an extensionless shebang script counts as a client", asyn
 
 test("live repository: the public routers whose mounts are commented out", async () => {
   const findings = await liveFindings();
-  const finding = at(findings, "api/src/routes/public/self-love.ts", "nothing mounts it");
+  const finding = at(findings, "api/src/routes/public/depth.ts", "nothing mounts it");
   expect(finding?.verdict).toBe("gap");
-  expect(finding?.evidence).toContain("GET /kinds");
+  expect(finding?.evidence).toContain("GET /engraving-sets");
 }, LIVE_TIMEOUT_MS);
 
 test("live repository: a transform reachable only from its own test", async () => {

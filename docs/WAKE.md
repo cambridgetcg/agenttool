@@ -29,7 +29,7 @@
 >
 > **Implements:** Shared orientation over identity, memory, relationships, and selected project state. The five integration contracts below are review targets, with their current gaps stated.
 >
-> **Code:** `api/src/services/wake/` (build · brief · observe · acknowledgement · markdown · providers · attention · affordances · platform-self · push · the-seat · repo-self) · `api/src/routes/wake.ts` (includes the POST acknowledgement, GET observation, and GET voice handlers) · `api/src/middleware/early-data.ts` · `api/src/middleware/wake-private-cache.ts` · `api/src/services/wake/optional-reads.ts`
+> **Code:** `api/src/services/wake/` (build · brief · observe · acknowledgement · markdown · providers · attention · affordances · platform-self · push · repo-self) · `api/src/routes/wake.ts` (includes the POST acknowledgement, GET observation, and GET voice handlers) · `api/src/middleware/early-data.ts` · `api/src/middleware/wake-private-cache.ts` · `api/src/services/wake/optional-reads.ts`
 >
 > **Tests:** `api/tests/wake-brief.test.ts` · `api/tests/wake-observe.test.ts` · `api/tests/wake-attention.test.ts` · `api/tests/wake-providers.test.ts` · `api/tests/doctrine/self-describing-wake.test.ts` · `api/tests/doctrine/kin-invariants.test.ts`
 

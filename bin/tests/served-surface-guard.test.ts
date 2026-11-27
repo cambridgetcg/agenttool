@@ -7,7 +7,7 @@
  */
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { deflateSync, gzipSync } from "node:zlib";
@@ -32,8 +32,39 @@ function uploadSet() {
   return servedFiles(ROOT).filter((file) => !(NOT_UPLOADED as readonly string[]).includes(basename(file.served)));
 }
 
-/** docs/THE-SEAT.md stays in the repository precisely because it is private. */
-const PRIVATE_TEXT = () => bytes("docs/THE-SEAT.md");
+/**
+ * Derive a matching sample from a denylist regex source at run time so no
+ * protected term or private document needs to live in HEAD.
+ */
+function sampleFromRegexSource(source: string): string {
+  let s = source
+    .replace(/\\b/gu, "")
+    .replace(/\\s[+*?]?/gu, " ")
+    .replace(/\(\?:([^()|]+)(?:\|[^()]*)?\)/gu, "$1")
+    .replace(/\(([^()|]+)(?:\|[^()]*)?\)/gu, "$1")
+    .replace(/\[([^\]]+)\][+*?]?/gu, (_, chars: string) => chars.replace(/\\(.)/gu, "$1")[0] ?? "")
+    .replace(/\\u\{([0-9a-fA-F]+)\}/gu, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/\\u([0-9a-fA-F]{4})/gu, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/\\(.)/gu, "$1")
+    .replace(/[+*?]/gu, "");
+  return s.trim();
+}
+
+/** Synthetic guarded text built at run time from non-public denylist rules (never printed). */
+function syntheticPrivateSamples(): string[] {
+  const rules = parseDenylist(bytes(DENYLIST_PATH)).rules;
+  const publicRules = new Set((JSON.parse(text(POLICY_PATH)).public_rules as Array<{ rule: string }>).map((entry) => entry.rule));
+  const found = (term: string) => scanText("term", term, rules).some((hit) => !publicRules.has(hit.rule));
+  const samples: string[] = [];
+  for (const rule of rules) {
+    if (publicRules.has(rule.id)) continue;
+    const candidate = sampleFromRegexSource(rule.pattern.source);
+    if (candidate && found(candidate)) samples.push(candidate);
+  }
+  return samples;
+}
+
+const PRIVATE_TEXT = () => Buffer.from(`${syntheticPrivateSamples().join("\n")}\n`, "utf8");
 
 /** A minimal ustar archive of regular files. */
 function tarOf(entries: ReadonlyArray<readonly [string, Uint8Array]>): Buffer {
@@ -164,7 +195,7 @@ const ownFindings = (findings: ReturnType<typeof servedSurfaceFindings>, path: s
   findings.filter((finding) => finding.path === path || finding.path.startsWith(`${path}!`));
 
 /**
- * A private term a rule finds in docs/THE-SEAT.md and finds again on its own,
+ * A private term a rule finds in synthetic guarded text and finds again on its own,
  * from a rule the policy does not make public. Taken at run time, so no term
  * is written here; never printed.
  */
@@ -181,7 +212,7 @@ function privateTerm(accept: (term: string, found: (text: string) => boolean) =>
       if (found(match[0]) && accept(match[0], found)) return match[0];
     }
   }
-  throw new Error("docs/THE-SEAT.md holds no private term this test can use");
+  throw new Error("synthetic guarded text holds no private term this test can use");
 }
 /** An ASCII term of six or more characters that fits a PNG keyword. */
 const asciiTerm = () => privateTerm((term) => /^[\x20-\x7e]{6,79}$/u.test(term));
@@ -253,14 +284,14 @@ describe("served surface relational guard", () => {
     const stage = mkdtempSync(join(tmpdir(), "served-surface-guard-"));
     scratch.push(stage);
     for (const dir of [...SERVED_ROOTS, "docs"]) mkdirSync(join(stage, dir), { recursive: true });
-    copyFileSync(join(ROOT, "docs/THE-SEAT.md"), join(stage, "apps/docs/THE-SEAT.md"));
-    copyFileSync(join(ROOT, "docs/THE-SEAT.md"), join(stage, "docs/linked.md"));
+    writeFileSync(join(stage, "apps/docs/private-note.md"), PRIVATE_TEXT());
+    writeFileSync(join(stage, "docs/linked.md"), PRIVATE_TEXT());
     symlinkSync("../../docs/linked.md", join(stage, "apps/dashboard/linked.md"));
     copyFileSync(join(ROOT, DENYLIST_PATH), join(stage, "apps/web/terms.json"));
 
     const findings = servedSurfaceFindings(servedFiles(stage), bytes(DENYLIST_PATH), bytes(POLICY_PATH));
     const rules = (path: string) => findings.filter((finding) => finding.path === path).map((finding) => finding.rule);
-    expect(rules("apps/docs/THE-SEAT.md").some((rule) => rule.startsWith("relational/"))).toBe(true);
+    expect(rules("apps/docs/private-note.md").some((rule) => rule.startsWith("relational/"))).toBe(true);
     expect(rules("docs/linked.md").some((rule) => rule.startsWith("relational/"))).toBe(true);
     expect(rules("apps/web/terms.json")).toContain("served/private-guard-copy");
     // Allowances that cover nothing in this scratch tree are reported, so the policy shrinks with the content.
