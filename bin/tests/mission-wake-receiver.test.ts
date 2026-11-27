@@ -122,6 +122,44 @@ describe.skipIf(process.platform === "win32")("mission receiver authority and du
     await expect(wake.bind(f.state, f.config, f.options)).rejects.toThrow();
   });
 
+  test("Execution Seat S3: wake bindings accept seat_id across Claude channel (replacing session_label) and Codex", async () => {
+    const SEAT = "0199f0c4-6b1e-7c2a-9d3f-5a1b2c3d4e5f";
+    // Claude channel bound purely by seat_id without legacy session_label
+    const claude = fixture();
+    const claudeAddr = await wake.bind(claude.state, {
+      ...claude.config,
+      target: { kind: "claude-channel", seat_id: SEAT },
+    }, claude.options);
+    expect(claudeAddr.seat_id).toBe(SEAT);
+    expect(wake.returnPeek(claude.state).route).toEqual({
+      route_id: claudeAddr.route_id, harness: "claude-channel", seat_id: SEAT,
+    });
+    const r1 = open(claude);
+    expect(r1.binding.target).toEqual({ kind: "claude-channel", seat_id: SEAT });
+    r1.close();
+
+    // Codex target with optional seat_id
+    const codex = fixture();
+    const codexAddr = await wake.bind(codex.state, {
+      ...codex.config,
+      target: { ...codex.config.target, seat_id: SEAT },
+    }, codex.options);
+    expect(codexAddr.seat_id).toBe(SEAT);
+    expect(wake.returnPeek(codex.state).route.seat_id).toBe(SEAT);
+
+    // Invalid seat_id or empty claude-channel target refused before writing state
+    for (const badTarget of [
+      { kind: "claude-channel" },
+      { kind: "claude-channel", seat_id: "not-a-uuid" },
+      { kind: "claude-channel", seat_id: SEAT.toUpperCase() },
+      { kind: "codex", thread_id: codex.config.target.thread_id, cwd: codex.config.target.cwd, seat_id: "bad" },
+    ]) {
+      const bad = fixture();
+      await expect(wake.bind(bad.state, { ...bad.config, target: badTarget as any }, bad.options)).rejects.toThrow();
+      expect(existsSync(join(bad.state, "wake"))).toBe(false);
+    }
+  });
+
   test("binding refuses wrong digest, self peer, expired lifetime and unaccepted read scope", async () => {
     for (const variant of ["digest", "self", "expired", "long", "read_denied", "target"] as const) {
       const f = fixture(), config = structuredClone(f.config);

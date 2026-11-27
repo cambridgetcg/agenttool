@@ -22,6 +22,8 @@ export interface WitnessBinding {
   ledger_path: string;
   /** Host-selected scratch parent; each observation uses a fresh private HOME/cwd below it. */
   home: string;
+  /** Optional declared execution seat UUID for this witness binding (no authority). */
+  seat_id?: string;
   timeout_ms?: number;
   /** Ceiling for outer pipes and, separately, cumulative query pipes; at most 1 MiB each. */
   max_output_bytes?: number;
@@ -105,6 +107,7 @@ export interface WitnessObserver {
 const MAX_OUTPUT = 1_048_576;
 const MAX_TIME = 30_000;
 const TOKEN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const NETWORKS = new Set(["zerone-testnet-1", "zerone-1"]);
 
 function object(value: unknown): Record<string, unknown> | null {
@@ -125,12 +128,13 @@ function validSelection(value: WitnessSelection, workspace: string): boolean {
     && value.memo === `agenttool.collab-anchor/0.1 ws=${workspace} epoch=${value.epoch_id} seq=${value.sequence} head=${value.head_hash}`;
 }
 
-function copyBinding(input: WitnessBinding): Required<WitnessBinding> {
+function copyBinding(input: WitnessBinding): Omit<Required<WitnessBinding>, "seat_id"> & { seat_id?: string } {
   const binding = { ...input, timeout_ms: input.timeout_ms ?? 10_000, max_output_bytes: input.max_output_bytes ?? 262_144 };
   const paths = [binding.command, binding.cli_path, binding.zeroned_bin, binding.db_path, binding.ledger_path, binding.home];
   if (paths.some(path => typeof path !== "string" || !isAbsolute(path) || path.length > 4096 || /[\x00-\x1f\x7f]/.test(path))
     || typeof binding.workspace_id !== "string" || !TOKEN.test(binding.workspace_id)
     || typeof binding.observer_name !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$/.test(binding.observer_name)
+    || (binding.seat_id !== undefined && (typeof binding.seat_id !== "string" || !UUID.test(binding.seat_id)))
     || !NETWORKS.has(binding.network)
     || !positiveInteger(binding.timeout_ms) || binding.timeout_ms > MAX_TIME
     || !positiveInteger(binding.max_output_bytes) || binding.max_output_bytes > MAX_OUTPUT) {
@@ -185,7 +189,7 @@ class ObservationFailure extends Error {
 async function boundedRead(
   runner: WitnessRunner,
   request: WitnessRunRequest,
-  binding: Required<WitnessBinding>,
+  binding: Omit<Required<WitnessBinding>, "seat_id"> & { seat_id?: string },
   signal?: AbortSignal,
 ): Promise<string> {
   if (signal?.aborted) throw new ObservationFailure("cancelled");

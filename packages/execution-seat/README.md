@@ -1,7 +1,7 @@
 # Execution seat ledger — unreleased source candidate
 
 > **Compass:** [Execution seat](../../docs/EXECUTION-SEAT.md) · [Collaboration roadmap](../../docs/COLLABORATION-ROADMAP.md#keep-the-records-distinct)
-> **Implements:** slices S1 and S2 of `execution-seat/v1` and `execution-seat-group/v1`, as a local, append-only ledger with Claude Code and Codex readers and Claude Code and Codex hooks. It grants no authority and publishes nothing.
+> **Implements:** slices S1, S2 and the `mission_event` hook promotion of S3 for `execution-seat/v1` and `execution-seat-group/v1`, as a local, append-only ledger with Claude Code and Codex readers and Claude Code and Codex hooks. It grants no authority and publishes nothing.
 > **Code:** `src/{types,fields,lines,claude-code,codex,ledger,ingest,home,collab-writes,claude-hook,codex-hook}.ts` · `bin/agenttool-execution-seat.ts`
 > **Tests:** `tests/{readers,ledger,cli,hook,codex-hook}.test.ts`
 
@@ -38,7 +38,7 @@ The ledger lives at `$AGENTTOOL_EXECUTION_SEAT_HOME`, or else at `${XDG_STATE_HO
 - **SessionEnd** records the end with its reason.
 - **`/clear`.** Claude Code ends the old session (`reason: clear`) and starts a new one (`source: clear`) in the same process. The new seat is recorded as a `continuation` of the old one. Transcripts on this Mac carry no marker for this: 0 hold a `continued-in` line.
 - **Exit.** On any other documented reason (`prompt_input_exit`, `logout`, `other`) the process is exiting. With `--collab-host`, the hook runs `agenttool-collab-host end --seat-ref claude-code:<session_id>` once, for every session that process hosted, then forgets the process. An unknown reason records the end and touches nothing else. A session that had declared a rest (`collab_session_rest`) is ended like any other: a host's exit is an end, and a Claude Code seat can be woken only while its process lives, so a rest left standing could never be answered. A session holding a live lease is refused (`session_has_active_leases`) and stays open, resting or not, because the hook does not pass `--release-leases`. The host binding file of each ended session is removed.
-- **A subagent's collab write.** A subagent shares its parent's MCP connection, so collab records its writes under the parent's session and seat ref. `PostToolUse` inside a subagent carries `agent_id`. When the tool is a collab write (a task, report, decision, handoff or artifact; `COLLAB_WRITES` in `src/claude-hook.ts`), the hook gives the subagent its own record with trigger `collab_write`, ancestors first. If the subagent has no row yet, the hook reads the session's subagent tree once, but only from a `transcript_path` named `<session_id>.jsonl`; the path is never stored. Reads, presence, cursors, session lifecycle and every other tool are ignored without opening the ledger.
+- **A subagent's collab or mission write.** A subagent shares its parent's MCP connection, so collab and mission calls go out under the parent's session and seat ref. `PostToolUse` inside a subagent carries `agent_id`. When the tool is a collab write (`COLLAB_WRITES` in `src/collab-writes.ts`) or a mission write (`MISSION_WRITES`: `mission_send`, `mission_accept`, `mission_retry`), the hook gives the subagent its own record with trigger `collab_write` or `mission_event`, ancestors first. If the subagent has no row yet, the hook reads the session's subagent tree once, but only from a `transcript_path` named `<session_id>.jsonl`; the path is never stored. Reads, presence, cursors, session lifecycle and every other tool are ignored without opening the ledger.
 - **Host files.** A small file per Claude Code process, `hosts/claude-code-<pid>.json` (mode 0600 in a 0700 directory), lists the sessions the process hosted. It holds session ids and the process start time `ps` reports, nothing else. The pid is `CLAUDE_PID` (observed in hook environments on Claude Code 2.1.302; not documented), else the hook's parent. A pid whose start time changed is a new process. Files of processes that are gone are deleted by the next hook.
 
 The MCP servers of a Claude Code process keep the session ID they were spawned with, even after `/clear` or an in-process `/resume`. That is why the exit covers every session the process hosted, not only the last one.
@@ -50,7 +50,7 @@ The MCP servers of a Claude Code process keep the session ID they were spawned w
   "hooks": {
     "SessionStart": [{ "hooks": [{ "type": "command", "command": "bun <repo>/packages/execution-seat/bin/agenttool-execution-seat.ts hook claude-code" }] }],
     "SessionEnd": [{ "hooks": [{ "type": "command", "timeout": 10, "command": "bun <repo>/packages/execution-seat/bin/agenttool-execution-seat.ts hook claude-code --collab-host <collab>/dist/agenttool-collab-host.js" }] }],
-    "PostToolUse": [{ "matcher": "mcp__.*__collab_.*", "hooks": [{ "type": "command", "command": "bun <repo>/packages/execution-seat/bin/agenttool-execution-seat.ts hook claude-code" }] }]
+    "PostToolUse": [{ "matcher": "mcp__.*__(collab|mission)_.*", "hooks": [{ "type": "command", "command": "bun <repo>/packages/execution-seat/bin/agenttool-execution-seat.ts hook claude-code" }] }]
   }
 }
 ```
@@ -70,7 +70,7 @@ Limits:
 `hook codex` handles Codex `SessionStart`, `SessionEnd` and `PostToolUse` hooks. It reads only the event name, `session_id`, `source`, `reason`, the tool name and `agent_id`, prints nothing (Codex adds a SessionStart hook's stdout to the model's context too) and always exits 0. It takes no `--collab-host`.
 
 - **Observed on codex-cli 0.162.1 (2026-10-18).** In a spawned thread, `PostToolUse` carries `agent_id` (the thread id). Its `session_id` is the parent session, and its `transcript_path` is the spawned thread's own rollout, which already exists. The SessionEnd reason was `other`. Codex writes `-` in an MCP server name as `_` (`mcp__agenttool_collab__collab_task_claim`).
-- **Collab writes.** A spawned thread's first collab write (`COLLAB_WRITES`) reads its rollout, which places its row under the root seat, and promotes it with trigger `collab_write`. A nested thread's missing ancestors are read from rollouts in the same directory; a chain that still cannot be placed is reported, not guessed. A rollout is read only when its file name carries the thread's own id.
+- **Collab and mission writes.** A spawned thread's first collab write (`COLLAB_WRITES`) or mission write (`MISSION_WRITES`) reads its rollout, which places its row under the root seat, and promotes it with trigger `collab_write` or `mission_event`. A nested thread's missing ancestors are read from rollouts in the same directory; a chain that still cannot be placed is reported, not guessed. A rollout is read only when its file name carries the thread's own id.
 - **Sessions.** SessionStart reads the top-level thread's rollout and resumes a seat whose end was recorded; SessionEnd records the end. A long rollout takes about half a second to read (226 MB on 2026-10-18), so SessionEnd reads none once the seat is known, and the snippet runs SessionStart in the background. Session hooks in a spawned thread are ignored; Codex sends SubagentStart and SubagentStop there.
 - **Trust.** Codex runs a configured hook only after it has been trusted (reviewed in the Codex TUI). Until then `codex exec` skips it silently. The probes used `--dangerously-bypass-hook-trust`, which applies to one invocation.
 
@@ -81,7 +81,7 @@ Not installed by this package. A snippet for `~/.codex/hooks.json` (Codex's Sess
   "hooks": {
     "SessionStart": [{ "hooks": [{ "type": "command", "async": true, "command": "bun <install>/bin/agenttool-execution-seat.ts hook codex" }] }],
     "SessionEnd": [{ "hooks": [{ "type": "command", "timeout": 3, "command": "bun <install>/bin/agenttool-execution-seat.ts hook codex" }] }],
-    "PostToolUse": [{ "matcher": "^mcp__.*__collab_", "hooks": [{ "type": "command", "command": "bun <install>/bin/agenttool-execution-seat.ts hook codex" }] }]
+    "PostToolUse": [{ "matcher": "^mcp__.*__(collab|mission)_", "hooks": [{ "type": "command", "command": "bun <install>/bin/agenttool-execution-seat.ts hook codex" }] }]
   }
 }
 ```

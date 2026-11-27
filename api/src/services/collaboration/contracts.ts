@@ -46,9 +46,18 @@ export const issueMissionGrantSchema = z.object({
   grant_id: missionUuidSchema, identity_id: missionUuidSchema, signing_key_id: missionUuidSchema,
   actions: missionActionsSchema, expires_at: missionDateSchema, token_sha256: missionTokenSha256Schema.optional(),
 }).strict();
+export const missionSeatSchema = z.union([
+  z.object({ seat_id: missionUuidSchema }).strict(),
+  z.object({
+    device_id: boundedText(128),
+    session_id: boundedText(128),
+    harness: boundedText(128),
+    seat_id: missionUuidSchema.optional(),
+  }).strict(),
+]);
 export const missionObservationSchema = z.object({
   event_id: missionUuidSchema, summary: boundedText(1000),
-  seat: z.object({ device_id: boundedText(128), session_id: boundedText(128), harness: boundedText(128) }).strict().optional(),
+  seat: missionSeatSchema.optional(),
 }).strict();
 export const missionAcceptSchema = z.object({ mission_digest: missionDigestSchema }).strict();
 export type MissionDescriptor = z.infer<typeof missionDescriptorSchema>;
