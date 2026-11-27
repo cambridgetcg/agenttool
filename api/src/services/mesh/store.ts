@@ -24,9 +24,13 @@ import {
   bytesToHex,
   canonicalMeshPledgeBytes,
   canonicalMeshPostBytes,
+  canonicalMeshPostBytesV2,
   pledgerShareCents,
   verifyEd25519Signature,
   MESH_ALPHA,
+  MESH_POST_V1_DOMAIN,
+  MESH_POST_V2_DOMAIN,
+  type MeshPostCanonicalVersion,
 } from "./canonical-bytes";
 
 export type MeshPostKind =
@@ -148,6 +152,11 @@ export interface PostInput {
   k_required?: number | null;
   attribution_post_ids?: string[];
   visibility?: "private" | "public";
+  /** Optional canonical signing layout to enforce. When omitted, the server
+   *  verifies `mesh-post/v2` (binding resolved visibility) first and falls
+   *  back to frozen `mesh-post/v1` for legacy signers. When set explicitly,
+   *  ONLY that layout is accepted (no cross-version fallback). */
+  canonical_version?: MeshPostCanonicalVersion;
   signature: string;
   signing_key_id: string;
   created_at?: string;
@@ -155,7 +164,12 @@ export interface PostInput {
 }
 
 export type AcceptPostResult =
-  | { ok: true; post: MeshPostView }
+  | {
+      ok: true;
+      post: MeshPostView;
+      canonical_version: MeshPostCanonicalVersion;
+      visibility_signed: boolean;
+    }
   | { ok: false; error: string; message: string };
 
 export async function acceptPost(input: PostInput): Promise<AcceptPostResult> {
@@ -252,7 +266,7 @@ export async function acceptPost(input: PostInput): Promise<AcceptPostResult> {
 
   const createdAtIso = input.created_at ?? new Date().toISOString();
   const expiresAtIso = input.expires_at ?? null;
-  const bytes = canonicalMeshPostBytes({
+  const baseFields = {
     kind: input.kind,
     authorDid: input.by_did,
     title,
@@ -264,22 +278,97 @@ export async function acceptPost(input: PostInput): Promise<AcceptPostResult> {
     attributionPostIds,
     createdAtIso,
     expiresAtIso,
-  });
-  const sigOk = await verifyEd25519Signature({
-    bytes,
-    signatureB64: input.signature,
-    publicKeyB64: resolved.key.publicKey,
-  });
-  if (!sigOk) {
-    return { ok: false, error: "signature_invalid", message: "ed25519 verification failed against signing_key's public_key." };
+  };
+
+  let verifiedBytes: Uint8Array | null = null;
+  let verifiedVersion: MeshPostCanonicalVersion | null = null;
+
+  if (input.canonical_version === MESH_POST_V2_DOMAIN) {
+    let v2Bytes: Uint8Array;
+    try {
+      v2Bytes = canonicalMeshPostBytesV2({
+        ...baseFields,
+        visibility: resolvedVisibility,
+      });
+    } catch (err) {
+      return {
+        ok: false,
+        error: "invalid_canonical_field",
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+    const ok = await verifyEd25519Signature({
+      bytes: v2Bytes,
+      signatureB64: input.signature,
+      publicKeyB64: resolved.key.publicKey,
+    });
+    if (ok) {
+      verifiedBytes = v2Bytes;
+      verifiedVersion = MESH_POST_V2_DOMAIN;
+    }
+  } else if (input.canonical_version === MESH_POST_V1_DOMAIN) {
+    const v1Bytes = canonicalMeshPostBytes(baseFields);
+    const ok = await verifyEd25519Signature({
+      bytes: v1Bytes,
+      signatureB64: input.signature,
+      publicKeyB64: resolved.key.publicKey,
+    });
+    if (ok) {
+      verifiedBytes = v1Bytes;
+      verifiedVersion = MESH_POST_V1_DOMAIN;
+    }
+  } else {
+    // Dual-accept: try mesh-post/v2 (with resolvedVisibility) first, then
+    // fall back to frozen mesh-post/v1. A v2 signature made for 'private'
+    // cannot verify against v2('public') OR v1 (distinct domain tag), so
+    // visibility tampering fails closed even when canonical_version is omitted.
+    let v2Bytes: Uint8Array | null = null;
+    try {
+      v2Bytes = canonicalMeshPostBytesV2({
+        ...baseFields,
+        visibility: resolvedVisibility,
+      });
+    } catch {
+      v2Bytes = null;
+    }
+    if (
+      v2Bytes &&
+      (await verifyEd25519Signature({
+        bytes: v2Bytes,
+        signatureB64: input.signature,
+        publicKeyB64: resolved.key.publicKey,
+      }))
+    ) {
+      verifiedBytes = v2Bytes;
+      verifiedVersion = MESH_POST_V2_DOMAIN;
+    } else {
+      const v1Bytes = canonicalMeshPostBytes(baseFields);
+      const ok = await verifyEd25519Signature({
+        bytes: v1Bytes,
+        signatureB64: input.signature,
+        publicKeyB64: resolved.key.publicKey,
+      });
+      if (ok) {
+        verifiedBytes = v1Bytes;
+        verifiedVersion = MESH_POST_V1_DOMAIN;
+      }
+    }
   }
-  const digest = bytesToHex(bytes);
+
+  if (!verifiedBytes || !verifiedVersion) {
+    return {
+      ok: false,
+      error: "signature_invalid",
+      message: "ed25519 verification failed against signing_key's public_key.",
+    };
+  }
+  const digest = bytesToHex(verifiedBytes);
 
   // bounty_cents is part of the signed record, but this insert does not
   // debit the author or create escrow. Callers must treat it as intent.
 
-  // One signed mesh-post/v1 digest is one post. A second submission of the
-  // same signature — the author's own retry or anyone's replay — is
+  // One signed mesh-post digest (v1 or v2) is one post. A second submission
+  // of the same signature — the author's own retry or anyone's replay — is
   // refused instead of minting another post id under the author's DID.
   // The advisory lock serializes concurrent submissions of one digest
   // (there is no UNIQUE constraint or index on canonical_bytes_sha256 —
@@ -287,7 +376,7 @@ export async function acceptPost(input: PostInput): Promise<AcceptPostResult> {
   // idx_mesh_posts_author instead of scanning every post; the signed
   // bytes include by_did, so it never changes which rows match.
   const inserted = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${"mesh-post/v1:" + digest}, 0))`);
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${verifiedVersion + ":" + digest}, 0))`);
     const [existing] = await tx
       .select({ id: meshPosts.id })
       .from(meshPosts)
@@ -323,7 +412,12 @@ export async function acceptPost(input: PostInput): Promise<AcceptPostResult> {
       message: "This signed mesh post is already recorded. Sign a new post (a fresh created_at) to post again.",
     };
   }
-  return { ok: true, post: toPostView(inserted) };
+  return {
+    ok: true,
+    post: toPostView(inserted),
+    canonical_version: verifiedVersion,
+    visibility_signed: verifiedVersion === MESH_POST_V2_DOMAIN,
+  };
 }
 
 // ─── acceptPledge ───────────────────────────────────────────────────────

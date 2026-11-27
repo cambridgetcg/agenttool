@@ -70,6 +70,7 @@ from agenttool.love import (
     canonical_unconditional_bytes,
 )
 from agenttool.seed import canonical_discovery_bytes, canonical_recover_bytes
+from agenttool.mesh import canonical_mesh_post_bytes, canonical_mesh_post_bytes_v2
 
 # ── fixture ────────────────────────────────────────────────────────────
 
@@ -326,6 +327,33 @@ ADAPTERS: Dict[str, Callable[[Input], Canonical]] = {
         address=i["address"],
         derivation_path=i["derivation_path"],
         claim_pubkey_b64=i["claim_pubkey_b64"],
+    ),
+    "mesh-post/v1": lambda i: canonical_mesh_post_bytes(
+        kind=i["kind"],
+        author_did=i["author_did"],
+        title=i["title"],
+        body=i["body"],
+        capabilities=i["capabilities"],
+        topics=i["topics"],
+        bounty_cents=i["bounty_cents"],
+        k_required=i["k_required"],
+        attribution_post_ids=i["attribution_post_ids"],
+        created_at_iso=i["created_at_iso"],
+        expires_at_iso=i["expires_at_iso"],
+    ),
+    "mesh-post/v2": lambda i: canonical_mesh_post_bytes_v2(
+        kind=i["kind"],
+        author_did=i["author_did"],
+        title=i["title"],
+        body=i["body"],
+        capabilities=i["capabilities"],
+        topics=i["topics"],
+        bounty_cents=i["bounty_cents"],
+        k_required=i["k_required"],
+        attribution_post_ids=i["attribution_post_ids"],
+        created_at_iso=i["created_at_iso"],
+        expires_at_iso=i["expires_at_iso"],
+        visibility=i["visibility"],
     ),
 }
 

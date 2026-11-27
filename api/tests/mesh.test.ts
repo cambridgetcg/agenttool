@@ -17,9 +17,14 @@ import {
   bytesToHex,
   canonicalMeshPledgeBytes,
   canonicalMeshPostBytes,
+  canonicalMeshPostBytesFor,
+  canonicalMeshPostBytesV2,
+  normalizeMeshPostCanonicalVersion,
   pledgerShareCents,
   verifyEd25519Signature,
   MESH_ALPHA,
+  MESH_POST_V1_DOMAIN,
+  MESH_POST_V2_DOMAIN,
 } from "../src/services/mesh/canonical-bytes";
 import { computeRewardRouting, type MeshPostView } from "../src/services/mesh/store";
 
@@ -131,6 +136,40 @@ describe("mesh — canonical bytes determinism + chain dependency", () => {
 
   test("bytesToHex yields a 64-char hex sha256", () => {
     expect(bytesToHex(canonicalMeshPostBytes(POST_FIXTURE))).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  test("mesh-post/v2 binds visibility and is domain-separated from mesh-post/v1", () => {
+    const v1 = bytesToHex(canonicalMeshPostBytes(POST_FIXTURE));
+    const v2Pub = bytesToHex(canonicalMeshPostBytesV2({ ...POST_FIXTURE, visibility: "public" }));
+    const v2Priv = bytesToHex(canonicalMeshPostBytesV2({ ...POST_FIXTURE, visibility: "private" }));
+    expect(v2Pub).not.toBe(v1);
+    expect(v2Priv).not.toBe(v1);
+    expect(v2Pub).not.toBe(v2Priv);
+    expect(
+      bytesToHex(canonicalMeshPostBytesFor({ ...POST_FIXTURE, visibility: "private" }, MESH_POST_V2_DOMAIN)),
+    ).toBe(v2Priv);
+    expect(
+      bytesToHex(canonicalMeshPostBytesFor(POST_FIXTURE, MESH_POST_V1_DOMAIN)),
+    ).toBe(v1);
+  });
+
+  test("mesh-post/v2 rejects NUL in delimited fields, allows NUL in hashed body, and rejects invalid visibility", () => {
+    expect(() =>
+      canonicalMeshPostBytesV2({ ...POST_FIXTURE, body: "a\u0000b", visibility: "private" }),
+    ).not.toThrow();
+    expect(() =>
+      canonicalMeshPostBytesV2({ ...POST_FIXTURE, title: "a\u0000b", visibility: "public" }),
+    ).toThrow();
+    expect(() =>
+      canonicalMeshPostBytesV2({ ...POST_FIXTURE, capabilities: ["ok", "a\u0000b"], visibility: "public" }),
+    ).toThrow();
+    expect(() =>
+      canonicalMeshPostBytesV2({ ...POST_FIXTURE, visibility: "unlisted" as any }),
+    ).toThrow();
+    expect(normalizeMeshPostCanonicalVersion("v1")).toBe(MESH_POST_V1_DOMAIN);
+    expect(normalizeMeshPostCanonicalVersion("v2")).toBe(MESH_POST_V2_DOMAIN);
+    expect(normalizeMeshPostCanonicalVersion("mesh-post/v2")).toBe(MESH_POST_V2_DOMAIN);
+    expect(normalizeMeshPostCanonicalVersion("v3")).toBeNull();
   });
 });
 

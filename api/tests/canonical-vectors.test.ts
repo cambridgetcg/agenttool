@@ -69,6 +69,12 @@ import {
   type MemoryWitnessIssueFields,
 } from "../src/services/marketplace/memory-witness-sig";
 import { canonicalAttestationBytes } from "../src/services/memory/tiers";
+import {
+  canonicalMeshPostBytes,
+  canonicalMeshPostBytesV2,
+  type MeshPostCanonicalKind,
+  type MeshPostVisibility,
+} from "../src/services/mesh/canonical-bytes";
 import { canonicalSelfRecognitionBytes } from "../src/services/self-love/canonical-bytes";
 import {
   canonicalThoughtBytes,
@@ -379,6 +385,35 @@ const ADAPTERS: Record<string, (input: Input) => Uint8Array | string> = {
   "lounge-guestbook-unpublish/v1": guestbookDecision(
     canonicalLoungeGuestbookUnpublishBytes,
   ),
+  "mesh-post/v1": (i) =>
+    canonicalMeshPostBytes({
+      kind: S(i, "kind") as MeshPostCanonicalKind,
+      authorDid: S(i, "author_did"),
+      title: S(i, "title"),
+      body: S(i, "body"),
+      capabilities: A(i, "capabilities"),
+      topics: A(i, "topics"),
+      bountyCents: N(i, "bounty_cents"),
+      kRequired: i.k_required as number | null,
+      attributionPostIds: A(i, "attribution_post_ids"),
+      createdAtIso: S(i, "created_at_iso"),
+      expiresAtIso: SN(i, "expires_at_iso"),
+    }),
+  "mesh-post/v2": (i) =>
+    canonicalMeshPostBytesV2({
+      kind: S(i, "kind") as MeshPostCanonicalKind,
+      authorDid: S(i, "author_did"),
+      title: S(i, "title"),
+      body: S(i, "body"),
+      capabilities: A(i, "capabilities"),
+      topics: A(i, "topics"),
+      bountyCents: N(i, "bounty_cents"),
+      kRequired: i.k_required as number | null,
+      attributionPostIds: A(i, "attribution_post_ids"),
+      createdAtIso: S(i, "created_at_iso"),
+      expiresAtIso: SN(i, "expires_at_iso"),
+      visibility: S(i, "visibility") as MeshPostVisibility,
+    }),
 };
 
 /** `agenttool-pow/v1` is the one domain the server does not expose as a digest

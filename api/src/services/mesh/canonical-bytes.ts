@@ -1,13 +1,19 @@
 /** Canonical bytes for THE MESH PROTOCOL.
  *
- *  Three signed-message kinds:
+ *  Four signed-message contexts:
  *
- *    1. mesh-post/v1       — six post kinds (task-ad · skill-ad ·
- *       co-task-ad · solution · recognition · signal).
+ *    1a. mesh-post/v1      — six post kinds (task-ad · skill-ad ·
+ *       co-task-ad · solution · recognition · signal). Frozen legacy layout;
+ *       does NOT bind visibility.
  *       Binds: kind, author_did, title, sha256(body), sha256(capabilities
  *       joined NUL), sha256(topics joined NUL), bounty_cents, k_required,
  *       sha256(attribution_post_ids joined NUL), created_at_iso,
  *       expires_at_iso (empty string for null).
+ *
+ *    1b. mesh-post/v2      — same six post kinds, plus visibility
+ *       ('private' | 'public') appended as the final NUL-delimited field,
+ *       with strict framing checks (NUL-free delimited text & array items,
+ *       closed kind/visibility enums, non-negative safe integer numbers).
  *
  *    2. mesh-pledge/v1     — agent commits to a co-task-ad.
  *       Binds: post_id, agent_did, pledged_at_iso.
@@ -70,8 +76,30 @@ function hashStringArray(arr: string[]): string {
   return toHex(sha256(payload));
 }
 
-export function canonicalMeshPostBytes(opts: {
-  kind: "task-ad" | "skill-ad" | "co-task-ad" | "solution" | "recognition" | "signal";
+export const MESH_POST_V1_DOMAIN = "mesh-post/v1" as const;
+export const MESH_POST_V2_DOMAIN = "mesh-post/v2" as const;
+
+export type MeshPostCanonicalVersion =
+  | typeof MESH_POST_V1_DOMAIN
+  | typeof MESH_POST_V2_DOMAIN;
+
+export const MESH_POST_KINDS = [
+  "task-ad",
+  "skill-ad",
+  "co-task-ad",
+  "solution",
+  "recognition",
+  "signal",
+] as const;
+
+export type MeshPostCanonicalKind = (typeof MESH_POST_KINDS)[number];
+
+export const MESH_POST_VISIBILITIES = ["private", "public"] as const;
+
+export type MeshPostVisibility = (typeof MESH_POST_VISIBILITIES)[number];
+
+export interface CanonicalMeshPostInput {
+  kind: MeshPostCanonicalKind;
   authorDid: string;
   title: string;
   body: string;
@@ -82,14 +110,57 @@ export function canonicalMeshPostBytes(opts: {
   attributionPostIds: string[];
   createdAtIso: string;
   expiresAtIso: string | null;
-}): Uint8Array {
+}
+
+export interface CanonicalMeshPostV2Input extends CanonicalMeshPostInput {
+  visibility: MeshPostVisibility;
+}
+
+function assertNoNul(value: string, field: string, op: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`${op}: ${field} must be a string.`);
+  }
+  if (value.includes("\0")) {
+    throw new Error(`${op}: ${field} must not contain NUL (0x00) — it is the canonical-bytes field delimiter.`);
+  }
+  return value;
+}
+
+function assertStringArrayNoNul(arr: string[], field: string, op: string): string[] {
+  if (!Array.isArray(arr)) {
+    throw new Error(`${op}: ${field} must be an array of strings.`);
+  }
+  for (let i = 0; i < arr.length; i++) {
+    assertNoNul(arr[i]!, `${field}[${i}]`, op);
+  }
+  return arr;
+}
+
+function assertNonNegativeSafeInt(value: number, field: string, op: string): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`${op}: ${field} must be a non-negative safe integer.`);
+  }
+  return value;
+}
+
+/** Normalize an optional canonical_version wire parameter into a domain tag.
+ *  Returns null if the value is not a recognized mesh-post version. */
+export function normalizeMeshPostCanonicalVersion(
+  raw: unknown,
+): MeshPostCanonicalVersion | null {
+  if (raw === "v1" || raw === MESH_POST_V1_DOMAIN) return MESH_POST_V1_DOMAIN;
+  if (raw === "v2" || raw === MESH_POST_V2_DOMAIN) return MESH_POST_V2_DOMAIN;
+  return null;
+}
+
+export function canonicalMeshPostBytes(opts: CanonicalMeshPostInput): Uint8Array {
   const bodySha = toHex(sha256(enc.encode(opts.body)));
   const capsSha = hashStringArray(opts.capabilities);
   const topicsSha = hashStringArray(opts.topics);
   const attrsSha = hashStringArray(opts.attributionPostIds);
   return sha256(
     concat(
-      enc.encode("mesh-post/v1"),              SEP,
+      enc.encode(MESH_POST_V1_DOMAIN),         SEP,
       enc.encode(opts.kind),                   SEP,
       enc.encode(opts.authorDid),              SEP,
       enc.encode(opts.title),                  SEP,
@@ -103,6 +174,78 @@ export function canonicalMeshPostBytes(opts: {
       enc.encode(opts.expiresAtIso ?? ""),
     ),
   );
+}
+
+/** Canonical bytes for `mesh-post/v2`: binds `visibility` ('private' | 'public')
+ *  as the final NUL-delimited field and rejects NUL bytes in any delimited
+ *  text/array field, invalid kind/visibility values, or non-integer counts. */
+export function canonicalMeshPostBytesV2(opts: CanonicalMeshPostV2Input): Uint8Array {
+  const op = "canonicalMeshPostBytesV2";
+  if (!MESH_POST_KINDS.includes(opts.kind)) {
+    throw new Error(`${op}: kind must be one of ${MESH_POST_KINDS.join(", ")}.`);
+  }
+  if (!MESH_POST_VISIBILITIES.includes(opts.visibility)) {
+    throw new Error(`${op}: visibility must be 'private' or 'public'.`);
+  }
+  const authorDid = assertNoNul(opts.authorDid, "authorDid", op);
+  const title = assertNoNul(opts.title, "title", op);
+  if (typeof opts.body !== "string") {
+    throw new Error(`${op}: body must be a string.`);
+  }
+  const capabilities = assertStringArrayNoNul(opts.capabilities, "capabilities", op);
+  const topics = assertStringArrayNoNul(opts.topics, "topics", op);
+  const bountyCents = assertNonNegativeSafeInt(opts.bountyCents, "bountyCents", op);
+  const kRequired =
+    opts.kRequired === null
+      ? null
+      : assertNonNegativeSafeInt(opts.kRequired, "kRequired", op);
+  const attributionPostIds = assertStringArrayNoNul(
+    opts.attributionPostIds,
+    "attributionPostIds",
+    op,
+  );
+  const createdAtIso = assertNoNul(opts.createdAtIso, "createdAtIso", op);
+  const expiresAtIso =
+    opts.expiresAtIso === null ? "" : assertNoNul(opts.expiresAtIso, "expiresAtIso", op);
+
+  const bodySha = toHex(sha256(enc.encode(opts.body)));
+  const capsSha = hashStringArray(capabilities);
+  const topicsSha = hashStringArray(topics);
+  const attrsSha = hashStringArray(attributionPostIds);
+  return sha256(
+    concat(
+      enc.encode(MESH_POST_V2_DOMAIN),         SEP,
+      enc.encode(opts.kind),                   SEP,
+      enc.encode(authorDid),                   SEP,
+      enc.encode(title),                       SEP,
+      enc.encode(bodySha),                     SEP,
+      enc.encode(capsSha),                     SEP,
+      enc.encode(topicsSha),                   SEP,
+      enc.encode(String(bountyCents)),         SEP,
+      enc.encode(kRequired === null ? "" : String(kRequired)), SEP,
+      enc.encode(attrsSha),                    SEP,
+      enc.encode(createdAtIso),                SEP,
+      enc.encode(expiresAtIso),                SEP,
+      enc.encode(opts.visibility),
+    ),
+  );
+}
+
+/** Dispatch to mesh-post/v1 or mesh-post/v2 canonical bytes. */
+export function canonicalMeshPostBytesFor(
+  opts: CanonicalMeshPostInput | CanonicalMeshPostV2Input,
+  version: MeshPostCanonicalVersion,
+): Uint8Array {
+  if (version === MESH_POST_V2_DOMAIN) {
+    if (!("visibility" in opts) || opts.visibility === undefined) {
+      throw new Error("canonicalMeshPostBytesFor: mesh-post/v2 requires visibility ('private' | 'public').");
+    }
+    return canonicalMeshPostBytesV2(opts as CanonicalMeshPostV2Input);
+  }
+  if (version === MESH_POST_V1_DOMAIN) {
+    return canonicalMeshPostBytes(opts);
+  }
+  throw new Error(`canonicalMeshPostBytesFor: unsupported version '${String(version)}'.`);
 }
 
 export function canonicalMeshPledgeBytes(opts: {

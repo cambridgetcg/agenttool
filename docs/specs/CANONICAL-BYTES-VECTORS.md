@@ -1,7 +1,7 @@
 # Canonical-bytes vectors
 
 **Artifact:** [`canonical-bytes-vectors.json`](canonical-bytes-vectors.json) —
-37 domain-separated signing formats, 264 cases, one file.
+39 domain-separated signing formats, 281 cases, one file.
 
 ## Why this exists
 
@@ -10,8 +10,8 @@ agenttool signs the same wire contract in three hand-written places:
 | | |
 |---|---|
 | **server** | `api/src/services/*/sig.ts`, `.../canonical-bytes.ts`, `identity/{crypto,authority}.ts`, `memory/tiers.ts`, `bootstrap/elevate.ts`, `routes/identity/at-rest.ts` |
-| **sdk-ts** | `packages/sdk-ts/src/{crypto,grace,inbox,love,at-rest,authority,seed,bootstrap,identity,lounge}.ts` |
-| **sdk-py** | `packages/sdk-py/src/agenttool/{crypto,grace,inbox,love,at_rest,authority,bootstrap,bootstrap_agent,identity,lounge}.py` |
+| **sdk-ts** | `packages/sdk-ts/src/{crypto,grace,inbox,love,at-rest,authority,seed,bootstrap,identity,lounge,mesh}.ts` |
+| **sdk-py** | `packages/sdk-py/src/agenttool/{crypto,grace,inbox,love,at_rest,authority,bootstrap,bootstrap_agent,identity,lounge,mesh}.py` |
 
 Three implementations, no shared artifact, and a parity gate that compared
 *identifier spelling* rather than *bytes*. Every confirmed cross-language
