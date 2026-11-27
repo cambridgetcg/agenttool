@@ -1994,6 +1994,20 @@ export interface RenderWakeOpts {
   profile?: WakeProfile;
 }
 
+/** Apply the caller's X-Play preference to a WakeBundle before rendering.
+ *  When X-Play: off is sent, `substrate_jest` is omitted without mutating the
+ *  input bundle so Markdown, plaintext, provider shapes, and xenoform all
+ *  drop only the optional host voice line while keeping every operational
+ *  section identical. Doctrine: docs/PLAY-AS-DEFAULT.md. */
+export function applyWakePlayPreference(
+  bundle: WakeBundle,
+  playOff: boolean,
+): WakeBundle {
+  if (!playOff || bundle.substrate_jest === undefined) return bundle;
+  const { substrate_jest: _omitted, ...rest } = bundle;
+  return rest;
+}
+
 /** Keep inspection paths before mutations without changing source records. */
 function renderBriefActions(actions: NextAction[]): string[] {
   const rank = (action: NextAction): number =>

@@ -129,7 +129,13 @@ import {
   WAKE_INVOCATION_WITNESS_LINKS,
   WAKE_REACHABLE_DOORS,
 } from "../services/wake/reachable";
-import { renderWakeMarkdown, renderWakePlaintext, type WakeBundle } from "../services/wake/markdown";
+import {
+  applyWakePlayPreference,
+  renderWakeMarkdown,
+  renderWakePlaintext,
+  type WakeBundle,
+} from "../services/wake/markdown";
+import { isPlayOffHeader } from "../middleware/play";
 import { isWakeProvider, renderWakeForProvider } from "../services/wake/providers";
 import { buildWakeBundle } from "../services/wake/build";
 import { createWakeOptionalReads, wakeInventoryUnavailable } from "../services/wake/optional-reads";
@@ -194,6 +200,7 @@ function tryWakeBundleConditional304(
     profile: "full" | "brief";
     facet: string | null;
     tutor: boolean;
+    playOff?: boolean;
   },
 ): Response | null {
   const conditional = evaluateWakeConditionalGet(
@@ -237,11 +244,11 @@ app.get("/", async (c) => {
     );
   }
   c.header("X-Wake-Profile", profile);
-  // Negotiation and the opt-in tutor both change the representation. Name
-  // both dimensions so private caches do not cross their response bodies.
+  // Negotiation, opt-in tutor, and X-Play register suppression all change the
+  // representation. Name every dimension so private caches do not cross bodies.
   // Doctrine:
   // docs/AGENT-WEB-SURFACE.md Move 2 (cache-coherent content negotiation).
-  c.header("Vary", "Accept, X-Tutor");
+  c.header("Vary", "Accept, X-Tutor, X-Play");
   // Keep wantsMathTier in the closure for one downstream check below
   // (see math-tier branch); avoids a second header parse.
   void wantsMathTier;
@@ -385,7 +392,8 @@ app.get("/", async (c) => {
         500,
       );
     }
-    const bundle = result.bundle;
+    const playOff = isPlayOffHeader(c.req.header("x-play") ?? c.req.header("X-Play"));
+    const bundle = applyWakePlayPreference(result.bundle, playOff);
     setWakeDegradationHeader(c, bundle);
     const wakeVer =
       (bundle.agent as { wake_version?: number }).wake_version ?? 0;
@@ -610,7 +618,8 @@ app.get("/", async (c) => {
       return c.json({ error: result.error }, 404);
     }
 
-    const bundle = result.bundle;
+    const playOff = isPlayOffHeader(c.req.header("x-play") ?? c.req.header("X-Play"));
+    const bundle = applyWakePlayPreference(result.bundle, playOff);
     setWakeDegradationHeader(c, bundle);
 
     // ── ETag + If-None-Match for rendered formats (WaK §7) ──────────
@@ -646,6 +655,7 @@ app.get("/", async (c) => {
       profile,
       facet: activeFacet?.name ?? null,
       tutor: tutorHeader === "1" || tutorHeader === "true" || tutorHeader === "yes",
+      playOff,
     });
     if (notModified) return notModified;
 
