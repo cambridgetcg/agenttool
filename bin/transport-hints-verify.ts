@@ -552,16 +552,16 @@ async function fetchAuthority(
       continue;
     }
 
+    if (!options.readBody) {
+      await cancelBody(response);
+      return { ok: true, status: response.status, headers: response.headers, bytes: null, redirects, finalUrl: currentUrl, problems };
+    }
+
     const contentEncoding = response.headers.get("content-encoding");
     if (contentEncoding !== null && contentEncoding.trim().toLowerCase() !== "identity") {
       await cancelBody(response);
       problems.push(`Content-Encoding '${contentEncoding}' is not identity`);
       return { ok: false, status: response.status, headers: response.headers, bytes: null, redirects, finalUrl: currentUrl, problems };
-    }
-
-    if (!options.readBody) {
-      await cancelBody(response);
-      return { ok: true, status: response.status, headers: response.headers, bytes: null, redirects, finalUrl: currentUrl, problems };
     }
 
     if (response.status !== 200) {
@@ -969,8 +969,12 @@ export async function verifyDescriptorAuthority(
             loveProblems.push(`manifest mirror URL is invalid: ${item.url}`);
             continue;
           }
-          if (mirrorUrl.protocol !== "https:" || mirrorUrl.username !== "" || mirrorUrl.password !== "") {
-            loveProblems.push(`manifest mirror URL must be unauthenticated https: ${item.url}`);
+          if (!isHttpsUrl(item.url)) {
+            loveProblems.push(`manifest mirror URL breaks section 4.1 HTTPS URL rule: ${item.url}`);
+            continue;
+          }
+          if (!allowUrl(mirrorUrl, 0)) {
+            loveProblems.push(`manifest mirror URL refused by egress policy: ${item.url}`);
             continue;
           }
           if (seenMirrors.has(item.url)) {
@@ -1304,9 +1308,19 @@ export interface HintsIndexContext {
   readonly torrentsBySha256?: ReadonlyMap<string, Uint8Array>;
 }
 
-function checkNoSignatureField(obj: Record<string, unknown>, label: string, problems: string[]): void {
-  if (Object.hasOwn(obj, "signature")) {
-    problems.push(`${label} must not carry a field named 'signature' (draft section 8.1)`);
+function checkNoSignatureDeep(value: unknown, path: string, problems: string[]): void {
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i += 1) {
+      checkNoSignatureDeep(value[i], `${path}[${i}]`, problems);
+    }
+    return;
+  }
+  if (!isPlainObject(value)) return;
+  for (const key of Object.keys(value)) {
+    if (key === "signature") {
+      problems.push(`${path} must not carry a field named 'signature' (draft section 8.1)`);
+    }
+    checkNoSignatureDeep(value[key], `${path}.${key}`, problems);
   }
 }
 
@@ -1365,7 +1379,7 @@ export function hintsIndexProblems(indexText: string, context: HintsIndexContext
   if (!isPlainObject(root)) return ["hints-index must be a JSON object"];
 
   const problems: string[] = [];
-  checkNoSignatureField(root, "hints-index", problems);
+  checkNoSignatureDeep(root, "hints-index", problems);
 
   if (root.protocol !== PROTOCOL) problems.push(`protocol is '${String(root.protocol)}', not '${PROTOCOL}'`);
   if (root.document_type !== HINTS_INDEX_DOCUMENT_TYPE) {
@@ -1406,7 +1420,6 @@ export function hintsIndexProblems(indexText: string, context: HintsIndexContext
       problems.push(`${label} must be an object`);
       return;
     }
-    checkNoSignatureField(rawEntry, label, problems);
 
     const subjectSha = rawEntry.subject_sha256;
     const name = rawEntry.name;
@@ -1458,45 +1471,45 @@ export function hintsIndexProblems(indexText: string, context: HintsIndexContext
     // Status-conditional required fields (section 8.1)
     if (status === "listed") {
       for (const req of ["descriptor_url", "clearance_sha256", "irreversibility_notice_sha256", "promise_until", "torrent"]) {
-        if (!(req in rawEntry)) problems.push(`${label} (listed) is missing required field '${req}'`);
+        if (!Object.hasOwn(rawEntry, req)) problems.push(`${label} (listed) is missing required field '${req}'`);
       }
     } else if (status === "withdrawn") {
       for (const req of ["withdrawn_at", "stopped", "cannot_stop"]) {
-        if (!(req in rawEntry)) problems.push(`${label} (withdrawn) is missing required field '${req}'`);
+        if (!Object.hasOwn(rawEntry, req)) problems.push(`${label} (withdrawn) is missing required field '${req}'`);
       }
     } else if (status === "superseded") {
       for (const req of ["superseded_at", "superseded_by", "stopped", "cannot_stop"]) {
-        if (!(req in rawEntry)) problems.push(`${label} (superseded) is missing required field '${req}'`);
+        if (!Object.hasOwn(rawEntry, req)) problems.push(`${label} (superseded) is missing required field '${req}'`);
       }
     }
 
     // Optional / conditional field validation
-    if ("descriptor_url" in rawEntry && !isHttpsUrl(rawEntry.descriptor_url)) {
+    if (Object.hasOwn(rawEntry, "descriptor_url") && !isHttpsUrl(rawEntry.descriptor_url)) {
       problems.push(`${label}.descriptor_url breaks section 4.1 URL rule`);
     }
-    if ("clearance_sha256" in rawEntry && (typeof rawEntry.clearance_sha256 !== "string" || !RE.sha256Hex.test(rawEntry.clearance_sha256))) {
+    if (Object.hasOwn(rawEntry, "clearance_sha256") && (typeof rawEntry.clearance_sha256 !== "string" || !RE.sha256Hex.test(rawEntry.clearance_sha256))) {
       problems.push(`${label}.clearance_sha256 is not 64 lowercase hex`);
     }
     if (
-      "irreversibility_notice_sha256" in rawEntry &&
+      Object.hasOwn(rawEntry, "irreversibility_notice_sha256") &&
       (typeof rawEntry.irreversibility_notice_sha256 !== "string" || !RE.sha256Hex.test(rawEntry.irreversibility_notice_sha256))
     ) {
       problems.push(`${label}.irreversibility_notice_sha256 is not 64 lowercase hex`);
     }
-    if ("promise_until" in rawEntry && !isValidIsoDate(rawEntry.promise_until)) {
+    if (Object.hasOwn(rawEntry, "promise_until") && !isValidIsoDate(rawEntry.promise_until)) {
       problems.push(`${label}.promise_until is not a valid YYYY-MM-DD date`);
     }
-    if ("withdrawn_at" in rawEntry && !isValidIsoDate(rawEntry.withdrawn_at)) {
+    if (Object.hasOwn(rawEntry, "withdrawn_at") && !isValidIsoDate(rawEntry.withdrawn_at)) {
       problems.push(`${label}.withdrawn_at is not a valid YYYY-MM-DD date`);
     }
-    if ("superseded_at" in rawEntry && !isValidIsoDate(rawEntry.superseded_at)) {
+    if (Object.hasOwn(rawEntry, "superseded_at") && !isValidIsoDate(rawEntry.superseded_at)) {
       problems.push(`${label}.superseded_at is not a valid YYYY-MM-DD date`);
     }
-    if ("stopped" in rawEntry) checkUniqueBoundedStrings(rawEntry.stopped, `${label}.stopped`, 200, problems);
-    if ("cannot_stop" in rawEntry) checkUniqueBoundedStrings(rawEntry.cannot_stop, `${label}.cannot_stop`, 200, problems);
+    if (Object.hasOwn(rawEntry, "stopped")) checkUniqueBoundedStrings(rawEntry.stopped, `${label}.stopped`, 200, problems);
+    if (Object.hasOwn(rawEntry, "cannot_stop")) checkUniqueBoundedStrings(rawEntry.cannot_stop, `${label}.cannot_stop`, 200, problems);
 
     // Rule 8.3.6: superseded_by names descriptor_sha256 of another entry in the same index.
-    if ("superseded_by" in rawEntry) {
+    if (Object.hasOwn(rawEntry, "superseded_by")) {
       if (typeof rawEntry.superseded_by !== "string" || !RE.sha256Hex.test(rawEntry.superseded_by)) {
         problems.push(`${label}.superseded_by is not 64 lowercase hex`);
       } else if (validDescSha && rawEntry.superseded_by === descSha) {
@@ -1507,12 +1520,11 @@ export function hintsIndexProblems(indexText: string, context: HintsIndexContext
     }
 
     let validTorrentField: { readonly url: string; readonly sha256: string; readonly url_list: readonly string[] } | null = null;
-    if ("torrent" in rawEntry) {
+    if (Object.hasOwn(rawEntry, "torrent")) {
       const t = rawEntry.torrent;
       if (!isPlainObject(t)) {
         problems.push(`${label}.torrent must be an object`);
       } else {
-        checkNoSignatureField(t, `${label}.torrent`, problems);
         const okUrl = isHttpsUrl(t.url);
         if (!okUrl) problems.push(`${label}.torrent.url breaks section 4.1 URL rule`);
         const okSha = typeof t.sha256 === "string" && RE.sha256Hex.test(t.sha256);
@@ -1535,19 +1547,18 @@ export function hintsIndexProblems(indexText: string, context: HintsIndexContext
       }
     }
 
-    if ("none_prior" in rawEntry) {
+    if (Object.hasOwn(rawEntry, "none_prior")) {
       const np = rawEntry.none_prior;
       if (!isPlainObject(np)) {
         problems.push(`${label}.none_prior must be an object`);
       } else {
-        checkNoSignatureField(np, `${label}.none_prior`, problems);
         if (!isValidIsoDateTime(np.hashed_at)) {
           problems.push(`${label}.none_prior.hashed_at is not a valid YYYY-MM-DDTHH:MM:SSZ UTC timestamp`);
         }
       }
     }
 
-    if ("observations" in rawEntry) {
+    if (Object.hasOwn(rawEntry, "observations")) {
       if (!Array.isArray(rawEntry.observations)) {
         problems.push(`${label}.observations must be an array`);
       } else {
@@ -1557,7 +1568,6 @@ export function hintsIndexProblems(indexText: string, context: HintsIndexContext
             problems.push(`${obsLabel} must be an object`);
             return;
           }
-          checkNoSignatureField(obs, obsLabel, problems);
           if (!isValidIsoDate(obs.at) && !isValidIsoDateTime(obs.at)) {
             problems.push(`${obsLabel}.at must be a valid YYYY-MM-DD date or YYYY-MM-DDTHH:MM:SSZ timestamp`);
           }
@@ -1568,7 +1578,7 @@ export function hintsIndexProblems(indexText: string, context: HintsIndexContext
       }
     }
 
-    if ("other_replicas" in rawEntry) {
+    if (Object.hasOwn(rawEntry, "other_replicas")) {
       if (!Array.isArray(rawEntry.other_replicas)) {
         problems.push(`${label}.other_replicas must be an array`);
       } else {
@@ -1578,14 +1588,13 @@ export function hintsIndexProblems(indexText: string, context: HintsIndexContext
             problems.push(`${repLabel} must be an object`);
             return;
           }
-          checkNoSignatureField(rep, repLabel, problems);
           if (typeof rep.kind !== "string" || !RE.replicaKind.test(rep.kind)) {
             problems.push(`${repLabel}.kind breaks the replica kind pattern`);
           }
-          if ("holds_bytes" in rep && typeof rep.holds_bytes !== "boolean") {
+          if (Object.hasOwn(rep, "holds_bytes") && typeof rep.holds_bytes !== "boolean") {
             problems.push(`${repLabel}.holds_bytes must be a boolean`);
           }
-          if ("recall" in rep && (typeof rep.recall !== "string" || rep.recall.length < 1 || rep.recall.length > 200)) {
+          if (Object.hasOwn(rep, "recall") && (typeof rep.recall !== "string" || rep.recall.length < 1 || rep.recall.length > 200)) {
             problems.push(`${repLabel}.recall must be a string of 1 to 200 characters`);
           }
         });
@@ -1613,7 +1622,7 @@ export function hintsIndexProblems(indexText: string, context: HintsIndexContext
             problems.push(`${label}.name differs from linked descriptor bittorrent.name`);
           }
           // Rule 8.3.3: none_prior is present iff authority.kind === 'none-prior'
-          const hasNonePrior = "none_prior" in rawEntry;
+          const hasNonePrior = Object.hasOwn(rawEntry, "none_prior");
           const isNonePriorAuth = linkedDescriptor.authority.kind === "none-prior";
           if (hasNonePrior !== isNonePriorAuth) {
             problems.push(
@@ -1660,7 +1669,7 @@ export function hintsIndexProblems(indexText: string, context: HintsIndexContext
     }
 
     // Rule 8.3.5: magnet agrees with descriptor's btih, btmh and name and with torrent fields
-    if ("magnet" in rawEntry) {
+    if (Object.hasOwn(rawEntry, "magnet")) {
       if (typeof rawEntry.magnet !== "string" || rawEntry.magnet.length > 8192) {
         problems.push(`${label}.magnet must be a string of at most 8,192 characters`);
       } else {
@@ -1687,6 +1696,15 @@ export function hintsIndexProblems(indexText: string, context: HintsIndexContext
           const wsDecoded = wsEncoded.map(decodeMagnetComponent);
           if (wsDecoded.some((u) => u === null || !isHttpsUrl(u) || !RE.webSeedEnd.test(u))) {
             problems.push(`rule 8.3.5: ${label}.magnet carries an invalid or non-canonical ws= web seed`);
+          } else {
+            const seenWs = new Set<string>();
+            for (const u of wsDecoded) {
+              if (u !== null && seenWs.has(u)) {
+                problems.push(`rule 8.3.5: ${label}.magnet carries duplicate ws= web seed '${u}'`);
+              } else if (u !== null) {
+                seenWs.add(u);
+              }
+            }
           }
           if (mXs !== undefined) {
             const xsDecoded = decodeMagnetComponent(mXs);
@@ -1754,81 +1772,109 @@ export function verifyHintsIndexChain(
   versions.forEach((raw, idx) => {
     const stepLabel = `chain[${idx}]`;
     const rawBytes = typeof raw === "string" ? utf8(raw) : raw;
+    const currentExactSha256 = sha256Hex(rawBytes);
     let text: string;
     try {
       text = typeof raw === "string" ? raw : fatalUtf8Decoder.decode(rawBytes);
     } catch {
       problems.push(`${stepLabel} is not valid UTF-8`);
+      prevVersionNum = null;
+      prevExactSha256 = currentExactSha256;
       return;
     }
 
     const singleProblems = hintsIndexProblems(text, options);
     for (const p of singleProblems) problems.push(`${stepLabel}: ${p}`);
-    if (singleProblems.length > 0) {
-      prevExactSha256 = sha256Hex(rawBytes);
+
+    let parsed: unknown;
+    try {
+      parsed = parseStrictIJson(text);
+    } catch {
+      prevVersionNum = null;
+      prevExactSha256 = currentExactSha256;
+      return;
+    }
+    if (!isPlainObject(parsed)) {
+      prevVersionNum = null;
+      prevExactSha256 = currentExactSha256;
       return;
     }
 
-    const doc = parseStrictIJson(text) as {
-      readonly version: number;
-      readonly previous_sha256: string | null;
-      readonly entries: ReadonlyArray<Record<string, unknown>>;
-    };
+    const version =
+      typeof parsed.version === "number" && Number.isSafeInteger(parsed.version) && parsed.version >= 1
+        ? parsed.version
+        : null;
 
     if (idx === 0) {
-      if (!options.allowPartialStart && doc.version !== 1) {
-        problems.push(`${stepLabel}: chain must start at version 1, found version ${doc.version}`);
+      if (!options.allowPartialStart && version !== null && version !== 1) {
+        problems.push(`${stepLabel}: chain must start at version 1, found version ${version}`);
       }
     } else {
-      if (prevVersionNum !== null && doc.version !== prevVersionNum + 1) {
-        problems.push(`rule 8.1: ${stepLabel} version ${doc.version} does not increment ${prevVersionNum} by 1`);
+      if (prevVersionNum !== null && version !== null && version !== prevVersionNum + 1) {
+        problems.push(`rule 8.1: ${stepLabel} version ${version} does not increment ${prevVersionNum} by 1`);
       }
-      if (prevExactSha256 !== null && doc.previous_sha256 !== prevExactSha256) {
+      if (prevExactSha256 !== null && parsed.previous_sha256 !== prevExactSha256) {
         problems.push(
-          `rule 8.3.8: ${stepLabel}.previous_sha256 ${String(doc.previous_sha256)} differs from previous version exact SHA-256 ${prevExactSha256}`,
+          `rule 8.3.8: ${stepLabel}.previous_sha256 ${String(parsed.previous_sha256)} differs from previous version exact SHA-256 ${prevExactSha256}`,
         );
       }
     }
 
-    const currentDescriptors = new Set<string>();
-    for (const entry of doc.entries) {
-      const name = entry.name as string;
-      const subjectSha = entry.subject_sha256 as string;
-      const descSha = entry.descriptor_sha256 as string;
-      currentDescriptors.add(descSha);
+    if (Array.isArray(parsed.entries)) {
+      const currentDescriptors = new Set<string>();
+      const versionLabel = version ?? idx + 1;
+      for (const rawEntry of parsed.entries) {
+        if (!isPlainObject(rawEntry)) continue;
+        const name = typeof rawEntry.name === "string" && rawEntry.name.length > 0 ? rawEntry.name : null;
+        const subjectSha =
+          typeof rawEntry.subject_sha256 === "string" && RE.sha256Hex.test(rawEntry.subject_sha256)
+            ? rawEntry.subject_sha256
+            : null;
+        const descSha =
+          typeof rawEntry.descriptor_sha256 === "string" && RE.sha256Hex.test(rawEntry.descriptor_sha256)
+            ? rawEntry.descriptor_sha256
+            : null;
 
-      const priorName = globalNameOwner.get(name);
-      if (priorName && priorName.subjectSha256 !== subjectSha) {
-        problems.push(
-          `rule 8.3.1: ${stepLabel} reuses name '${name}' for ${subjectSha}; version ${priorName.version} bound it to ${priorName.subjectSha256}`,
-        );
-      } else if (!priorName) {
-        globalNameOwner.set(name, { subjectSha256: subjectSha, version: doc.version });
+        if (name !== null && subjectSha !== null) {
+          const priorName = globalNameOwner.get(name);
+          if (priorName && priorName.subjectSha256 !== subjectSha) {
+            problems.push(
+              `rule 8.3.1: ${stepLabel} reuses name '${name}' for ${subjectSha}; version ${priorName.version} bound it to ${priorName.subjectSha256}`,
+            );
+          } else if (!priorName) {
+            globalNameOwner.set(name, { subjectSha256: subjectSha, version: versionLabel });
+          }
+        }
+
+        if (descSha !== null) {
+          currentDescriptors.add(descSha);
+          if (name !== null && subjectSha !== null) {
+            const priorDesc = priorDescriptors.get(descSha);
+            if (priorDesc) {
+              if (priorDesc.subjectSha256 !== subjectSha || priorDesc.name !== name) {
+                problems.push(
+                  `rule 8.3.7: ${stepLabel} mutated immutable identity fields of descriptor_sha256 ${descSha} from version ${priorDesc.firstVersion}`,
+                );
+              }
+            } else {
+              priorDescriptors.set(descSha, { subjectSha256: subjectSha, name, firstVersion: versionLabel });
+            }
+          }
+        }
       }
 
-      const priorDesc = priorDescriptors.get(descSha);
-      if (priorDesc) {
-        if (priorDesc.subjectSha256 !== subjectSha || priorDesc.name !== name) {
+      // Rule 8.3.7: entries once published stay recorded in the index (moving to withdrawn/superseded, never dropped).
+      for (const [descSha, meta] of priorDescriptors.entries()) {
+        if (!currentDescriptors.has(descSha)) {
           problems.push(
-            `rule 8.3.7: ${stepLabel} mutated immutable identity fields of descriptor_sha256 ${descSha} from version ${priorDesc.firstVersion}`,
+            `rule 8.3.7: ${stepLabel} (version ${versionLabel}) dropped descriptor_sha256 ${descSha} first listed in version ${meta.firstVersion}`,
           );
         }
-      } else {
-        priorDescriptors.set(descSha, { subjectSha256: subjectSha, name, firstVersion: doc.version });
       }
     }
 
-    // Rule 8.3.7: entries once published stay recorded in the index (moving to withdrawn/superseded, never dropped).
-    for (const [descSha, meta] of priorDescriptors.entries()) {
-      if (!currentDescriptors.has(descSha)) {
-        problems.push(
-          `rule 8.3.7: ${stepLabel} (version ${doc.version}) dropped descriptor_sha256 ${descSha} first listed in version ${meta.firstVersion}`,
-        );
-      }
-    }
-
-    prevVersionNum = doc.version;
-    prevExactSha256 = sha256Hex(rawBytes);
+    prevVersionNum = version;
+    prevExactSha256 = currentExactSha256;
   });
 
   return problems;

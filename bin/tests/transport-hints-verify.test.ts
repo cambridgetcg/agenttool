@@ -296,6 +296,36 @@ describe("verifyDescriptorAuthority across all five authority kinds (sections 4.
       ["size", { ...validManifest, artifact: { ...validManifest.artifact, size: built.size + 1 } }],
       ["filename", { ...validManifest, artifact: { ...validManifest.artifact, filename: "other.tgz" } }],
       ["sha256", { ...validManifest, artifact: { ...validManifest.artifact, sha256: fake("0", 64) } }],
+      [
+        "unvetted loopback/fragment mirror",
+        {
+          ...validManifest,
+          artifact: {
+            ...validManifest.artifact,
+            mirrors: [{ url: "https://127.0.0.1:8443/evil.bin?x=1#frag" }],
+          },
+        },
+      ],
+      [
+        "localhost mirror refused by egress policy",
+        {
+          ...validManifest,
+          artifact: {
+            ...validManifest.artifact,
+            mirrors: [{ url: "https://localhost/evil.tgz" }],
+          },
+        },
+      ],
+      [
+        "fragment mirror breaking section 4.1 URL rule",
+        {
+          ...validManifest,
+          artifact: {
+            ...validManifest.artifact,
+            mirrors: [{ url: "https://example.org/releases/fake-pkg-1.0.0.tgz#frag" }],
+          },
+        },
+      ],
     ] as const) {
       const res = await verifyDescriptorAuthority(built.descriptor.text, {
         fetch: makeFakeFetch(() => ({ body: JSON.stringify(mutated) })).fetch,
@@ -401,6 +431,21 @@ describe("verifyDescriptorAuthority across all five authority kinds (sections 4.
     expect(okRes.ok, okRes.problems.join("; ")).toBe(true);
     expect(okRes.redirects).toBe(0);
     expect(hfMock.calls).toHaveLength(1);
+
+    // Compressed redirect body is ignored because hf-resolve-etag does not read the body
+    const gzipRedirect = await verifyDescriptorAuthority(built.descriptor.text, {
+      fetch: makeFakeFetch(() => ({
+        status: 302,
+        headers: {
+          Location: "https://cdn-lfs.example.org/signed?exp=3600",
+          "Content-Encoding": "gzip",
+          "x-linked-etag": `"${built.sha256}"`,
+          "x-linked-size": String(built.size),
+          "x-repo-commit": commit,
+        },
+      })).fetch,
+    });
+    expect(gzipRedirect.ok, gzipRedirect.problems.join("; ")).toBe(true);
 
     // Weak ETag, double-quoted ETag, wrong size, and wrong commit all fail
     const badCases: ReadonlyArray<readonly [string, Record<string, string>]> = [
@@ -784,10 +829,41 @@ describe("magnet link derivation (section 7.5) and hints-index invariants (secti
     });
     expect(verifyHintsIndexChain([v1Text, v2Compact, badDroppedV3]).join("; ")).toContain("rule 8.3.7");
 
-    // Signature field forbidden at every level (section 8.1)
+    // Signature field forbidden at arbitrary nesting depth (section 8.1)
     const badSig = JSON.parse(v1Text) as Json;
-    badSig.entries[0].observations = [{ at: "2026-12-01", by: "probe", signature: "nope" }];
+    badSig.entries[0].observations = [
+      { at: "2026-12-01", by: "probe", web_seeds: [{ url: "https://example.org/files/item-a.bin", signature: "leaked" }] },
+    ];
     expect(hintsIndexProblems(canonicalJson(badSig)).join("; ")).toContain("signature");
+
+    const badExtSig = JSON.parse(v1Text) as Json;
+    badExtSig.extra = { nested: [{ signature: "leaked-deep" }] };
+    expect(hintsIndexProblems(canonicalJson(badExtSig)).join("; ")).toContain("signature");
+
+    // Duplicate ws= inside magnet is refused even when torrent is absent
+    const dupWsNoTorrent = JSON.parse(v1Text) as Json;
+    dupWsNoTorrent.entries[0].status = "unmaintained";
+    delete dupWsNoTorrent.entries[0].torrent;
+    const oneSeed = encodeURIComponent("https://example.org/files/item-a.bin");
+    dupWsNoTorrent.entries[0].magnet =
+      `magnet:?xt=urn:btih:${itemA.torrentBuild.btih}&xt=urn:btmh:${itemA.torrentBuild.btmh}&dn=${itemA.name}&ws=${oneSeed}&ws=${oneSeed}`;
+    expect(hintsIndexProblems(canonicalJson(dupWsNoTorrent)).join("; ")).toContain("duplicate ws=");
+
+    // Minor error in v1 must NOT mask v2 cross-version violations (version jump + dropped entries)
+    const badObsV1Obj = JSON.parse(v1Text) as Json;
+    badObsV1Obj.entries[0].observations = [{ at: "not-a-date", by: "probe" }];
+    const badObsV1Text = canonicalJson(badObsV1Obj);
+    const badJumpDropV2Text = canonicalJson({
+      protocol: "transport-hints/v1",
+      document_type: "hints-index",
+      version: 99,
+      previous_sha256: sha256Hex(badObsV1Text),
+      entries: [],
+    });
+    const chainProblems = verifyHintsIndexChain([badObsV1Text, badJumpDropV2Text]).join("; ");
+    expect(chainProblems).toContain("chain[0]");
+    expect(chainProblems).toContain("rule 8.1: chain[1] version 99 does not increment 1 by 1");
+    expect(chainProblems).toContain("rule 8.3.7: chain[1]");
   });
 });
 
