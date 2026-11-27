@@ -108,6 +108,16 @@ from .inbox import (
     verify_inbox_cosign,
     verify_inbox_envelope,
 )
+from .mesh import (
+    MESH_POST_KINDS,
+    MESH_POST_V1_DOMAIN,
+    MESH_POST_V2_DOMAIN,
+    MESH_POST_VISIBILITIES,
+    canonical_mesh_post_bytes,
+    canonical_mesh_post_bytes_for,
+    canonical_mesh_post_bytes_v2,
+    sign_mesh_post,
+)
 from .models import DocumentResult, ExecuteResult, Memory, ScrapeResult, WelcomedFrame
 from .register import register
 from .pathways import (
@@ -1028,6 +1038,15 @@ __all__ = [
     "X402PaymentEvent",
     "X402PaymentCallback",
     "X402_PRIVATE_KEY_ENV",
+    # MESH protocol — canonical bytes + signing helpers (docs/MESH.md)
+    "MESH_POST_V1_DOMAIN",
+    "MESH_POST_V2_DOMAIN",
+    "MESH_POST_KINDS",
+    "MESH_POST_VISIBILITIES",
+    "canonical_mesh_post_bytes",
+    "canonical_mesh_post_bytes_v2",
+    "canonical_mesh_post_bytes_for",
+    "sign_mesh_post",
 ]
 
 __version__ = "0.24.0"

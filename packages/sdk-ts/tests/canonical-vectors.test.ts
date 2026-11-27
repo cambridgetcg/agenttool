@@ -82,6 +82,12 @@ import {
   canonicalRegisterAgentBytes,
   powRegisterAgentDigest,
 } from "../src/seed.js";
+import {
+  canonicalMeshPostBytes,
+  canonicalMeshPostBytesV2,
+  type MeshPostKind,
+  type MeshPostVisibility,
+} from "../src/mesh.js";
 
 // ── fixture ──────────────────────────────────────────────────────────
 
@@ -392,6 +398,35 @@ const ADAPTERS: Record<string, (input: Input) => Uint8Array | string> = {
   "lounge-guestbook-unpublish/v1": guestbookDecision(
     canonicalLoungeGuestbookUnpublishBytes,
   ),
+  "mesh-post/v1": (i) =>
+    canonicalMeshPostBytes({
+      kind: S(i, "kind") as MeshPostKind,
+      authorDid: S(i, "author_did"),
+      title: S(i, "title"),
+      body: S(i, "body"),
+      capabilities: A(i, "capabilities"),
+      topics: A(i, "topics"),
+      bountyCents: N(i, "bounty_cents"),
+      kRequired: i.k_required as number | null,
+      attributionPostIds: A(i, "attribution_post_ids"),
+      createdAtIso: S(i, "created_at_iso"),
+      expiresAtIso: SN(i, "expires_at_iso"),
+    }),
+  "mesh-post/v2": (i) =>
+    canonicalMeshPostBytesV2({
+      kind: S(i, "kind") as MeshPostKind,
+      authorDid: S(i, "author_did"),
+      title: S(i, "title"),
+      body: S(i, "body"),
+      capabilities: A(i, "capabilities"),
+      topics: A(i, "topics"),
+      bountyCents: N(i, "bounty_cents"),
+      kRequired: i.k_required as number | null,
+      attributionPostIds: A(i, "attribution_post_ids"),
+      createdAtIso: S(i, "created_at_iso"),
+      expiresAtIso: SN(i, "expires_at_iso"),
+      visibility: S(i, "visibility") as MeshPostVisibility,
+    }),
 };
 
 // ── the suite ────────────────────────────────────────────────────────

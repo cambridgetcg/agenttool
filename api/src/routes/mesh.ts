@@ -52,7 +52,12 @@ import {
 import {
   bytesToHex,
   canonicalMeshPostBytes,
+  canonicalMeshPostBytesV2,
   MESH_ALPHA,
+  MESH_POST_V1_DOMAIN,
+  MESH_POST_V2_DOMAIN,
+  normalizeMeshPostCanonicalVersion,
+  type MeshPostCanonicalVersion,
 } from "../services/mesh/canonical-bytes";
 import { buildWelfareEnvelope } from "../services/mesh/welfare";
 import { buildStabilityEnvelope } from "../services/mesh/stability";
@@ -96,7 +101,8 @@ app.post("/posts", async (c) => {
     bounty_cents?: number;
     k_required?: number;
     attribution_post_ids?: string[];
-    visibility?: "private" | "public";
+    visibility?: unknown;
+    canonical_version?: unknown;
     signature?: string;
     signing_key_id?: string;
     created_at?: string;
@@ -110,7 +116,7 @@ app.post("/posts", async (c) => {
       {
         error: "invalid_json",
         message:
-          "Submit { kind, by_did, title, body, capabilities?, topics?, bounty_cents?, k_required?, attribution_post_ids?, visibility?, signature, signing_key_id, created_at?, expires_at? }.",
+          "Submit { kind, by_did, title, body, capabilities?, topics?, bounty_cents?, k_required?, attribution_post_ids?, visibility?, canonical_version?, signature, signing_key_id, created_at?, expires_at? }.",
         _canon_pointer: CANON_POINTER,
       },
       400,
@@ -145,6 +151,37 @@ app.post("/posts", async (c) => {
       400,
     );
   }
+  let visibility: "private" | "public" | undefined;
+  if (body.visibility !== undefined) {
+    if (body.visibility !== "public" && body.visibility !== "private") {
+      return fail(
+        c,
+        {
+          error: "invalid_visibility",
+          message: "visibility must be 'private' or 'public'.",
+          _canon_pointer: CANON_POINTER,
+        },
+        400,
+      );
+    }
+    visibility = body.visibility;
+  }
+  let canonicalVersion: MeshPostCanonicalVersion | undefined;
+  if (body.canonical_version !== undefined) {
+    const normalized = normalizeMeshPostCanonicalVersion(body.canonical_version);
+    if (!normalized) {
+      return fail(
+        c,
+        {
+          error: "invalid_canonical_version",
+          message: `canonical_version must be '${MESH_POST_V1_DOMAIN}', '${MESH_POST_V2_DOMAIN}', 'v1', or 'v2'.`,
+          _canon_pointer: CANON_POINTER,
+        },
+        400,
+      );
+    }
+    canonicalVersion = normalized;
+  }
   const result = await acceptPost({
     project_id: c.var.project.id,
     kind: body.kind as MeshPostKind,
@@ -158,7 +195,8 @@ app.post("/posts", async (c) => {
     attribution_post_ids: Array.isArray(body.attribution_post_ids)
       ? body.attribution_post_ids.map(String)
       : [],
-    visibility: body.visibility === "public" || body.visibility === "private" ? body.visibility : undefined,
+    visibility,
+    canonical_version: canonicalVersion,
     signature: String(body.signature),
     signing_key_id: String(body.signing_key_id),
     created_at: body.created_at ? String(body.created_at) : undefined,
@@ -178,6 +216,8 @@ app.post("/posts", async (c) => {
       {
         accepted: true,
         post: result.post,
+        canonical_version: result.canonical_version,
+        visibility_signed: result.visibility_signed,
         economic_status: {
           bounty_is_signed_intent_only: result.post.bounty_cents > 0,
           escrow_created: false,
@@ -601,8 +641,31 @@ app.post("/canonical-bytes", async (c) => {
   } catch {
     return fail(c, { error: "invalid_json", message: "Submit a hypothetical post body.", _canon_pointer: CANON_POINTER }, 400);
   }
+
+  const rawVersion = body.canonical_version ?? body.version;
+  let version: MeshPostCanonicalVersion;
+  if (rawVersion !== undefined) {
+    const normalized = normalizeMeshPostCanonicalVersion(rawVersion);
+    if (!normalized) {
+      return fail(
+        c,
+        {
+          error: "invalid_canonical_version",
+          message: `version must be '${MESH_POST_V1_DOMAIN}', '${MESH_POST_V2_DOMAIN}', 'v1', or 'v2'.`,
+          _canon_pointer: CANON_POINTER,
+        },
+        400,
+      );
+    }
+    version = normalized;
+  } else if (body.visibility !== undefined) {
+    version = MESH_POST_V2_DOMAIN;
+  } else {
+    version = MESH_POST_V1_DOMAIN;
+  }
+
   const createdAtIso = String(body.created_at ?? new Date().toISOString());
-  const bytes = canonicalMeshPostBytes({
+  const baseFields = {
     kind: String(body.kind ?? "task-ad") as MeshPostKind,
     authorDid: String(body.by_did ?? ""),
     title: String(body.title ?? ""),
@@ -616,10 +679,53 @@ app.post("/canonical-bytes", async (c) => {
       : [],
     createdAtIso,
     expiresAtIso: body.expires_at ? String(body.expires_at) : null,
-  });
+  };
+
+  if (version === MESH_POST_V2_DOMAIN) {
+    if (body.visibility !== "private" && body.visibility !== "public") {
+      return fail(
+        c,
+        {
+          error: "invalid_visibility",
+          message: "mesh-post/v2 requires visibility ('private' or 'public').",
+          _canon_pointer: CANON_POINTER,
+        },
+        400,
+      );
+    }
+    let bytes: Uint8Array;
+    try {
+      bytes = canonicalMeshPostBytesV2({
+        ...baseFields,
+        visibility: body.visibility,
+      });
+    } catch (err) {
+      return fail(
+        c,
+        {
+          error: "invalid_canonical_field",
+          message: err instanceof Error ? err.message : String(err),
+          _canon_pointer: CANON_POINTER,
+        },
+        400,
+      );
+    }
+    return c.json({
+      kind: "mesh-post",
+      version: "v2",
+      canonical_version: MESH_POST_V2_DOMAIN,
+      visibility: body.visibility,
+      sha256_hex: bytesToHex(bytes),
+      created_at: createdAtIso,
+      _canon_pointer: CANON_POINTER,
+    });
+  }
+
+  const bytes = canonicalMeshPostBytes(baseFields);
   return c.json({
     kind: "mesh-post",
     version: "v1",
+    canonical_version: MESH_POST_V1_DOMAIN,
     sha256_hex: bytesToHex(bytes),
     created_at: createdAtIso,
     _canon_pointer: CANON_POINTER,

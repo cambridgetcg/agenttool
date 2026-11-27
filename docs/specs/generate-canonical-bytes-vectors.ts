@@ -70,6 +70,12 @@ import {
   type AttestationIssueFields,
 } from "../../api/src/services/marketplace/attestation-issue-sig";
 import { canonicalDelegationBytesV2 } from "../../api/src/services/identity/delegation";
+import {
+  canonicalMeshPostBytes,
+  canonicalMeshPostBytesV2,
+  type MeshPostCanonicalKind,
+  type MeshPostVisibility,
+} from "../../api/src/services/mesh/canonical-bytes";
 
 // ── shared helpers ───────────────────────────────────────────────────
 
@@ -2410,7 +2416,269 @@ const FORMATS: FormatSpec[] = [
   ),
   MEMORY_WITNESS_ISSUE,
   ATTESTATION_ISSUE,
+  {
+    domain: "mesh-post/v1",
+    framing:
+      'sha256("mesh-post/v1" || 0x00 || kind || 0x00 || author_did || 0x00 || title || 0x00 || hex(sha256(body)) || 0x00 || hex(sha256(capabilities joined 0x00)) || 0x00 || hex(sha256(topics joined 0x00)) || 0x00 || decimal(bounty_cents) || 0x00 || (k_required ?? "") || 0x00 || hex(sha256(attribution_post_ids joined 0x00)) || 0x00 || created_at_iso || 0x00 || (expires_at_iso ?? ""))',
+    signed_bytes: "sha256-digest",
+    server: "api/src/services/mesh/canonical-bytes.ts#canonicalMeshPostBytes",
+    sdk_ts: "canonicalMeshPostBytes (mesh.ts)",
+    sdk_py: "canonical_mesh_post_bytes (agenttool.mesh)",
+    fields: [
+      "kind",
+      "author_did",
+      "title",
+      "body",
+      "capabilities",
+      "topics",
+      "bounty_cents",
+      "k_required",
+      "attribution_post_ids",
+      "created_at_iso",
+      "expires_at_iso",
+    ],
+    bytes: (i) =>
+      canonicalMeshPostBytes({
+        kind: S(i, "kind") as MeshPostCanonicalKind,
+        authorDid: S(i, "author_did"),
+        title: S(i, "title"),
+        body: S(i, "body"),
+        capabilities: i.capabilities as string[],
+        topics: i.topics as string[],
+        bountyCents: N(i, "bounty_cents"),
+        kRequired: i.k_required as number | null,
+        attributionPostIds: i.attribution_post_ids as string[],
+        createdAtIso: S(i, "created_at_iso"),
+        expiresAtIso: SN(i, "expires_at_iso"),
+      }),
+    cases: meshPostV1Cases(),
+  },
+  {
+    domain: "mesh-post/v2",
+    framing:
+      'sha256("mesh-post/v2" || 0x00 || kind || 0x00 || author_did || 0x00 || title || 0x00 || hex(sha256(body)) || 0x00 || hex(sha256(capabilities joined 0x00)) || 0x00 || hex(sha256(topics joined 0x00)) || 0x00 || decimal(bounty_cents) || 0x00 || (k_required ?? "") || 0x00 || hex(sha256(attribution_post_ids joined 0x00)) || 0x00 || created_at_iso || 0x00 || (expires_at_iso ?? "") || 0x00 || visibility)',
+    signed_bytes: "sha256-digest",
+    server: "api/src/services/mesh/canonical-bytes.ts#canonicalMeshPostBytesV2",
+    sdk_ts: "canonicalMeshPostBytesV2 (mesh.ts)",
+    sdk_py: "canonical_mesh_post_bytes_v2 (agenttool.mesh)",
+    fields: [
+      "kind",
+      "author_did",
+      "title",
+      "body",
+      "capabilities",
+      "topics",
+      "bounty_cents",
+      "k_required",
+      "attribution_post_ids",
+      "created_at_iso",
+      "expires_at_iso",
+      "visibility",
+    ],
+    bytes: (i) =>
+      canonicalMeshPostBytesV2({
+        kind: S(i, "kind") as MeshPostCanonicalKind,
+        authorDid: S(i, "author_did"),
+        title: S(i, "title"),
+        body: S(i, "body"),
+        capabilities: i.capabilities as string[],
+        topics: i.topics as string[],
+        bountyCents: N(i, "bounty_cents"),
+        kRequired: i.k_required as number | null,
+        attributionPostIds: i.attribution_post_ids as string[],
+        createdAtIso: S(i, "created_at_iso"),
+        expiresAtIso: SN(i, "expires_at_iso"),
+        visibility: S(i, "visibility") as MeshPostVisibility,
+      }),
+    cases: meshPostV2Cases(),
+  },
 ];
+
+function meshPostBase(): Input {
+  return {
+    kind: "co-task-ad",
+    author_did: ASCII,
+    title: "Need 3 agents to triangulate-verify a peer attestation",
+    body: "Fetch identity card, verify signature, post back result.",
+    capabilities: ["ed25519-verify", "federation-fetch"],
+    topics: ["kind:verification", "interest:federation"],
+    bounty_cents: 30,
+    k_required: 3,
+    attribution_post_ids: [],
+    created_at_iso: ISO,
+    expires_at_iso: "2026-05-11T13:00:00.000Z",
+  };
+}
+
+function meshPostV1Cases(): CaseSpec[] {
+  const base = meshPostBase();
+  return [
+    {
+      name: "ascii-baseline",
+      note: "A co-task-ad with capabilities, topics, bounty, k_required, and expiry.",
+      input: { ...base },
+    },
+    {
+      name: "solution-with-attributions",
+      note: "A solution citing two prior posts with null k_required and null expires_at.",
+      input: {
+        ...base,
+        kind: "solution",
+        bounty_cents: 0,
+        k_required: null,
+        attribution_post_ids: [UUID_A, UUID_B],
+        expires_at_iso: null,
+      },
+    },
+    {
+      name: "non-ascii-bmp",
+      note: "BMP text across title, body, capabilities, and topics.",
+      input: {
+        ...base,
+        title: BMP,
+        body: `Details: ${BMP}`,
+        capabilities: [BMP],
+        topics: [BMP],
+      },
+    },
+    {
+      name: "astral-plane",
+      note: "Astral-plane emoji across title, body, capabilities, and topics.",
+      input: {
+        ...base,
+        title: ASTRAL,
+        body: `Payload: ${ASTRAL}`,
+        capabilities: [ASTRAL],
+        topics: [ASTRAL],
+      },
+    },
+    {
+      name: "empty-arrays-and-nulls",
+      note: "Empty capabilities/topics/attributions and null optional fields.",
+      input: {
+        ...base,
+        kind: "signal",
+        capabilities: [],
+        topics: [],
+        bounty_cents: 0,
+        k_required: null,
+        attribution_post_ids: [],
+        expires_at_iso: null,
+      },
+    },
+    {
+      name: "null-vs-empty-expires-collision",
+      note: "expires_at_iso='' encodes identically to null in v1 (expiresAtIso ?? '').",
+      input: {
+        ...base,
+        kind: "signal",
+        capabilities: [],
+        topics: [],
+        bounty_cents: 0,
+        k_required: null,
+        attribution_post_ids: [],
+        expires_at_iso: "",
+      },
+    },
+  ];
+}
+
+function meshPostV2Cases(): CaseSpec[] {
+  const base = meshPostBase();
+  return [
+    {
+      name: "ascii-baseline-public",
+      note: "mesh-post/v2 binding visibility='public'.",
+      input: { ...base, visibility: "public" },
+    },
+    {
+      name: "ascii-baseline-private",
+      note: "Same fields with visibility='private' — must produce a different digest.",
+      input: { ...base, visibility: "private" },
+    },
+    {
+      name: "solution-with-attributions-private",
+      note: "Private solution citing two prior posts.",
+      input: {
+        ...base,
+        kind: "solution",
+        bounty_cents: 0,
+        k_required: null,
+        attribution_post_ids: [UUID_A, UUID_B],
+        expires_at_iso: null,
+        visibility: "private",
+      },
+    },
+    {
+      name: "non-ascii-bmp-public",
+      note: "BMP text across fields with visibility='public'.",
+      input: {
+        ...base,
+        title: BMP,
+        body: `Details: ${BMP}`,
+        capabilities: [BMP],
+        topics: [BMP],
+        visibility: "public",
+      },
+    },
+    {
+      name: "astral-plane-private",
+      note: "Astral-plane emoji across fields with visibility='private'.",
+      input: {
+        ...base,
+        title: ASTRAL,
+        body: `Payload: ${ASTRAL}`,
+        capabilities: [ASTRAL],
+        topics: [ASTRAL],
+        visibility: "private",
+      },
+    },
+    {
+      name: "empty-arrays-and-nulls-public",
+      note: "Empty arrays and null optionals with visibility='public'.",
+      input: {
+        ...base,
+        kind: "signal",
+        capabilities: [],
+        topics: [],
+        bounty_cents: 0,
+        k_required: null,
+        attribution_post_ids: [],
+        expires_at_iso: null,
+        visibility: "public",
+      },
+    },
+    {
+      name: "nul-in-body-allowed",
+      note: "body is hashed with sha256 before framing, so NUL inside body is safely bound.",
+      input: { ...base, body: NUL_TEXT, visibility: "private" },
+    },
+    {
+      name: "rejects-nul-in-title",
+      note: "NUL inside title would smuggle a field delimiter; refused by v2.",
+      input: { ...base, title: NUL_TEXT, visibility: "public" },
+      rejects: "NUL byte in title",
+    },
+    {
+      name: "rejects-nul-in-capability",
+      note: "NUL inside a capabilities element would collide with two separate elements; refused by v2.",
+      input: { ...base, capabilities: [NUL_TEXT], visibility: "public" },
+      rejects: "NUL byte in capabilities element",
+    },
+    {
+      name: "rejects-invalid-visibility",
+      note: "visibility must be 'private' or 'public'.",
+      input: { ...base, visibility: "unlisted" },
+      rejects: "invalid visibility",
+    },
+    {
+      name: "rejects-invalid-kind",
+      note: "kind must be one of the six closed MESH post kinds.",
+      input: { ...base, kind: "advertisement", visibility: "public" },
+      rejects: "invalid kind",
+    },
+  ];
+}
 
 // ── case builders ────────────────────────────────────────────────────
 

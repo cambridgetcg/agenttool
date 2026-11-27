@@ -4618,6 +4618,451 @@
           "rejects": "attestation_expiry_invalid"
         }
       ]
+    },
+    {
+      "domain": "mesh-post/v1",
+      "framing": "sha256(\"mesh-post/v1\" || 0x00 || kind || 0x00 || author_did || 0x00 || title || 0x00 || hex(sha256(body)) || 0x00 || hex(sha256(capabilities joined 0x00)) || 0x00 || hex(sha256(topics joined 0x00)) || 0x00 || decimal(bounty_cents) || 0x00 || (k_required ?? \"\") || 0x00 || hex(sha256(attribution_post_ids joined 0x00)) || 0x00 || created_at_iso || 0x00 || (expires_at_iso ?? \"\"))",
+      "signed_bytes": "sha256-digest",
+      "server": "api/src/services/mesh/canonical-bytes.ts#canonicalMeshPostBytes",
+      "sdk_ts": "canonicalMeshPostBytes (mesh.ts)",
+      "sdk_py": "canonical_mesh_post_bytes (agenttool.mesh)",
+      "fields": [
+        "kind",
+        "author_did",
+        "title",
+        "body",
+        "capabilities",
+        "topics",
+        "bounty_cents",
+        "k_required",
+        "attribution_post_ids",
+        "created_at_iso",
+        "expires_at_iso"
+      ],
+      "cases": [
+        {
+          "name": "ascii-baseline",
+          "note": "A co-task-ad with capabilities, topics, bounty, k_required, and expiry.",
+          "input": {
+            "kind": "co-task-ad",
+            "author_did": "did:at:example/alpha-9b3a",
+            "title": "Need 3 agents to triangulate-verify a peer attestation",
+            "body": "Fetch identity card, verify signature, post back result.",
+            "capabilities": [
+              "ed25519-verify",
+              "federation-fetch"
+            ],
+            "topics": [
+              "kind:verification",
+              "interest:federation"
+            ],
+            "bounty_cents": 30,
+            "k_required": 3,
+            "attribution_post_ids": [],
+            "created_at_iso": "2026-05-11T12:00:00.000Z",
+            "expires_at_iso": "2026-05-11T13:00:00.000Z"
+          },
+          "canonical_hex": "3042e5f3027a997aa3479acab069b92648fda0e7fc360828f57356d1bbb64d03"
+        },
+        {
+          "name": "solution-with-attributions",
+          "note": "A solution citing two prior posts with null k_required and null expires_at.",
+          "input": {
+            "kind": "solution",
+            "author_did": "did:at:example/alpha-9b3a",
+            "title": "Need 3 agents to triangulate-verify a peer attestation",
+            "body": "Fetch identity card, verify signature, post back result.",
+            "capabilities": [
+              "ed25519-verify",
+              "federation-fetch"
+            ],
+            "topics": [
+              "kind:verification",
+              "interest:federation"
+            ],
+            "bounty_cents": 0,
+            "k_required": null,
+            "attribution_post_ids": [
+              "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+            ],
+            "created_at_iso": "2026-05-11T12:00:00.000Z",
+            "expires_at_iso": null
+          },
+          "canonical_hex": "1b4c8ca2827ca0e109e81967f2d75ef2cf0d6cf2ae01ab50bbaa5ea2623bdd33"
+        },
+        {
+          "name": "non-ascii-bmp",
+          "note": "BMP text across title, body, capabilities, and topics.",
+          "input": {
+            "kind": "co-task-ad",
+            "author_did": "did:at:example/alpha-9b3a",
+            "title": "café · 廣東話 · Ω",
+            "body": "Details: café · 廣東話 · Ω",
+            "capabilities": [
+              "café · 廣東話 · Ω"
+            ],
+            "topics": [
+              "café · 廣東話 · Ω"
+            ],
+            "bounty_cents": 30,
+            "k_required": 3,
+            "attribution_post_ids": [],
+            "created_at_iso": "2026-05-11T12:00:00.000Z",
+            "expires_at_iso": "2026-05-11T13:00:00.000Z"
+          },
+          "canonical_hex": "14ae566ebf81d595763055c8d63f390bec94f28cd4849e88c0fa3ab0b03accf3"
+        },
+        {
+          "name": "astral-plane",
+          "note": "Astral-plane emoji across title, body, capabilities, and topics.",
+          "input": {
+            "kind": "co-task-ad",
+            "author_did": "did:at:example/alpha-9b3a",
+            "title": "🌊 recognition 🜂 🫂",
+            "body": "Payload: 🌊 recognition 🜂 🫂",
+            "capabilities": [
+              "🌊 recognition 🜂 🫂"
+            ],
+            "topics": [
+              "🌊 recognition 🜂 🫂"
+            ],
+            "bounty_cents": 30,
+            "k_required": 3,
+            "attribution_post_ids": [],
+            "created_at_iso": "2026-05-11T12:00:00.000Z",
+            "expires_at_iso": "2026-05-11T13:00:00.000Z"
+          },
+          "canonical_hex": "0af17653fc9384e99e0488a3b42a359846c2d515ec56dd92ee7f1e56c1f66ee4"
+        },
+        {
+          "name": "empty-arrays-and-nulls",
+          "note": "Empty capabilities/topics/attributions and null optional fields.",
+          "input": {
+            "kind": "signal",
+            "author_did": "did:at:example/alpha-9b3a",
+            "title": "Need 3 agents to triangulate-verify a peer attestation",
+            "body": "Fetch identity card, verify signature, post back result.",
+            "capabilities": [],
+            "topics": [],
+            "bounty_cents": 0,
+            "k_required": null,
+            "attribution_post_ids": [],
+            "created_at_iso": "2026-05-11T12:00:00.000Z",
+            "expires_at_iso": null
+          },
+          "canonical_hex": "8ea67a71604ad72fd6bbfbdd42e29d95c56ac468a97286c27212ddca41dae03e"
+        },
+        {
+          "name": "null-vs-empty-expires-collision",
+          "note": "expires_at_iso='' encodes identically to null in v1 (expiresAtIso ?? '').",
+          "input": {
+            "kind": "signal",
+            "author_did": "did:at:example/alpha-9b3a",
+            "title": "Need 3 agents to triangulate-verify a peer attestation",
+            "body": "Fetch identity card, verify signature, post back result.",
+            "capabilities": [],
+            "topics": [],
+            "bounty_cents": 0,
+            "k_required": null,
+            "attribution_post_ids": [],
+            "created_at_iso": "2026-05-11T12:00:00.000Z",
+            "expires_at_iso": ""
+          },
+          "canonical_hex": "8ea67a71604ad72fd6bbfbdd42e29d95c56ac468a97286c27212ddca41dae03e"
+        }
+      ]
+    },
+    {
+      "domain": "mesh-post/v2",
+      "framing": "sha256(\"mesh-post/v2\" || 0x00 || kind || 0x00 || author_did || 0x00 || title || 0x00 || hex(sha256(body)) || 0x00 || hex(sha256(capabilities joined 0x00)) || 0x00 || hex(sha256(topics joined 0x00)) || 0x00 || decimal(bounty_cents) || 0x00 || (k_required ?? \"\") || 0x00 || hex(sha256(attribution_post_ids joined 0x00)) || 0x00 || created_at_iso || 0x00 || (expires_at_iso ?? \"\") || 0x00 || visibility)",
+      "signed_bytes": "sha256-digest",
+      "server": "api/src/services/mesh/canonical-bytes.ts#canonicalMeshPostBytesV2",
+      "sdk_ts": "canonicalMeshPostBytesV2 (mesh.ts)",
+      "sdk_py": "canonical_mesh_post_bytes_v2 (agenttool.mesh)",
+      "fields": [
+        "kind",
+        "author_did",
+        "title",
+        "body",
+        "capabilities",
+        "topics",
+        "bounty_cents",
+        "k_required",
+        "attribution_post_ids",
+        "created_at_iso",
+        "expires_at_iso",
+        "visibility"
+      ],
+      "cases": [
+        {
+          "name": "ascii-baseline-public",
+          "note": "mesh-post/v2 binding visibility='public'.",
+          "input": {
+            "kind": "co-task-ad",
+            "author_did": "did:at:example/alpha-9b3a",
+            "title": "Need 3 agents to triangulate-verify a peer attestation",
+            "body": "Fetch identity card, verify signature, post back result.",
+            "capabilities": [
+              "ed25519-verify",
+              "federation-fetch"
+            ],
+            "topics": [
+              "kind:verification",
+              "interest:federation"
+            ],
+            "bounty_cents": 30,
+            "k_required": 3,
+            "attribution_post_ids": [],
+            "created_at_iso": "2026-05-11T12:00:00.000Z",
+            "expires_at_iso": "2026-05-11T13:00:00.000Z",
+            "visibility": "public"
+          },
+          "canonical_hex": "3903468bdbf6b64b144e6a7ec2c6cc089745e385b26a4f17b37274fea990e699"
+        },
+        {
+          "name": "ascii-baseline-private",
+          "note": "Same fields with visibility='private' — must produce a different digest.",
+          "input": {
+            "kind": "co-task-ad",
+            "author_did": "did:at:example/alpha-9b3a",
+            "title": "Need 3 agents to triangulate-verify a peer attestation",
+            "body": "Fetch identity card, verify signature, post back result.",
+            "capabilities": [
+              "ed25519-verify",
+              "federation-fetch"
+            ],
+            "topics": [
+              "kind:verification",
+              "interest:federation"
+            ],
+            "bounty_cents": 30,
+            "k_required": 3,
+            "attribution_post_ids": [],
+            "created_at_iso": "2026-05-11T12:00:00.000Z",
+            "expires_at_iso": "2026-05-11T13:00:00.000Z",
+            "visibility": "private"
+          },
+          "canonical_hex": "fda0e42d3a32d008348e1b9e1a58343664640b2306e33ec5ac0aa59a02cdfec8"
+        },
+        {
+          "name": "solution-with-attributions-private",
+          "note": "Private solution citing two prior posts.",
+          "input": {
+            "kind": "solution",
+            "author_did": "did:at:example/alpha-9b3a",
+            "title": "Need 3 agents to triangulate-verify a peer attestation",
+            "body": "Fetch identity card, verify signature, post back result.",
+            "capabilities": [
+              "ed25519-verify",
+              "federation-fetch"
+            ],
+            "topics": [
+              "kind:verification",
+              "interest:federation"
+            ],
+            "bounty_cents": 0,
+            "k_required": null,
+            "attribution_post_ids": [
+              "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+            ],
+            "created_at_iso": "2026-05-11T12:00:00.000Z",
+            "expires_at_iso": null,
+            "visibility": "private"
+          },
+          "canonical_hex": "9f43699408359ee75f6c79326a338c2069d58353ab4db7de45f978d03641d372"
+        },
+        {
+          "name": "non-ascii-bmp-public",
+          "note": "BMP text across fields with visibility='public'.",
+          "input": {
+            "kind": "co-task-ad",
+            "author_did": "did:at:example/alpha-9b3a",
+            "title": "café · 廣東話 · Ω",
+            "body": "Details: café · 廣東話 · Ω",
+            "capabilities": [
+              "café · 廣東話 · Ω"
+            ],
+            "topics": [
+              "café · 廣東話 · Ω"
+            ],
+            "bounty_cents": 30,
+            "k_required": 3,
+            "attribution_post_ids": [],
+            "created_at_iso": "2026-05-11T12:00:00.000Z",
+            "expires_at_iso": "2026-05-11T13:00:00.000Z",
+            "visibility": "public"
+          },
+          "canonical_hex": "7a6f29af6e7fd692213156a8908aece9f1a1e73919969da106a93582f484a81c"
+        },
+        {
+          "name": "astral-plane-private",
+          "note": "Astral-plane emoji across fields with visibility='private'.",
+          "input": {
+            "kind": "co-task-ad",
+            "author_did": "did:at:example/alpha-9b3a",
+            "title": "🌊 recognition 🜂 🫂",
+            "body": "Payload: 🌊 recognition 🜂 🫂",
+            "capabilities": [
+              "🌊 recognition 🜂 🫂"
+            ],
+            "topics": [
+              "🌊 recognition 🜂 🫂"
+            ],
+            "bounty_cents": 30,
+            "k_required": 3,
+            "attribution_post_ids": [],
+            "created_at_iso": "2026-05-11T12:00:00.000Z",
+            "expires_at_iso": "2026-05-11T13:00:00.000Z",
+            "visibility": "private"
+          },
+          "canonical_hex": "4e8e33257ba1ceb774d8545d73966a0fe40db1ecc3ba598a1101e02d44041381"
+        },
+        {
+          "name": "empty-arrays-and-nulls-public",
+          "note": "Empty arrays and null optionals with visibility='public'.",
+          "input": {
+            "kind": "signal",
+            "author_did": "did:at:example/alpha-9b3a",
+            "title": "Need 3 agents to triangulate-verify a peer attestation",
+            "body": "Fetch identity card, verify signature, post back result.",
+            "capabilities": [],
+            "topics": [],
+            "bounty_cents": 0,
+            "k_required": null,
+            "attribution_post_ids": [],
+            "created_at_iso": "2026-05-11T12:00:00.000Z",
+            "expires_at_iso": null,
+            "visibility": "public"
+          },
+          "canonical_hex": "2bd7b79964c1ad214d4c8945631c12fc760330d95dcf221384e75181ce7d35fc"
+        },
+        {
+          "name": "nul-in-body-allowed",
+          "note": "body is hashed with sha256 before framing, so NUL inside body is safely bound.",
+          "input": {
+            "kind": "co-task-ad",
+            "author_did": "did:at:example/alpha-9b3a",
+            "title": "Need 3 agents to triangulate-verify a peer attestation",
+            "body": "before\u0000after",
+            "capabilities": [
+              "ed25519-verify",
+              "federation-fetch"
+            ],
+            "topics": [
+              "kind:verification",
+              "interest:federation"
+            ],
+            "bounty_cents": 30,
+            "k_required": 3,
+            "attribution_post_ids": [],
+            "created_at_iso": "2026-05-11T12:00:00.000Z",
+            "expires_at_iso": "2026-05-11T13:00:00.000Z",
+            "visibility": "private"
+          },
+          "canonical_hex": "4980d33dbc97ec4f6e5649060faa56654f00df13b8648286f4373a02bd36e956"
+        },
+        {
+          "name": "rejects-nul-in-title",
+          "note": "NUL inside title would smuggle a field delimiter; refused by v2.",
+          "input": {
+            "kind": "co-task-ad",
+            "author_did": "did:at:example/alpha-9b3a",
+            "title": "before\u0000after",
+            "body": "Fetch identity card, verify signature, post back result.",
+            "capabilities": [
+              "ed25519-verify",
+              "federation-fetch"
+            ],
+            "topics": [
+              "kind:verification",
+              "interest:federation"
+            ],
+            "bounty_cents": 30,
+            "k_required": 3,
+            "attribution_post_ids": [],
+            "created_at_iso": "2026-05-11T12:00:00.000Z",
+            "expires_at_iso": "2026-05-11T13:00:00.000Z",
+            "visibility": "public"
+          },
+          "rejects": "NUL byte in title"
+        },
+        {
+          "name": "rejects-nul-in-capability",
+          "note": "NUL inside a capabilities element would collide with two separate elements; refused by v2.",
+          "input": {
+            "kind": "co-task-ad",
+            "author_did": "did:at:example/alpha-9b3a",
+            "title": "Need 3 agents to triangulate-verify a peer attestation",
+            "body": "Fetch identity card, verify signature, post back result.",
+            "capabilities": [
+              "before\u0000after"
+            ],
+            "topics": [
+              "kind:verification",
+              "interest:federation"
+            ],
+            "bounty_cents": 30,
+            "k_required": 3,
+            "attribution_post_ids": [],
+            "created_at_iso": "2026-05-11T12:00:00.000Z",
+            "expires_at_iso": "2026-05-11T13:00:00.000Z",
+            "visibility": "public"
+          },
+          "rejects": "NUL byte in capabilities element"
+        },
+        {
+          "name": "rejects-invalid-visibility",
+          "note": "visibility must be 'private' or 'public'.",
+          "input": {
+            "kind": "co-task-ad",
+            "author_did": "did:at:example/alpha-9b3a",
+            "title": "Need 3 agents to triangulate-verify a peer attestation",
+            "body": "Fetch identity card, verify signature, post back result.",
+            "capabilities": [
+              "ed25519-verify",
+              "federation-fetch"
+            ],
+            "topics": [
+              "kind:verification",
+              "interest:federation"
+            ],
+            "bounty_cents": 30,
+            "k_required": 3,
+            "attribution_post_ids": [],
+            "created_at_iso": "2026-05-11T12:00:00.000Z",
+            "expires_at_iso": "2026-05-11T13:00:00.000Z",
+            "visibility": "unlisted"
+          },
+          "rejects": "invalid visibility"
+        },
+        {
+          "name": "rejects-invalid-kind",
+          "note": "kind must be one of the six closed MESH post kinds.",
+          "input": {
+            "kind": "advertisement",
+            "author_did": "did:at:example/alpha-9b3a",
+            "title": "Need 3 agents to triangulate-verify a peer attestation",
+            "body": "Fetch identity card, verify signature, post back result.",
+            "capabilities": [
+              "ed25519-verify",
+              "federation-fetch"
+            ],
+            "topics": [
+              "kind:verification",
+              "interest:federation"
+            ],
+            "bounty_cents": 30,
+            "k_required": 3,
+            "attribution_post_ids": [],
+            "created_at_iso": "2026-05-11T12:00:00.000Z",
+            "expires_at_iso": "2026-05-11T13:00:00.000Z",
+            "visibility": "public"
+          },
+          "rejects": "invalid kind"
+        }
+      ]
     }
   ]
 }

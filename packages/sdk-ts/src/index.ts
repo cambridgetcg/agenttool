@@ -869,3 +869,22 @@ export type {
   ListAttestationGrantsOptions,
   IssueAttestationGrantOptions,
 } from "./attestation-marketplace.js";
+// MESH protocol — canonical bytes + signing helpers (docs/MESH.md).
+export {
+  MESH_POST_V1_DOMAIN,
+  MESH_POST_V2_DOMAIN,
+  MESH_POST_KINDS,
+  MESH_POST_VISIBILITIES,
+  canonicalMeshPostBytes,
+  canonicalMeshPostBytesV2,
+  canonicalMeshPostBytesFor,
+  signMeshPost,
+} from "./mesh.js";
+export type {
+  MeshPostCanonicalVersion,
+  MeshPostKind,
+  MeshPostVisibility,
+  CanonicalMeshPostInput,
+  CanonicalMeshPostV2Input,
+  SignMeshPostOpts,
+} from "./mesh.js";
