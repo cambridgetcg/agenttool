@@ -571,6 +571,7 @@ export interface NoteVerbInput {
   outcome?: string;
   replaces?: string;
   dry_run?: boolean;
+  expected_head_sequence?: number;
 }
 
 /** The acts collab_note records in this build. */
@@ -771,12 +772,44 @@ interface PlannedNote {
   extra: Record<string, unknown>;
 }
 
+function parseNoteExpectedHeadSequence(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new CollabError(
+      "invalid_expected_head_sequence",
+      "expected_head_sequence must be a whole number 0 or more",
+      {
+        remedy: {
+          say: "Pass expected_head_sequence as a whole number 0 or more (the event_sequence of the last report you read), or omit it.",
+        },
+      },
+    );
+  }
+  return value;
+}
+
+/** Rewrite the store's head_moved remedy onto the Notes surface (collab_inbox with include: "all"). */
+function headMovedForNote(ctx: NoteVerbContext, error: unknown): unknown {
+  if (!(error instanceof CollabError) || error.code !== "head_moved") return error;
+  const expected = typeof error.details.expected_head_sequence === "number" ? error.details.expected_head_sequence : 0;
+  const reportsSince = typeof error.details.reports_since === "number" ? error.details.reports_since : 0;
+  const remedy: NoteRemedy = reportsSince > 0
+    ? withSlot(ctx, { tool: "collab_inbox", input: { include: "all", since: expected } })
+    : withSlot(ctx, { tool: "collab_inbox", input: { include: "all" } });
+  return new CollabError(error.code, error.message, { ...error.details, remedy });
+}
+
 export async function noteVerb(ctx: NoteVerbContext, input: NoteVerbInput): Promise<Record<string, unknown>> {
   const { binding } = requireCredential(ctx);
   // The lazy reveal runs first (spec 7), so a note on a ballot that has just
   // closed meets it revealed; a reveal that fails never fails the note.
   const pending = input.dry_run === true ? null : revealDue(ctx, binding.handle.workspace.id);
-  const result = await noteAct(ctx, input);
+  let result: Record<string, unknown>;
+  try {
+    result = await noteAct(ctx, input);
+  } catch (error) {
+    throw headMovedForNote(ctx, error);
+  }
   return pending ? { ...result, reveal_pending: pending } : result;
 }
 
@@ -792,6 +825,12 @@ async function noteAct(ctx: NoteVerbContext, input: NoteVerbInput): Promise<Reco
   if (input.dry_run !== undefined && typeof input.dry_run !== "boolean") {
     throw new CollabError("invalid_dry_run", "dry_run is true or false");
   }
+  const expectedHead = parseNoteExpectedHeadSequence(input.expected_head_sequence);
+  if (input.dry_run === true && expectedHead !== undefined) {
+    advice.push("expected_head_sequence is checked when the note is written, not during dry_run.");
+  }
+  const withCompared = (result: Record<string, unknown>) =>
+    expectedHead === undefined ? result : { ...result, compared_at_sequence: expectedHead };
   const outcome = decideOutcome(act, input);
   if (input.outcome !== undefined && act !== "decide") advice.push("outcome applies to decide only; it was not used.");
 
@@ -850,7 +889,10 @@ async function noteAct(ctx: NoteVerbContext, input: NoteVerbInput): Promise<Reco
   const planAdvice = (planned: PlannedNote) => [...evidence.advice, ...planned.advice, ...planned.addressee.advice];
 
   if (act === "decide") {
-    return decideNote(ctx, binding, credential, { fields, target, evidence, keyInput, advice, read_as: read.read_as, input, outcome });
+    const decided = await decideNote(ctx, binding, credential, {
+      fields, target, evidence, keyInput, advice, read_as: read.read_as, input, outcome, expectedHead,
+    });
+    return input.dry_run === true ? decided : withCompared(decided);
   }
 
   // A verdict and a relayed no address no one by state, so they plan first;
@@ -859,9 +901,9 @@ async function noteAct(ctx: NoteVerbContext, input: NoteVerbInput): Promise<Reco
     const { planned, note } = plan();
     advice.push(...planAdvice(planned));
     if (input.dry_run === true) return dryRunResult({ planned, note, advice, evidence, read_as: read.read_as });
-    return act === "relay_rejection"
-      ? relayNote(ctx, credential, { planned, note, keyInput, advice, read_as: read.read_as, input })
-      : reviewNote(ctx, binding, credential, { planned, evidence, note, keyInput, advice, read_as: read.read_as, input });
+    return withCompared(act === "relay_rejection"
+      ? await relayNote(ctx, credential, { planned, note, keyInput, advice, read_as: read.read_as, input, expectedHead })
+      : await reviewNote(ctx, binding, credential, { planned, evidence, note, keyInput, advice, read_as: read.read_as, input, expectedHead }));
   }
 
   const cite = evidence.items.length > 0 ? { worktree_id: binding.handle.worktree.id, items: evidence.items } : null;
@@ -888,6 +930,7 @@ async function noteAct(ctx: NoteVerbContext, input: NoteVerbInput): Promise<Reco
         cite,
         reports: fresh.planned.reports,
         receipt_plan: receiptPlan.guard,
+        ...(expectedHead === undefined ? {} : { expected_head_sequence: expectedHead }),
       });
     });
     // A plan made but not written (an identical call wrote first) is not what was recorded.
@@ -895,13 +938,13 @@ async function noteAct(ctx: NoteVerbContext, input: NoteVerbInput): Promise<Reco
   });
   if (fresh) {
     advice.push(...planAdvice(fresh.planned));
-    return noteResult(ctx, { planned: fresh.planned, receipt, replayed: false, note: fresh.note, advice, read_as: read.read_as, evidence });
+    return withCompared(noteResult(ctx, { planned: fresh.planned, receipt, replayed: false, note: fresh.note, advice, read_as: read.read_as, evidence }));
   }
   if (receiptPlan.retry) {
     advice.push("This repeats your latest act on this entity exactly, so it was read as a retry. Add a word to say it again.");
   }
   const replayed = replayedNote(ctx, workspaceId, { act, fields, target, receipt, to: keyInput.fields.to });
-  return noteResult(ctx, { ...replayed, receipt, replayed: true, advice, read_as: read.read_as });
+  return withCompared(noteResult(ctx, { ...replayed, receipt, replayed: true, advice, read_as: read.read_as }));
 }
 
 /**
@@ -1606,9 +1649,10 @@ async function reviewNote(
     advice: string[];
     read_as: string | null;
     input: NoteVerbInput;
+    expectedHead: number | undefined;
   },
 ): Promise<Record<string, unknown>> {
-  const { planned, evidence, advice } = options;
+  const { planned, evidence, advice, expectedHead } = options;
   const workspaceId = binding.handle.workspace.id;
   const pin = planned.extra.review as ReviewPin;
   const fields = planned.fields;
@@ -1636,6 +1680,7 @@ async function reviewNote(
       task_id: pin.task_id,
       outcome,
       evidence_refs: evidence.journal,
+      ...(expectedHead === undefined ? {} : { expected_head_sequence: expectedHead }),
     }));
     try {
       if (evidence.items.length > 0) {
@@ -1678,6 +1723,7 @@ async function reviewNote(
           evidence_refs: [...evidence.journal, ...(cite ? [`event:${cite.event_id}`] : [])],
           ...(confidenceBasis ? { confidence_basis: confidenceBasis } : {}),
           ...(fields.limits ? { limits: fields.limits } : {}),
+          ...(expectedHead === undefined ? {} : { expected_head_sequence: expectedHead }),
         })) as { task: Task; review: unknown; report: CollabReport };
       }));
       if (reviewed.replayed) replays += 1;
@@ -1765,9 +1811,10 @@ async function relayNote(
     advice: string[];
     read_as: string | null;
     input: NoteVerbInput;
+    expectedHead: number | undefined;
   },
 ): Promise<Record<string, unknown>> {
-  const { planned, advice } = options;
+  const { planned, advice, expectedHead } = options;
   const proposal = planned.target as Extract<ReTarget, { kind: "report" }>;
   const reason = planned.fields.body === null ? planned.fields.statement : `${planned.fields.statement}\n\n${planned.fields.body}`;
   const workspaceId = proposal.view.report.workspace_id;
@@ -1793,6 +1840,7 @@ async function relayNote(
         proposal_report_id: proposal.id,
         proposal_sha256: status0.proposal_sha256,
         reason,
+        ...(expectedHead === undefined ? {} : { expected_head_sequence: expectedHead }),
       })));
     return { plan, replayed: step.replayed };
   });
@@ -2002,9 +2050,10 @@ async function decideNote(
     read_as: string | null;
     input: NoteVerbInput;
     outcome: NoteDecisionOutcome;
+    expectedHead: number | undefined;
   },
 ): Promise<Record<string, unknown>> {
-  const { target, evidence, advice, input, outcome } = options;
+  const { target, evidence, advice, input, outcome, expectedHead } = options;
   const workspaceId = binding.handle.workspace.id;
   const me = credential.session_id;
   const planContext = { fields: options.fields, target, me, workspaceId, evidence, outcome };
@@ -2072,6 +2121,7 @@ async function decideNote(
         to_person: fresh.addressee.to_person,
         evidence_refs: fresh.evidence_refs,
         receipt_plan: plan.guard,
+        ...(expectedHead === undefined ? {} : { expected_head_sequence: expectedHead }),
       });
     });
     return { plan, receipt: step.value, fresh: step.replayed ? null : fresh as DecidePlan | null };

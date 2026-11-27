@@ -43,9 +43,13 @@ const REST_TOOLS = ["collab_session_rest"];
 const ADDED_INPUT_FIELDS: Record<string, Record<string, unknown>> = {
   collab_report_append: {
     expected_head_sequence: {
-      description: "Optional compare-and-swap: the journal head sequence you last read. If a report was posted after it, "
-        + "nothing is written and the call is refused with head_moved; read what is new, then send again. "
-        + "Sessions, tasks and leases moving the head do not count.",
+      description: "Optional compare-and-swap: the event_sequence of the last report you read (from collab_report_list, "
+        + "events.next_anchor.sequence, or collab_inbox with include all; not head_sequence). If another session or "
+        + "the person desk posted any report after it (notes, reports, task completion summaries, review requests or "
+        + "verdicts, proposals or ballots, whoever addressed), nothing is written and head_moved returns reports_since "
+        + "and missed_report_ids; read them with collab_report_list, then send again. Your own reports and non-report "
+        + "events (sessions, claims, leases, task creation/progress/blockers, handoff offers, person proposal acts) do "
+        + "not count. On success, compared_at_sequence echoes the checked value.",
       type: "integer",
       minimum: 0,
       maximum: Number.MAX_SAFE_INTEGER,
@@ -285,6 +289,7 @@ describe("refusals through the real entry point", () => {
       { name: "collab_inbox", arguments: { binding_key: "not a key" } },
       // A missing purpose, the likeliest first mistake, is the verb's refusal too.
       { name: "collab_arrive", arguments: { root_path: directory } },
+      { name: "collab_note", arguments: { text: "bad cas", expected_head_sequence: -1 } },
     ]);
     const refusals = results.filter((_, index) => index !== 1);
     expect(results[1]!.isError).toBeUndefined();
@@ -311,6 +316,7 @@ describe("refusals through the real entry point", () => {
       "invalid_purpose",
       "invalid_binding_key",
       "invalid_purpose",
+      "invalid_expected_head_sequence",
     ]);
     // A number out of range comes back as a ready call with the nearest value that works.
     expect(refusals[1]!.structuredContent!.remedy).toEqual({ tool: "collab_inbox", input: { wait_seconds: 30 } });

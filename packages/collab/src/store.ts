@@ -3794,10 +3794,12 @@ export class CollabStoreCore {
     authority_basis?: string;
     to_person?: boolean;
     /**
-     * Optional compare-and-swap, after BitTorrent BEP 44's `cas`: the journal head
-     * sequence the caller last read. If anything was posted since, nothing is
-     * written and the call is refused with head_moved, so the caller reads what
-     * is new and sends again.
+     * Optional compare-and-swap, after BitTorrent BEP 44's `cas`: the
+     * event_sequence of the last report the caller read. If another session or
+     * the person desk posted a report after it, nothing is written and the call
+     * is refused with head_moved (returning reports_since and missed_report_ids),
+     * so the caller reads what is new and sends again. The caller's own reports
+     * and non-report events do not count.
      */
     expected_head_sequence?: number;
   }): CollabReport {
@@ -3831,9 +3833,9 @@ export class CollabStoreCore {
       // The expected head joins the request hash only when given, for the same reason.
       expectedHead === undefined ? normalized : { ...normalized, expected_head_sequence: expectedHead },
       (session) => {
-        if (expectedHead !== undefined) this.requireJournalHead(session.workspace_id, expectedHead);
         this.validateReportInput(session, normalized);
         this.refuseProposalRewrite(normalized);
+        if (expectedHead !== undefined) this.requireJournalHead(session.workspace_id, expectedHead, session.id);
         return this.appendReportInternal(session, normalized);
       },
     );
@@ -4071,14 +4073,20 @@ export class CollabStoreCore {
     proposal_report_id: string;
     proposal_sha256: string;
     reason: string;
+    expected_head_sequence?: number;
   }): ProposalStatus {
+    const expectedHead = input.expected_head_sequence === undefined
+      ? undefined
+      : validateExpectedHeadSequence(input.expected_head_sequence);
     const normalized = {
       proposal_report_id: validateId(input.proposal_report_id, "proposal_report_id"),
       proposal_sha256: validateSha256(input.proposal_sha256),
       reason: cleanText(input.reason, "reason", 2_000),
     };
-    return this.mutateAsSession(input, input.idempotency_key, "proposal.reject.relay.v1", normalized, (session) => {
+    const request = expectedHead === undefined ? normalized : { ...normalized, expected_head_sequence: expectedHead };
+    return this.mutateAsSession(input, input.idempotency_key, "proposal.reject.relay.v1", request, (session) => {
       const terms = this.requireProposalTerms(session.workspace_id, normalized.proposal_report_id);
+      if (expectedHead !== undefined) this.requireJournalHead(session.workspace_id, expectedHead, session.id);
       return this.recordPersonAct({
         workspace_id: terms.workspace_id,
         proposal_report_id: terms.report_id,
@@ -5275,9 +5283,13 @@ export class CollabStoreCore {
     confidence?: ReportConfidence;
     confidence_basis?: string;
     limits?: string;
+    expected_head_sequence?: number;
   }): { task: Task; review: TaskReview; report: CollabReport } {
     const taskId = validateId(input.task_id, "task_id");
     const expectedVersion = validateExpectedVersion(input.expected_version);
+    const expectedHead = input.expected_head_sequence === undefined
+      ? undefined
+      : validateExpectedHeadSequence(input.expected_head_sequence);
     if (input.outcome !== "accept" && input.outcome !== "request_changes") {
       throw new CollabError("invalid_review_outcome", "Review outcome is invalid");
     }
@@ -5298,6 +5310,7 @@ export class CollabStoreCore {
       ...(confidence === "unknown" ? {} : { confidence }),
       ...(confidenceBasis === null ? {} : { confidence_basis: confidenceBasis }),
       ...(limits === null ? {} : { limits }),
+      ...(expectedHead === undefined ? {} : { expected_head_sequence: expectedHead }),
     };
     const replay = this.readSessionMutationReceipt<{
       task: Task;
@@ -5375,6 +5388,8 @@ export class CollabStoreCore {
           }
         }
       }
+
+      if (expectedHead !== undefined) this.requireJournalHead(session.workspace_id, expectedHead, session.id);
 
       const report = this.appendReportInternal(session, {
         task_id: row.id,
@@ -8049,28 +8064,54 @@ export class CollabStoreCore {
 
   /**
    * The compare in compare-and-swap, inside the writer's transaction: refuse if
-   * a report was posted after the sequence the caller last read. Only reports
-   * count. Sessions resuming, claims and leases move the journal head all the
-   * time, and none of them is a crossing answer. Like BEP 44's error 301, the
-   * refusal says to re-read and try again, and how many reports were missed.
+   * another session or the person desk posted any report after the sequence the
+   * caller last read. Every report row with `from_session_id IS NOT caller`
+   * counts, whoever it is addressed to (notes, reports, task completion
+   * summaries, review requests and verdicts, proposals, ballots, and
+   * person-desk rows where `from_session_id` is NULL). The caller's own reports
+   * and non-report events (sessions, claims, leases, task create/progress/block,
+   * handoff offers, person proposal agree/reject acts) do not count. Like BEP
+   * 44's error 301, the refusal says to re-read and try again, how many reports
+   * were missed, and up to MAX_MISSED_REPORT_IDS missed report ids.
    */
-  protected requireJournalHead(workspaceId: string, expected: number): void {
+  protected requireJournalHead(
+    workspaceId: string,
+    expected: number,
+    callerSessionId: string,
+  ): void {
     const head = this.requireWorkspace(workspaceId).event_head_sequence;
     if (expected > head) {
       throw new CollabError(
         "head_moved",
-        "The expected head is ahead of the journal; read the head, then send again",
-        { expected_head_sequence: expected, head_sequence: head, reports_since: 0 },
+        "The expected sequence is ahead of the journal; read the journal, then send again",
+        {
+          expected_head_sequence: expected,
+          head_sequence: head,
+          reports_since: 0,
+          missed_report_ids: [],
+          remedy: "Call collab_report_list (or collab_next) to read the current sequence, then send again with the event_sequence of the last report you read.",
+        },
       );
     }
     const { count } = this.db.query(
-      `SELECT COUNT(*) AS count FROM reports WHERE workspace_id = ? AND event_sequence > ?`,
-    ).get(workspaceId, expected) as { count: number };
+      `SELECT COUNT(*) AS count FROM reports WHERE workspace_id = ? AND event_sequence > ? AND from_session_id IS NOT ?`,
+    ).get(workspaceId, expected, callerSessionId) as { count: number };
     if (count === 0) return;
+    const missed = this.db.query(
+      `SELECT id FROM reports WHERE workspace_id = ? AND event_sequence > ? AND from_session_id IS NOT ? ORDER BY event_sequence ASC LIMIT ?`,
+    ).all(workspaceId, expected, callerSessionId, MAX_MISSED_REPORT_IDS) as Array<{ id: string }>;
+    const missedReportIds = missed.map((row) => row.id);
     throw new CollabError(
       "head_moved",
-      "Reports were posted since you read the journal; read them, then send again",
-      { expected_head_sequence: expected, head_sequence: head, reports_since: count },
+      "Other sessions or the person desk posted reports after the sequence you last read; read them, then send again",
+      {
+        expected_head_sequence: expected,
+        head_sequence: head,
+        reports_since: count,
+        missed_report_ids: missedReportIds,
+        ...(count > missedReportIds.length ? { missed_report_ids_truncated: true } : {}),
+        remedy: `Call collab_report_list with after_event_sequence: ${expected} (note: collab_report_list also returns your own reports), read what is new, then send again with the event_sequence of the last report you read.`,
+      },
     );
   }
 
@@ -8346,7 +8387,9 @@ export function optionalText(value: string | undefined, field: string, max: numb
 const REST_UNTIL_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
 
-function validateExpectedHeadSequence(value: unknown): number {
+const MAX_MISSED_REPORT_IDS = 20;
+
+export function validateExpectedHeadSequence(value: unknown): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
     throw new CollabError("invalid_expected_head_sequence", "expected_head_sequence must be a non-negative integer");
   }

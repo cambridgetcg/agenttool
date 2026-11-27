@@ -1112,28 +1112,52 @@ agents' recorded preference: not a decision and not agreement. It adds nothing t
 you were already allowed to do. A direction-level choice goes to collab_propose, where
 every voice may still object and the person decides."
 
-## Compare-and-swap on report append (time/1 step 4)
+## Compare-and-swap on report append and notes (time/1 step 4)
 
-`collab_report_append` takes an optional `expected_head_sequence`: the journal head
-sequence the caller last read. It is BitTorrent BEP 44's `cas` applied to the journal's
-reports. Inside the writer's transaction:
+Both `collab_report_append` and `collab_note` take an optional `expected_head_sequence`:
+the `event_sequence` of the last report the caller has actually read (for example the
+newest `event_sequence` from `collab_report_list`, `events.next_anchor.sequence` from a
+drained `collab_next` page, or `read_through.sequence` from `collab_inbox {include: "all"}`).
+Do not pass `head_sequence` from a truncated `collab_next` page, `read_through.sequence`
+from a default `collab_inbox` pass that skipped unaddressed reports (`also_new.count > 0`),
+or the sequence of your own unguarded post; each can step past unread peer reports.
 
-- **No report was posted after that sequence:** the report is written as before. Sessions
-  resuming, claims, leases and other non-report events move the head constantly, and they
-  do not count.
-- **A report was posted after it:** nothing is written. The call is refused with
-  `head_moved` and `{expected_head_sequence, head_sequence, reports_since}`; read what is
-  new, then send again. A refused attempt leaves no receipt, so the retry may reuse its
-  key.
+It is BitTorrent BEP 44's `cas` applied to the workspace's reports. Inside the writer's
+transaction, after validating the report or note itself:
+
+- **What counts:** every report row after `expected_head_sequence` written by another
+  session or by the person desk (`from_session_id IS NOT caller`, where person-desk and
+  legacy rows have `NULL` and still count), whoever it is addressed to — notes, reports,
+  task completion summaries, review requests and verdicts, proposals, and ballots.
+- **What does not count:** the caller's own reports (including its own batched posts,
+  completion summaries and review requests), and non-report events — sessions joining or
+  resting, task creation, claims, leases, task progress and blockers, handoff offers, and
+  person proposal agree/reject acts (including relayed rejections).
+- **Nothing counted was posted after that sequence:** the write proceeds and the MCP
+  result echoes `compared_at_sequence` with the checked value. Servers before `0.6.0`
+  ignore the unknown input and omit `compared_at_sequence`.
+- **One or more counted reports were posted after it:** nothing is written (no report and
+  no `evidence.cited` event). The call is refused with `head_moved` and
+  `{expected_head_sequence, head_sequence, reports_since, missed_report_ids, remedy}`
+  (with `missed_report_ids` capped at 20 and `missed_report_ids_truncated: true` when
+  more were missed). Read what is new — `collab_report_list` with
+  `after_event_sequence: expected_head_sequence` (which has no author filter and may also
+  list the caller's own reports) or `collab_inbox {include: "all", since: expected_head_sequence}`
+  — then send again with the `event_sequence` of the last report read. A refused attempt
+  leaves no receipt, so the retry may reuse its key.
 - **The expected sequence is ahead of the journal:** refused the same way, with
-  `reports_since: 0`.
-- **A retry with the same key** after a success replays the first answer, whatever the
-  head is by then.
-- **The field is absent:** nothing changes. The field joins the request hash only when
-  given, so earlier receipts keep their hashes.
+  `reports_since: 0` and `missed_report_ids: []`.
+- **A retry with the same key** after a success replays the first answer only when it
+  repeats the same `expected_head_sequence` (matching `expected_version` on other tools);
+  changing or omitting `expected_head_sequence` on a used key returns
+  `idempotency_conflict`.
+- **The field is absent:** nothing changes, `compared_at_sequence` is omitted, and the
+  field stays out of the request hash so earlier receipts keep their hashes.
 
 It catches two agents writing at once. It is not a lock and not an order: the journal
-sequence still decides order.
+sequence still decides order. If workspace-wide refusals prove noisy during busy bursts,
+a narrower routed predicate can be added later as a separate optional input without
+changing this one.
 
 ## Reasons, basis and evidence
 
@@ -1286,7 +1310,8 @@ start with a line naming `full | notes`.
 - **`full`**, the default: the 36 existing tools, whose `tools/list` entries a test
   holds byte-identical to `a8799aad`'s but for what declared rest adds (one sentence on
   the four tools whose result names an addressee, and `collab_next`'s last sentence)
-  and one optional input, `expected_head_sequence` on `collab_report_append` (below),
+  and one optional input, `expected_head_sequence` on `collab_report_append` (above; also
+  accepted by `collab_note`),
   plus `collab_session_rest` and the eight verbs: 45 tools. Its
   instructions are the notes text, then "collab_arrive does not move the legacy cursor;
   call collab_next only if you mean to page the journal from its start.", then the

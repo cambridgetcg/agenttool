@@ -90,6 +90,7 @@ import {
   reviewFromRow,
   type ReviewRow,
   sessionLiveness,
+  validateExpectedHeadSequence,
   validateId,
   validateIdempotencyKey,
 } from "./store.js";
@@ -261,7 +262,11 @@ export class CollabStore extends CollabStoreCore {
     cite?: { worktree_id: string | null; items: NoteCitedItem[] } | null;
     reports: NoteReportInput[];
     receipt_plan?: ReceiptPlanGuard;
+    expected_head_sequence?: number;
   }): NoteAppendReceipt {
+    const expectedHead = input.expected_head_sequence === undefined
+      ? undefined
+      : validateExpectedHeadSequence(input.expected_head_sequence);
     if (!Array.isArray(input.reports) || input.reports.length < 1 || input.reports.length > 2) {
       throw new CollabError("invalid_note_reports", "A note posts one report, or a challenge and the withdrawal it replaces");
     }
@@ -270,7 +275,40 @@ export class CollabStore extends CollabStoreCore {
     if (reports.some((report) => report.cite_event) && !cite) {
       throw new CollabError("invalid_note_reports", "A report cites this note's evidence, but the note has none");
     }
-    return this.mutateAsSession(input, input.idempotency_key, "notes.note.v1", { cite, reports }, (session) => {
+    const request = expectedHead === undefined
+      ? { cite, reports }
+      : { cite, reports, expected_head_sequence: expectedHead };
+    return this.mutateAsSession(input, input.idempotency_key, "notes.note.v1", request, (session) => {
+      // Validate every report before the compare-and-swap so an invalid note is
+      // refused for its own problem rather than as crossed, and before citing
+      // evidence so a refusal writes nothing.
+      for (const report of reports) {
+        const preNormalized = {
+          task_id: report.task_id,
+          to_session_id: report.to_session_id,
+          kind: report.kind,
+          body: report.body,
+          evidence_refs: normalizeEvidenceRefs(report.evidence_refs),
+          confidence: "unknown" as const,
+          confidence_basis: null,
+          limits: null,
+          relation: report.relation,
+          target_report_id: report.target_report_id,
+          authority_scope: null,
+          authority_basis: null,
+          ...(report.to_person ? { to_person: true } : {}),
+        };
+        this.validateReportInput(session, preNormalized);
+        this.refuseProposalRewrite(preNormalized);
+        if (report.about_proposal_id) {
+          const termed = this.db.query(`SELECT workspace_id FROM proposal_terms WHERE report_id = ?`)
+            .get(report.about_proposal_id) as { workspace_id: string } | null;
+          if (!termed || termed.workspace_id !== session.workspace_id) {
+            throw new CollabError("proposal_not_found", "about_proposal_id must name a proposal in this workspace");
+          }
+        }
+      }
+      if (expectedHead !== undefined) this.requireJournalHead(session.workspace_id, expectedHead, session.id);
       const cited = cite ? this.appendNoteCite(session, cite) : null;
       const posted: CollabReport[] = [];
       for (const report of reports) {
@@ -294,15 +332,6 @@ export class CollabStore extends CollabStoreCore {
           authority_basis: null,
           ...(report.to_person ? { to_person: true } : {}),
         };
-        this.validateReportInput(session, normalized);
-        this.refuseProposalRewrite(normalized);
-        if (report.about_proposal_id) {
-          const termed = this.db.query(`SELECT workspace_id FROM proposal_terms WHERE report_id = ?`)
-            .get(report.about_proposal_id) as { workspace_id: string } | null;
-          if (!termed || termed.workspace_id !== session.workspace_id) {
-            throw new CollabError("proposal_not_found", "about_proposal_id must name a proposal in this workspace");
-          }
-        }
         posted.push(this.appendReportInternal(session, {
           ...normalized,
           ...(report.about_proposal_id ? { about_proposal_id: report.about_proposal_id } : {}),
@@ -482,8 +511,11 @@ export class CollabStore extends CollabStoreCore {
    */
   noteReviewPrecheck(
     credential: { session_id: string; session_token: string; generation: number },
-    input: { task_id: string; outcome: "accept" | "request_changes"; evidence_refs: string[] },
+    input: { task_id: string; outcome: "accept" | "request_changes"; evidence_refs: string[]; expected_head_sequence?: number },
   ): void {
+    const expectedHead = input.expected_head_sequence === undefined
+      ? undefined
+      : validateExpectedHeadSequence(input.expected_head_sequence);
     this.db.transaction(() => {
       const session = this.authenticateSession(credential);
       const row = this.requireTaskRow(session.workspace_id, validateId(input.task_id, "task_id"));
@@ -499,21 +531,23 @@ export class CollabStore extends CollabStoreCore {
       for (const reference of normalizeEvidenceRefs(input.evidence_refs)) {
         this.requireEvidenceRef(row.workspace_id, reference);
       }
-      if (input.outcome !== "accept") return;
-      if (this.hasObsoletedCompletionReport(row.workspace_id, row.completion_report_id)) {
-        throw new CollabError(
-          "completion_report_obsolete",
-          "The reported completion was withdrawn, corrected, or superseded; request changes before a new completion report",
-          { completion_report_id: row.completion_report_id },
-        );
+      if (input.outcome === "accept") {
+        if (this.hasObsoletedCompletionReport(row.workspace_id, row.completion_report_id)) {
+          throw new CollabError(
+            "completion_report_obsolete",
+            "The reported completion was withdrawn, corrected, or superseded; request changes before a new completion report",
+            { completion_report_id: row.completion_report_id },
+          );
+        }
+        if (this.hasUnresolvedChallenges(row.workspace_id, row.completion_report_id)) {
+          throw new CollabError(
+            "completion_challenged",
+            "Reported completion has an unresolved challenge",
+            { completion_report_id: row.completion_report_id },
+          );
+        }
       }
-      if (this.hasUnresolvedChallenges(row.workspace_id, row.completion_report_id)) {
-        throw new CollabError(
-          "completion_challenged",
-          "Reported completion has an unresolved challenge",
-          { completion_report_id: row.completion_report_id },
-        );
-      }
+      if (expectedHead !== undefined) this.requireJournalHead(session.workspace_id, expectedHead, session.id);
     }).deferred();
   }
 
@@ -2476,7 +2510,11 @@ export class CollabStore extends CollabStoreCore {
     to_person?: boolean;
     evidence_refs?: string[];
     receipt_plan?: ReceiptPlanGuard;
+    expected_head_sequence?: number;
   }): NoteDecisionReceipt {
+    const expectedHead = input.expected_head_sequence === undefined
+      ? undefined
+      : validateExpectedHeadSequence(input.expected_head_sequence);
     if (!(NOTE_DECISION_OUTCOMES as readonly string[]).includes(input.outcome)) {
       throw new CollabError("invalid_outcome", `outcome is ${NOTE_DECISION_OUTCOMES.join(", ")}`);
     }
@@ -2496,13 +2534,14 @@ export class CollabStore extends CollabStoreCore {
       evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
       cite,
     };
-    return this.mutateAsSession(input, input.idempotency_key, "notes.decide.v1", normalized, (session) => {
+    const request = expectedHead === undefined
+      ? normalized
+      : { ...normalized, expected_head_sequence: expectedHead };
+    return this.mutateAsSession(input, input.idempotency_key, "notes.decide.v1", request, (session) => {
       const derived = this.decisionAuthority(session.workspace_id, normalized.proposal_report_id, normalized.outcome, normalized.extent);
       const { scope, basis, proposal, person_act: personAct } = derived;
       const refs = [...normalized.evidence_refs, ...derived.refs];
-      const cited = normalized.cite ? this.appendNoteCite(session, normalized.cite) : null;
-      if (cited) refs.push(`event:${cited.event_id}`);
-      const report = {
+      const baseReport = {
         task_id: normalized.task_id,
         to_session_id: normalized.to_session_id,
         kind: "decision" as const,
@@ -2517,7 +2556,11 @@ export class CollabStore extends CollabStoreCore {
         authority_basis: basis,
         ...(normalized.to_person ? { to_person: true } : {}),
       };
-      this.validateReportInput(session, report);
+      this.validateReportInput(session, baseReport);
+      if (expectedHead !== undefined) this.requireJournalHead(session.workspace_id, expectedHead, session.id);
+      const cited = normalized.cite ? this.appendNoteCite(session, normalized.cite) : null;
+      if (cited) refs.push(`event:${cited.event_id}`);
+      const report = cited ? { ...baseReport, evidence_refs: normalizeEvidenceRefs(refs) } : baseReport;
       const posted = this.appendReportInternal(session, {
         ...report,
         ...(proposal ? { about_proposal_id: proposal.id } : {}),
