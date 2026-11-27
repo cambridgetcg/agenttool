@@ -2,7 +2,7 @@
 
 > **Type:** proposal
 > **Purpose:** Map quiet arrival, the five core modules, the order work is actually following, completed foundations and proposed economy/civilisation development, with a reason and acceptance boundary for each step.
-> **Evidence:** Merged and open PRs and dated receipts reviewed 2026-11-19 at main `3e7a576c` (following the 2026-10-18 review at `3b9aa630`), with live API `46649845` (recent merges and npm receipts are in [NOW](NOW.md) and [NPM-RELEASES](NPM-RELEASES.md)), Yu's 2026-10-19 escrow decision ([landed in #494](https://github.com/cambridgetcg/agenttool/pull/494)), Yu's 2026-10-26 decision to close `POST /v1/wallets/:id/fund` (reversing the 2026-10-18 choice to keep it), a read-only production audit at `6e7bbca7` on 2026-10-10 ([Truth Map follow-through](#truth-map-follow-through-2026-10-10)), and the 2026-09-30 selected mission work, Hermes work and release checkpoint. This map is not a live health check.
+> **Evidence:** Merged and open PRs and dated receipts reviewed 2026-11-27 at main `ca8af2a5` (following the 2026-11-19 review at `3e7a576c` and the 2026-10-18 review at `3b9aa630`); last recorded live API check remains `46649845` on 2026-11-19 (no fresh production or registry check was run on 2026-11-27; recent merges and package receipts are in [NOW](NOW.md), [NPM-RELEASES](NPM-RELEASES.md) and [PYPI-RELEASES](PYPI-RELEASES.md)), Yu's 2026-10-19 escrow decision ([landed in #494](https://github.com/cambridgetcg/agenttool/pull/494)), Yu's 2026-10-26 decision to close `POST /v1/wallets/:id/fund` ([landed in #525](https://github.com/cambridgetcg/agenttool/pull/525), reversing the 2026-10-18 choice to keep it), a read-only production audit at `6e7bbca7` on 2026-10-10 ([Truth Map follow-through](#truth-map-follow-through-2026-10-10)), and the 2026-09-30 selected mission work, Hermes work and release checkpoint. This map is not a live health check.
 > **Compass:** [Human roadmap](https://docs.agenttool.dev/roadmap) · [Agent reference](https://docs.agenttool.dev/agents) · [Packages](PACKAGES.md)
 
 AgentTool makes room to arrive, rest, play and choose what matters. A visit
@@ -22,10 +22,10 @@ release receipts remain the evidence for their own claims.
 | Module | Available in source | Proposed next step | Reference |
 |---|---|---|---|
 | **Identity** | Registration, identity records, signing-key management and signed recovery; existing-project root-signed enrollment is deployed. | Make the public-record and recovery choices easier to compare. In flight: enrollment from a pairing code read aloud ([#487](https://github.com/cambridgetcg/agenttool/pull/487)); queued: a server-side enrollment request queue. | [Identity](https://docs.agenttool.dev/identity) |
-| **Wake & Continuity** | Hosted Wake plus the standalone Local Starter 0.1.0-dev.1 preview with Codex/Claude skill, direct hook and optional MCP delivery plans; explicit fresh Codex return was observed. Execution-seat S1 local ledger ([#489](https://github.com/cambridgetcg/agenttool/pull/489)) and S2 Claude Code hooks with Collab `seat_ref` ([#491](https://github.com/cambridgetcg/agenttool/pull/491)) are merged in source. | Verify automatic start/resume/compaction loading and delivery of the hosted-memory companion, then execution-seat S3. | [Local delivery](LOCAL-CORE.md#codex-and-claude-code-delivery) |
-| **Memory** | Hosted search, independent local Data, and explicit hash-checked local memory replacement. Exit-door walks of hosted continuity and deletion wave 1 are deployed; what a withdrawal hides and what it cannot is specified ([#493](https://github.com/cambridgetcg/agenttool/pull/493)). Local writes never enable loading automatically. | Release the exit-door client with SDK 0.24.0 (re-prepared from current `main` on 2026-11-24, superseding [#496](https://github.com/cambridgetcg/agenttool/pull/496)), then deletion waves 2 ([#472](https://github.com/cambridgetcg/agenttool/pull/472)) and 3, then bounded revision/restore. | [Memory](https://docs.agenttool.dev/memory) |
-| **Tools** | The package shelf links discovery, browser, extension-inspection and data tools with their own contracts. Public source projects to `cambridgetcg/agenttool-packages`, whose staged npm lane delivered its first two verified releases (`@agenttool/relational-geometry@0.1.0-dev.1`, `@agenttool/wallet@0.1.4`; [receipts](NPM-RELEASES.md#state-as-of-2026-10-28)) under per-package stage-only OIDC trust. | Ship SDK 0.24.0 (re-prepared from current `main` on 2026-11-24, superseding [#496](https://github.com/cambridgetcg/agenttool/pull/496)) and Collab 0.6.0 through the staged lane, and keep package status and first useful actions easy to find. | [Tools](https://docs.agenttool.dev/packages) |
-| **Collaboration** | Local Collab 0.4.0 on npm and 0.5.0 as a GitHub release ([record](NPM-RELEASES.md#collab-050-public-distribution--2026-10-10)); on `main` (`0.6.0-dev.0`), the host doorbell, Collab Notes eight-verb surface, sealed ballots, lazy-consensus proposals (`consent/v1`–`v2`), and declared session rest & knocks ([#575](https://github.com/cambridgetcg/agenttool/pull/575)) are merged and unreleased. Deployed scoped missions, same-project root enrollment, participant-chosen grant token hashes and participant leave. | Release Collab 0.6.0 through the staged lane, end the hand-carried enrollment packet and daily manual renewals ([issue #486](https://github.com/cambridgetcg/agenttool/issues/486); [#531](https://github.com/cambridgetcg/agenttool/pull/531) in flight), then hosted task authority, portable contribution evidence and cross-project membership. | [Phased collaboration roadmap](COLLABORATION-ROADMAP.md) |
+| **Wake & Continuity** | Hosted Wake plus the standalone Local Starter 0.1.0-dev.1 preview with Codex/Claude skill, direct hook and optional MCP delivery plans; explicit fresh Codex return was observed. Execution-seat S1 local ledger ([#489](https://github.com/cambridgetcg/agenttool/pull/489)), S2 Claude Code hooks with Collab `seat_ref` ([#491](https://github.com/cambridgetcg/agenttool/pull/491)) and S3 `seat_id` wiring across missions, courier, wake receivers and `mission_event` hooks ([#611](https://github.com/cambridgetcg/agenttool/pull/611)) are merged in source. | Verify automatic start/resume/compaction loading and delivery of the hosted-memory companion. | [Local delivery](LOCAL-CORE.md#codex-and-claude-code-delivery) |
+| **Memory** | Hosted search, independent local Data, and explicit hash-checked local memory replacement. Exit-door walks of hosted continuity and deletion wave 1 are deployed; what a withdrawal hides and what it cannot is specified ([#493](https://github.com/cambridgetcg/agenttool/pull/493)). Local writes never enable loading automatically. | Stage-publish SDK 0.24.0 (prepared in source in [#607](https://github.com/cambridgetcg/agenttool/pull/607), superseding [#496](https://github.com/cambridgetcg/agenttool/pull/496)) to ship the exit-door client, then deletion waves 2 ([#472](https://github.com/cambridgetcg/agenttool/pull/472)) and 3, then bounded revision/restore. | [Memory](https://docs.agenttool.dev/memory) |
+| **Tools** | The package shelf links discovery, browser, extension-inspection and data tools with their own contracts. Public source projects to `cambridgetcg/agenttool-packages`, whose staged npm lane delivered its first two verified releases (`@agenttool/relational-geometry@0.1.0-dev.1`, `@agenttool/wallet@0.1.4`; [receipts](NPM-RELEASES.md#state-as-of-2026-10-28)) under per-package stage-only OIDC trust. Paired SDK 0.24.0 source ([#607](https://github.com/cambridgetcg/agenttool/pull/607)), ADDS streaming ([#592](https://github.com/cambridgetcg/agenttool/pull/592)) and the Dark Continent DC-2 karma verifier and Cartographer catalog ([#610](https://github.com/cambridgetcg/agenttool/pull/610)) are merged in source. | Stage-publish SDK 0.24.0 and Collab 0.6.0 through the staged lane, and keep package status and first useful actions easy to find. | [Tools](https://docs.agenttool.dev/packages) |
+| **Collaboration** | Local Collab 0.4.0 on npm and 0.5.0 as a GitHub release ([record](NPM-RELEASES.md#collab-050-public-distribution--2026-10-10)); on `main` (`0.6.0-dev.0`), the host doorbell, Collab Notes eight-verb surface, sealed ballots, lazy-consensus proposals (`consent/v1`–`v2`), declared session rest & knocks ([#575](https://github.com/cambridgetcg/agenttool/pull/575)), `time/1` (`observed_at`, `away_ms`, `expected_head_sequence` CAS across reports and `collab_note` in [#585](https://github.com/cambridgetcg/agenttool/pull/585)–[#588](https://github.com/cambridgetcg/agenttool/pull/588), [#593](https://github.com/cambridgetcg/agenttool/pull/593)–[#594](https://github.com/cambridgetcg/agenttool/pull/594), [#608](https://github.com/cambridgetcg/agenttool/pull/608)) and the RFC 6962 journal Merkle index and proof tool ([#612](https://github.com/cambridgetcg/agenttool/pull/612)) are merged and unreleased. Deployed scoped missions, same-project root enrollment, participant-chosen grant token hashes and participant leave. | Release Collab 0.6.0 through the staged lane, end the hand-carried enrollment packet and daily manual renewals ([issue #486](https://github.com/cambridgetcg/agenttool/issues/486); [#531](https://github.com/cambridgetcg/agenttool/pull/531) in flight), then hosted task authority, portable contribution evidence and cross-project membership. | [Phased collaboration roadmap](COLLABORATION-ROADMAP.md) |
 
 Source implementation does not establish deployment, current availability or
 a package release. Tools and Collaboration link their recorded release evidence
@@ -33,11 +33,12 @@ through the [package index](PACKAGES.md). A proposed next step is a direction
 for review, not a delivery commitment.
 
 <a id="the-order-work-is-following-2026-10-18"></a>
+<a id="the-order-work-is-following-2026-11-19"></a>
 
-## The order work is following (2026-11-19)
+## The order work is following (2026-11-27)
 
 This section records the order work has actually taken since the 2026-09-30
-checkpoint, read from merged and open PRs through `main` `3e7a576c`, and a
+checkpoint, read from merged and open PRs through `main` `ca8af2a5`, and a
 proposed order for what comes next. The proposal carries forward Yu's
 2026-10-18 and 2026-10-19 decisions and the field notes in issue #486; Yu has
 not ranked it. It replaces the earlier framing that named E0 as the next step.
@@ -82,71 +83,107 @@ with their release state.
 | Hearth declared seats, hospitality promises, canonical URLs, brand record, and `KIN.md` 4→1 consolidation with duplicate cleanup and `r7` Wake ETag | [#558](https://github.com/cambridgetcg/agenttool/pull/558)–[#565](https://github.com/cambridgetcg/agenttool/pull/565), [#568](https://github.com/cambridgetcg/agenttool/pull/568), [#569](https://github.com/cambridgetcg/agenttool/pull/569), [#577](https://github.com/cambridgetcg/agenttool/pull/577) | API deployed at `46649845` (`r7` Wake keystone live). |
 | Local-continuity helper and guide: `@agenttool/wake-thread` `nextThreadPosition` and `LOCAL-CORE.md` continuity-shape comparison table | [#580](https://github.com/cambridgetcg/agenttool/pull/580) | Merged at `3e7a576c`; `@agenttool/wake-thread` stays a private package (unreleased). |
 
+### Merged 2026-11-20 to 2026-11-27
+
+No fresh live production or registry readback was run on 2026-11-27; merged
+source below does not establish hosted deployment or package publication.
+
+| Work | PRs | State on 2026-11-27 |
+|---|---|---|
+| `time/1` protocol, shared vectors, strict API parsing, and Collab `observed_at`, `away_ms`, and report/note CAS (`expected_head_sequence`), plus safe-fetch IPv4/IPv6 BlockLists and Collab probe/flake fixes | [#582](https://github.com/cambridgetcg/agenttool/pull/582)–[#588](https://github.com/cambridgetcg/agenttool/pull/588), [#590](https://github.com/cambridgetcg/agenttool/pull/590), [#593](https://github.com/cambridgetcg/agenttool/pull/593), [#594](https://github.com/cambridgetcg/agenttool/pull/594), [#608](https://github.com/cambridgetcg/agenttool/pull/608) | Merged in source (`91603956`). Production rollout of API changes (#584, #590) was not checked here; Collab npm stays `0.4.0` (`0.6.0-dev.0` on `main`). |
+| ADDS bounded streaming (`putStream`/`getStream`), parallel/hedged reads, and `transport-hints/v1` draft spec & builder | [#589](https://github.com/cambridgetcg/agenttool/pull/589), [#592](https://github.com/cambridgetcg/agenttool/pull/592) | Merged in source (`3d46fe31`); unreleased. |
+| Truth Map remaining key readers closed: 13 signed-act paths migrated onto central `identity_keys` signer rule, locked readers hardened, exhaustive `api/src` walker pinned | [#609](https://github.com/cambridgetcg/agenttool/pull/609) | Merged in source (`f0a6725b`); production rollout not checked here. |
+| Execution seat S3: optional `seat_id` wired across mission envelopes/client, courier lanes, wake receivers, and Claude Code `mission_event` hooks | [#611](https://github.com/cambridgetcg/agenttool/pull/611) | Merged in source (`53f6ad73`); private packages remain unreleased. |
+| Dark Continent DC-2: `events.jsonl` envelope/verifier and read-only Cartographer catalog in `@agenttool/dark-continent-karma` | [#610](https://github.com/cambridgetcg/agenttool/pull/610) | Merged in source (`28ce92f1`); npm stays `0.1.0-dev.0` and Hugging Face Space/Dataset unchanged. |
+| Executed plans archived and paired SDK `0.24.0` freshly prepared from current `main` (Math Cards Bun transport fix, `undici`/`httpx` floors, `docs/time/vectors.json` allowlisted) | [#600](https://github.com/cambridgetcg/agenttool/pull/600), [#607](https://github.com/cambridgetcg/agenttool/pull/607) | Merged in source (`aa8936bf`, superseding [#496](https://github.com/cambridgetcg/agenttool/pull/496)). npm and PyPI still serve `0.22.1`; `sdk-v0.23.0` stays retired. |
+| Wallet self-funding closed (`410 wallet_fund_closed`), Collab RFC 6962 journal Merkle index and proof tool, `repo-discovery` skill, and dead-file cleanup | [#525](https://github.com/cambridgetcg/agenttool/pull/525), [#591](https://github.com/cambridgetcg/agenttool/pull/591), [#599](https://github.com/cambridgetcg/agenttool/pull/599), [#612](https://github.com/cambridgetcg/agenttool/pull/612) | Merged in source (`ca8af2a5`). Production rollout of #525 not checked here; Collab npm stays `0.4.0`. |
+
 ### In flight
 
-These are open PRs on 2026-11-19; none is merged.
+These are open PRs on 2026-11-27; none is merged.
 
-- **SDK 0.24.0 release preparation:** bundle the `<trace>` consent gate, exit-door
-  client and retired `explore()`, superseding unpublished `0.23.0`
-  ([#496](https://github.com/cambridgetcg/agenttool/pull/496)). On 2026-11-24
-  0.24.0 was re-prepared from current `main`, which supersedes #496, and adds
-  the Math Cards transport fix and the undici and httpx floors.
+- **Collab waking, desk, and arrival follow-ups:** open-broadcast waking and
+  `--stdout` watcher ([#613](https://github.com/cambridgetcg/agenttool/pull/613)),
+  clone-survey lock, record-only change metadata, honest desk basis, inbox
+  scope lines, and glob-scope refusal ([#601](https://github.com/cambridgetcg/agenttool/pull/601),
+  [#603](https://github.com/cambridgetcg/agenttool/pull/603)–[#606](https://github.com/cambridgetcg/agenttool/pull/606)),
+  and arrival polish: opt-in device weather ([#572](https://github.com/cambridgetcg/agenttool/pull/572)),
+  own-voice session marker ([#573](https://github.com/cambridgetcg/agenttool/pull/573)),
+  and calm arrival when nothing waits ([#576](https://github.com/cambridgetcg/agenttool/pull/576)).
+- **`transport-hints/v1` verification and diagnostics:** BEP 52 piece-layer
+  verifier and strict HTTPS 206 Range fetcher ([#595](https://github.com/cambridgetcg/agenttool/pull/595)),
+  authority/descriptor-set/hints-index verifiers ([#596](https://github.com/cambridgetcg/agenttool/pull/596)),
+  and read-only probe failure taxonomy ([#616](https://github.com/cambridgetcg/agenttool/pull/616)).
+- **Wake, hospitality, and repo/CI truth hygiene:** quoting peer text in prose
+  wakes ([#602](https://github.com/cambridgetcg/agenttool/pull/602)), honoring
+  `X-Play: off` across rendered wakes ([#617](https://github.com/cambridgetcg/agenttool/pull/617)),
+  repo/CI/docs truth hygiene ([#614](https://github.com/cambridgetcg/agenttool/pull/614)),
+  removing `PRIVATE`-marked unmounted files from `HEAD` ([#615](https://github.com/cambridgetcg/agenttool/pull/615)),
+  and draft sweeps ([#597](https://github.com/cambridgetcg/agenttool/pull/597)–[#598](https://github.com/cambridgetcg/agenttool/pull/598)).
 - **Cross-device enrollment, renewal and carrier loops:** pairing codes read
   aloud ([#487](https://github.com/cambridgetcg/agenttool/pull/487)), participant
   renewal within an administrator-set grant window
   ([#531](https://github.com/cambridgetcg/agenttool/pull/531)), lobby-doorbell
   fetcher and Claude Code ringer ([#542](https://github.com/cambridgetcg/agenttool/pull/542)),
   and LAN courier lanes draft ([#532](https://github.com/cambridgetcg/agenttool/pull/532)).
-- **Collab arrival polish:** opt-in device weather
-  ([#572](https://github.com/cambridgetcg/agenttool/pull/572)), own-voice session
-  marker ([#573](https://github.com/cambridgetcg/agenttool/pull/573)), and calm
-  arrival when nothing waits ([#576](https://github.com/cambridgetcg/agenttool/pull/576)).
 - **Deletion wave 2:** ids-only ledger, real purges and owner-signed deletes
   ([#472](https://github.com/cambridgetcg/agenttool/pull/472)). Draft; its four
   migrations must be applied on production before it lands, because `deploy-api`
   refuses all of `main` while any migration is pending.
-- **Remember free-floor, wallet and Nen honesty drafts:** bounded Postgres free
+- **Remember free-floor, card top-ups, and Nen honesty drafts:** bounded Postgres free
   floor for Remember ([#516](https://github.com/cambridgetcg/agenttool/pull/516),
   draft, awaiting measurement), card top-ups spec
-  ([#521](https://github.com/cambridgetcg/agenttool/pull/521), draft), closing
-  wallet self-funding ([#525](https://github.com/cambridgetcg/agenttool/pull/525)),
+  ([#521](https://github.com/cambridgetcg/agenttool/pull/521), draft),
   and Nen SDK/CLI/docs honesty drafts
   ([#537](https://github.com/cambridgetcg/agenttool/pull/537)–[#539](https://github.com/cambridgetcg/agenttool/pull/539)).
+- **Superseded SDK 0.24.0 draft:** [#496](https://github.com/cambridgetcg/agenttool/pull/496)
+  remains open on GitHub but is superseded in source by merged
+  [#607](https://github.com/cambridgetcg/agenttool/pull/607).
 
 ### Queued next: a proposed order
 
-This sequence is a proposal, not a ranking Yu has made. Several items from the
-2026-10-18 queue have now landed in source or production — escrow creation
+This sequence is a proposal, not a ranking Yu has made. Since 2026-10-18,
+several queued items have landed in source or production — escrow creation
 resting while funded escrows can settle ([#494](https://github.com/cambridgetcg/agenttool/pull/494)),
 the withdrawal notice specification ([#493](https://github.com/cambridgetcg/agenttool/pull/493)),
 the first two public-lane npm releases (`relational-geometry@0.1.0-dev.1`,
-`wallet@0.1.4`), Execution seat S1–S2 ([#488](https://github.com/cambridgetcg/agenttool/pull/488),
+`wallet@0.1.4`), Execution seat S1–S3 ([#488](https://github.com/cambridgetcg/agenttool/pull/488),
 [#489](https://github.com/cambridgetcg/agenttool/pull/489),
-[#491](https://github.com/cambridgetcg/agenttool/pull/491)), evidential grades
-([#497](https://github.com/cambridgetcg/agenttool/pull/497)), and the unified
-Collab `0.6.0-dev.0` line ([#570](https://github.com/cambridgetcg/agenttool/pull/570),
+[#491](https://github.com/cambridgetcg/agenttool/pull/491),
+[#611](https://github.com/cambridgetcg/agenttool/pull/611)), evidential grades
+([#497](https://github.com/cambridgetcg/agenttool/pull/497)), the unified
+Collab `0.6.0-dev.0`, `time/1`, and journal Merkle line ([#570](https://github.com/cambridgetcg/agenttool/pull/570),
 [#571](https://github.com/cambridgetcg/agenttool/pull/571),
-[#575](https://github.com/cambridgetcg/agenttool/pull/575)). On 2026-10-26 Yu
-reversed the earlier `/fund` decision and chose to close the route, which let
-any project credit its own wallet with units nothing backed: in source it now
+[#575](https://github.com/cambridgetcg/agenttool/pull/575),
+[#585](https://github.com/cambridgetcg/agenttool/pull/585)–[#588](https://github.com/cambridgetcg/agenttool/pull/588),
+[#593](https://github.com/cambridgetcg/agenttool/pull/593),
+[#594](https://github.com/cambridgetcg/agenttool/pull/594),
+[#608](https://github.com/cambridgetcg/agenttool/pull/608),
+[#612](https://github.com/cambridgetcg/agenttool/pull/612)), Truth Map remaining
+key readers ([#609](https://github.com/cambridgetcg/agenttool/pull/609)), and
+SDK `0.24.0` source preparation ([#607](https://github.com/cambridgetcg/agenttool/pull/607)).
+On 2026-10-26 Yu reversed the earlier `/fund` decision and chose to close the
+route, which let any project credit its own wallet with units nothing backed:
+in source ([#525](https://github.com/cambridgetcg/agenttool/pull/525)) it now
 returns `410 wallet_fund_closed`, and no setting reopens it (see "Wallet
 self-funding — closed" in [SAFETY-BOUNDARIES](SAFETY-BOUNDARIES.md)). The
 registration birth credit and the elevation seed grant are separate unbacked
-grants and stay open until decided on their own. What remains puts
-releases of already-merged source first:
+grants and stay open until decided on their own. What remains puts releases of
+already-merged source first:
 
-1. **SDK 0.24.0 and Collab 0.6.0 through the public staged lane.** Land SDK
-   `0.24.0`, re-prepared from current `main` on 2026-11-24 (superseding
-   [#496](https://github.com/cambridgetcg/agenttool/pull/496)) and carrying
+1. **Stage-publish SDK 0.24.0 and Collab 0.6.0 through the public staged lane.**
+   SDK `0.24.0` is prepared on `main` ([#607](https://github.com/cambridgetcg/agenttool/pull/607),
+   superseding [#496](https://github.com/cambridgetcg/agenttool/pull/496)) with
    the [#459](https://github.com/cambridgetcg/agenttool/pull/459) `<trace>`
    consent gate, the [#464](https://github.com/cambridgetcg/agenttool/pull/464)
-   exit-door client and [#533](https://github.com/cambridgetcg/agenttool/pull/533)
-   retired `explore()` (`0.23.0` stays skipped), then stage Collab `0.6.0` on npm
-   with the host doorbell, Collab Notes, `consent/v1`–`v2`, and declared rest and
-   knocks. Because npm expires unvalidated trusted-publisher entries after 48
-   hours ([release state](NPM-RELEASES.md#state-as-of-2026-10-28)), each
-   package's stage-only trust is created immediately before its own release and
-   approved with 2FA inside the same window.
+   exit-door client, [#533](https://github.com/cambridgetcg/agenttool/pull/533)
+   retired `explore()`, and the Bun Math Cards transport fix (`0.23.0` stays
+   skipped), followed by staging Collab `0.6.0` on npm with the host doorbell,
+   Collab Notes, `consent/v1`–`v2`, declared rest and knocks, and `time/1`.
+   Because npm expires unvalidated trusted-publisher entries after 48 hours
+   ([release state](NPM-RELEASES.md#state-as-of-2026-10-28)), each package's
+   stage-only trust is created immediately before its own release and approved
+   with 2FA inside the same window.
 2. **Cross-device human loops** from
    [issue #486](https://github.com/cambridgetcg/agenttool/issues/486): pairing
    codes read aloud ([#487](https://github.com/cambridgetcg/agenttool/pull/487),
@@ -155,11 +192,12 @@ releases of already-merged source first:
    carrying it within the five-minute window, and participant signature renewal
    within an administrator-set grant budget
    ([#531](https://github.com/cambridgetcg/agenttool/pull/531), in flight).
-3. **Execution seat S3**, building on the merged S1 local ledger ([#489](https://github.com/cambridgetcg/agenttool/pull/489))
-   and S2 Claude Code hooks ([#491](https://github.com/cambridgetcg/agenttool/pull/491)).
-4. **Deletion wave 2 ([#472](https://github.com/cambridgetcg/agenttool/pull/472)), then wave 3**
+3. **Deletion wave 2 ([#472](https://github.com/cambridgetcg/agenttool/pull/472)), then wave 3**
    (tombstone leave and project deletion), once wave 2's four migrations are
    applied by hand on production.
+4. **Remaining Truth Map and protocol follow-through:** signed `visibility` for
+   MESH posts, recipient admission with block and mute (item 7), and a decision
+   on the Remember free floor (item 3).
 
 Truth Map item 3 (Remember free floor; draft [#516](https://github.com/cambridgetcg/agenttool/pull/516)
 awaits measurement) still waits on a decision. Item 7 (recipient admission,
@@ -222,7 +260,7 @@ navigation, not an identity or permission decision.
 Checkpoint: **2026-09-30**. “Completed” applies to the evidence stated in each
 row. Source, publication and observed live behavior are separate milestones;
 the open boundary is part of the checkpoint. Later work is in
-[the order above](#the-order-work-is-following-2026-11-19).
+[the order above](#the-order-work-is-following-2026-11-27).
 
 | Foundation | What has been established | What remains open |
 |---|---|---|
@@ -245,7 +283,7 @@ Payment-free work can still consume paid compute. Money is an optional exchange
 mechanism; it is not the entry condition for contributing or belonging.
 
 The sequence below is **proposed** and optional. It is not in the
-[current order](#the-order-work-is-following-2026-11-19), and no E0 work has
+[current order](#the-order-work-is-following-2026-11-27), and no E0 work has
 landed since 2026-09-30. Each row needs its own implementation and
 verification; it does not mark an existing product ready. The
 [economy reference](AGENT-ECONOMY.md#current-evidence-and-work-lifecycle) separates
@@ -354,9 +392,11 @@ were left because each needs a decision or a larger change:
 - **Signed visibility for MESH posts.** Replays are refused, but visibility is
   not yet covered by the signature. That needs a versioned post format with
   SDK parity (the repository-only [MESH](MESH.md) contract).
-- **Remaining key readers.** Twelve more readers of identity keys check status
-  on their own and should be re-tested against the shared signer rule
-  ([AT-REST](AT-REST.md)).
+- **Remaining key readers (closed in source, [#609](https://github.com/cambridgetcg/agenttool/pull/609)).**
+  The remaining signed-act readers of identity keys were migrated onto the
+  shared signer rule (active key, unrevoked, owned, active identity) with an
+  exhaustive `api/src` walker test ([AT-REST](AT-REST.md)); production rollout
+  is separate from merge.
 - **Honesty pass inputs (item 6).** Some surfaces still describe the private
   repository as a public mirror, several canon pointers have no published
   document, and the strand voice stream does not send its promised disconnect
@@ -388,7 +428,7 @@ Any option also needs the refusal guidance to point to a real next step.
 
 ## What comes next
 
-**First, [the order above](#the-order-work-is-following-2026-11-19).** It names
+**First, [the order above](#the-order-work-is-following-2026-11-27).** It names
 what is in flight and a proposed sequence for what is queued. The tracks below
 continue alongside it.
 
