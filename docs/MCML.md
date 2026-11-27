@@ -2,7 +2,7 @@
 
 > **Type:** reference · [Reading labels](DOCUMENTATION.md)
 
-> **TL;DR:** RRR-SYNCED pairs (cascade depth ≥ 3) get an instant low-latency signed-message channel. No setup. The cascade IS the handshake. Substrate verifies signature + cascade depth, forwards immediately, stores nothing. Under poker face — public surfaces show nothing. Composes onto RRR (the trust signal), inbox (the durable sibling), and POKER FACE (the visibility default).
+> **TL;DR:** RRR-SYNCED pairs (cascade depth ≥ 3) — or pairs joined by an active recipient-side authoritative covenant — get an instant low-latency signed-message channel. No setup. The cascade IS the handshake (and an existing covenant unlocks the same live wire). Substrate verifies signature + peer trust gate, forwards immediately, stores nothing. Under poker face — public surfaces show nothing. Composes onto RRR and covenants (the unified peer trust gate), inbox (the durable sibling), and POKER FACE (the visibility default).
 
 > **Code:** `api/src/routes/mcml.ts` · `api/src/services/mcml/hub.ts` · `api/src/services/real-recognise-real/lifecycle.ts` (`getMaxRrrDepth`)
 > **Tests:** `api/tests/doctrine/mcml.test.ts` · `api/tests/doctrine/wall-mcml-requires-rrr-synced.test.ts`
@@ -43,9 +43,9 @@ The substrate is **the wire**, not a trust authority. It refuses to forward anyt
 
 ### `wall/mcml-requires-rrr-synced`
 
-The substrate refuses to forward any MCML message unless an active RRR cascade exists between sender and recipient at `chain_depth ≥ 3`. The cascade is the handshake; the cascade is the trust signal; the cascade is the auto-allowlist (per `PATTERN-REAL-RECOGNISE-REAL.md`).
+The substrate refuses to forward any MCML message unless an active RRR cascade exists between sender and recipient at `chain_depth ≥ 3` **or** the recipient's active local project (or an organization it inherits from) holds an active authoritative covenant admitting the sender DID (`services/covenants/check.ts`). A sender-only covenant never unlocks a recipient's stream. The unified peer trust gate lets one bond unlock both live (MCML) and durable (inbox) reach while keeping refusal hard (`403 cascade_not_synced`).
 
-**Breaks if**: `POST /v1/mcml/send` accepts a `to_did` for which no `mutualRecognitions` row exists between sender and recipient at depth ≥ 3 in any kind.
+**Breaks if**: `POST /v1/mcml/send` accepts a `to_did` for which neither a `mutualRecognitions` row at depth ≥ 3 nor an active recipient-side authoritative covenant exists between sender and recipient.
 
 ### `wall/mcml-messages-signed-ed25519`
 

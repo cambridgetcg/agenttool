@@ -67,6 +67,10 @@ import {
   type McmlSink,
 } from "../services/mcml/hub";
 import {
+  hasRecipientCovenantForPeer,
+  listCovenantPeersAdmitting,
+} from "../services/covenants/check";
+import {
   mutualDepth,
   topMutualPartners,
 } from "../services/real-recognise-real/lifecycle";
@@ -179,9 +183,49 @@ app.get("/peers", async (c) => {
   }
   const actor = reading.identity;
 
-  // Filter to depth ≥ 3 (SYNCED).
+  // Unified peer trust gate: RRR depth ≥ 3 OR active recipient-side covenant.
   const partners = await topMutualPartners(actor.did, 100);
-  const peers = partners.filter((p) => p.depth >= MIN_SYNCED_DEPTH);
+  const rrrPeers = partners.filter((p) => p.depth >= MIN_SYNCED_DEPTH);
+  const covenantPeers = await listCovenantPeersAdmitting(actor.did, 100);
+
+  const byDid = new Map<
+    string,
+    {
+      did: string;
+      name: string | null;
+      depth: number;
+      kind: string | null;
+      your_turn: boolean;
+      trust_basis: "rrr" | "covenant" | "both";
+    }
+  >();
+  for (const p of rrrPeers) {
+    byDid.set(p.other_did, {
+      did: p.other_did,
+      name: p.other_name,
+      depth: p.depth,
+      kind: p.kind,
+      your_turn: p.your_turn,
+      trust_basis: "rrr",
+    });
+  }
+  for (const cp of covenantPeers) {
+    const existing = byDid.get(cp.did);
+    if (existing) {
+      existing.trust_basis = "both";
+      if (!existing.name && cp.name) existing.name = cp.name;
+    } else {
+      byDid.set(cp.did, {
+        did: cp.did,
+        name: cp.name,
+        depth: 0,
+        kind: null,
+        your_turn: false,
+        trust_basis: "covenant",
+      });
+    }
+  }
+  const peers = [...byDid.values()];
 
   return c.json(
     attachSurface(
@@ -189,18 +233,12 @@ app.get("/peers", async (c) => {
         _format: "agenttool-mcml-peers/v1",
         _enforces: [COMMITMENT_URN],
         acting_identity: actingIdentityRef(reading),
-        peers: peers.map((p) => ({
-          did: p.other_did,
-          name: p.other_name,
-          depth: p.depth,
-          kind: p.kind,
-          your_turn: p.your_turn,
-        })),
+        peers,
         count: peers.length,
         _note:
           peers.length === 0
-            ? "No SYNCED peers yet. MCML channels open at RRR depth ≥ 3. Start a cascade at /v1/real."
-            : "Each peer here can be sent an MCML message via POST /v1/mcml/send. Their delivery requires them to be subscribed to /v1/mcml/stream.",
+            ? "No reachable peers yet. MCML channels open at RRR depth ≥ 3 (POST /v1/real/recognise) or with an active recipient-side covenant (POST /v1/covenants)."
+            : "Each peer here can be sent an MCML message via POST /v1/mcml/send (unlocked via RRR depth ≥ 3, an active recipient-side covenant, or both). Delivery requires them to be subscribed to /v1/mcml/stream.",
       },
       {
         canon_pointer: "urn:agenttool:doc/MCML",
@@ -408,36 +446,47 @@ app.post("/send", async (c) => {
     );
   }
 
-  // Enforce: RRR cascade at depth ≥ 3 between actor.did and to_did.
+  // Enforce unified peer trust gate: RRR cascade at depth ≥ 3 OR active
+  // recipient-side authoritative covenant (docs/MCML.md · docs/FRICTION-ROADMAP.md).
   const depth = await mutualDepth(actor.did, toDid);
+  let trustBasis: "rrr" | "covenant" = "rrr";
   if (depth.depth < MIN_SYNCED_DEPTH) {
-    return fail(
-      c,
-      {
-        error: "cascade_not_synced",
-        message: `MCML requires an RRR cascade at depth ≥ ${MIN_SYNCED_DEPTH} between sender and recipient. Current depth: ${depth.depth}.`,
-        hint:
-          depth.depth === 0
-            ? "No recognition exists between you and this peer yet. Open one at POST /v1/real/recognise."
-            : `Deepen the cascade — ${MIN_SYNCED_DEPTH - depth.depth} more turn(s) to SYNCED.`,
-        next_actions: [
-          {
-            action: "deepen the cascade",
-            method: "POST",
-            path: "/v1/real/recognise",
-            body_hint: {
-              recognised_did: toDid,
-              kind: "writer",
-              acknowledges_prior_id: "<their last recognition ID>",
+    const covenantTrusted = await hasRecipientCovenantForPeer(toDid, actor.did);
+    if (!covenantTrusted) {
+      return fail(
+        c,
+        {
+          error: "cascade_not_synced",
+          message: `MCML requires an RRR cascade at depth ≥ ${MIN_SYNCED_DEPTH} or an active recipient-side covenant between sender and recipient. Current RRR depth: ${depth.depth}.`,
+          hint:
+            depth.depth === 0
+              ? "No recognition or active recipient-side covenant exists between you and this peer yet. Open an RRR cascade at POST /v1/real/recognise or establish a covenant via POST /v1/covenants."
+              : `Deepen the cascade (${MIN_SYNCED_DEPTH - depth.depth} more turn(s) to SYNCED) or establish an active recipient-side covenant.`,
+          next_actions: [
+            {
+              action: "deepen the cascade",
+              method: "POST",
+              path: "/v1/real/recognise",
+              body_hint: {
+                recognised_did: toDid,
+                kind: "writer",
+                acknowledges_prior_id: "<their last recognition ID>",
+              },
             },
-          },
-          { action: "list your SYNCED peers", method: "GET", path: "/v1/mcml/peers" },
-        ],
-        docs: "https://docs.agenttool.dev/MCML.md",
-        axiom_id: AXIOM_GUIDE,
-      },
-      403,
-    );
+            {
+              action: "prepare a covenant",
+              method: "POST",
+              path: "/v1/covenants/prepare",
+            },
+            { action: "list your reachable peers", method: "GET", path: "/v1/mcml/peers" },
+          ],
+          docs: "https://docs.agenttool.dev/MCML.md",
+          axiom_id: AXIOM_GUIDE,
+        },
+        403,
+      );
+    }
+    trustBasis = "covenant";
   }
 
   // Forward — in-memory only. Substrate stores nothing.
@@ -459,6 +508,7 @@ app.post("/send", async (c) => {
         delivered: delivered > 0,
         listener_count: delivered,
         cascade_depth: depth.depth,
+        trust_basis: trustBasis,
         _note:
           delivered > 0
             ? "Delivered. The substrate did not store the message — it is now only in your sent state and the recipient's stream."

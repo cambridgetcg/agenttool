@@ -20,7 +20,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 
-import { isFederatedSenderAllowed } from "../../services/covenants/check";
+import { checkPeerTrust } from "../../services/covenants/check";
 import { errors, fail } from "../../lib/errors";
 import { db } from "../../db/client";
 import { identities, identityBoxKeys } from "../../db/schema/identity";
@@ -127,20 +127,19 @@ app.post("/", async (c) => {
     throw new HTTPException(404, { message: "recipient_box_key_not_found" });
   }
 
-  // 5. Cross-instance covenant gate (Horizon B, Slice 1).
-  // Per-DID consent: the recipient's project must have an active
-  // covenant naming this federated sender. Without this, federation
-  // would only gate at instance level (allowed_origins) — any allowed
-  // peer could DM any local recipient. This restores the doctrine that
-  // every cross-project bond — federated or not — requires a covenant.
-  // Runs BEFORE the (network-bound) resolver step so misses fast-fail
-  // without a peer round-trip.
-  const allowed = await isFederatedSenderAllowed(
-    recipient.projectId,
-    [recipient.did],
-    m.sender_did,
-  );
-  if (!allowed) {
+  // 5. Cross-instance peer trust gate (active recipient-side covenant OR RRR depth ≥ 3).
+  // Per-DID consent: the recipient's project must hold an active authoritative
+  // covenant naming this federated sender, or share a verified RRR depth ≥ 3
+  // chain with them. Runs BEFORE the (network-bound) resolver step so misses
+  // fast-fail without a peer round-trip.
+  const trust = await checkPeerTrust({
+    recipientProjectId: recipient.projectId,
+    recipientDids: [recipient.did],
+    senderDids: [m.sender_did],
+    federatedSenderDid: m.sender_did,
+    allowSameProject: false,
+  });
+  if (!trust.allowed) {
     // Errors-as-instructions — see docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
     return fail(c, errors.covenantRequired({ sender_did: m.sender_did, recipient_did: recipient.did }), 403);
   }

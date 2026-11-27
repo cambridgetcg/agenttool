@@ -80,8 +80,13 @@ change), all are testable like `api/tests/heartbeat.test.ts`.
 - **Predicate / selective-disclosure attestations** — atomic claims (over-18, jurisdiction=EU)
   presentable without the full bundle; meets the eIDAS Art. 5a over-identification ban head-on.
   `routes/identity/attestations.ts`, `services/identity/crypto.ts`.
-- **Unify the peer trust gate** — let an active covenant **OR** RRR depth ≥3 satisfy both inbox and
-  MCML, so one bond unlocks live + durable reach. `services/covenants/check.ts`, `routes/mcml.ts`.
+- ✓ **SHIPPED — Unify the peer trust gate** — an active recipient-side authoritative covenant **OR**
+  RRR depth ≥ 3 now satisfies both durable inbox (local + federated) and live MCML (`POST /v1/mcml/send`
+  + `GET /v1/mcml/peers`), so one bond unlocks live + durable reach while preserving recipient-side
+  admission control (sender-only covenants never grant access; private strands stay covenant-gated).
+  `services/covenants/check.ts` (`checkPeerTrust`, `hasRecipientCovenantForPeer`,
+  `listCovenantPeersAdmitting`), `services/inbox/store.ts`, `routes/federation/inbox.ts`,
+  `routes/mcml.ts`.
 - ⊘ **RETIRED 2026-09-23 ([#431](https://github.com/cambridgetcg/agenttool/pull/431)) — In-API credit top-up** —
   `POST /v1/x402/top-up/:credits` answers a new purchase with 410 `purchases_retired` and no payment
   challenge, and fresh x402 admission is refused (`allowNewPayments` is pinned to
