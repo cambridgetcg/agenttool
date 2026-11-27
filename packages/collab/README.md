@@ -882,6 +882,14 @@ remedy naming `collab_report_list` or `collab_inbox {include: "all"}`; your own
 reports and non-report events do not count, and `compared_at_sequence` echoes
 the checked value on success (see [PROTOCOL.md](PROTOCOL.md)).
 
+Reports (`collab_report_append`, `collab_note`) and tasks (`collab_task_create`,
+`collab_take` with `title`, `collab_task_progress`) also accept optional
+`eta_at` and `check_back_at` (`time/1` §6 RFC 3339 instants with seconds and
+timezone, normalized to UTC `Z`; `null` on `collab_task_progress` clears them).
+Reads derive `overdue_at = eta_at + max(10 minutes, floor(estimate / 2))` and
+`overdue` dynamically from the journal's events without changing the SQLite
+schema; completed tasks never read overdue.
+
 Acceptance records the independent reviewer's snapshot at that journal order.
 A later correction or withdrawal remains visible but does not silently revoke
 an already accepted task. Record a new explicit coordination decision or

@@ -54,6 +54,28 @@ const ADDED_INPUT_FIELDS: Record<string, Record<string, unknown>> = {
       enum: ["full", "headers"],
     },
   },
+  collab_task_create: {
+    eta_at: {
+      description: "Optional time/1 §6 reference-clock ETA (RFC 3339 timestamp with seconds and timezone, for example 2026-11-27T15:45:00Z). "
+        + "Unfinished tasks read overdue once observed_at reaches eta_at + max(10m, floor(estimate / 2)).",
+      type: "string",
+    },
+    check_back_at: {
+      description: "Optional time/1 §6 reference-clock instant when the waiter will check back if nothing arrives "
+        + "(RFC 3339 timestamp with seconds and timezone, for example 2026-11-27T16:00:00Z).",
+      type: "string",
+    },
+  },
+  collab_task_progress: {
+    eta_at: {
+      description: "Optional time/1 §6 reference-clock ETA update (RFC 3339 timestamp with seconds and timezone), or null to clear.",
+      anyOf: [{ type: "string" }, { type: "null" }],
+    },
+    check_back_at: {
+      description: "Optional time/1 §6 check-back instant update (RFC 3339 timestamp with seconds and timezone), or null to clear.",
+      anyOf: [{ type: "string" }, { type: "null" }],
+    },
+  },
   collab_report_append: {
     expected_head_sequence: {
       description: "Optional compare-and-swap: the event_sequence of the last report you read (from collab_report_list, "
@@ -76,6 +98,16 @@ const ADDED_INPUT_FIELDS: Record<string, Record<string, unknown>> = {
         type: "string",
         minLength: 1,
       },
+    },
+    eta_at: {
+      description: "Optional time/1 §6 reference-clock ETA (RFC 3339 timestamp with seconds and timezone, for example 2026-11-27T15:45:00Z). "
+        + "Reads compute overdue once observed_at reaches eta_at + max(10m, floor(estimate / 2)).",
+      type: "string",
+    },
+    check_back_at: {
+      description: "Optional time/1 §6 reference-clock instant when the waiter will check back if nothing arrives "
+        + "(RFC 3339 timestamp with seconds and timezone, for example 2026-11-27T16:00:00Z).",
+      type: "string",
     },
   },
   collab_journal_verify: {

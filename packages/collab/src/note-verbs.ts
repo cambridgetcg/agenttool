@@ -33,6 +33,7 @@ import {
 import { CONSENT_RULE_V2, type CollabReport, type ProposalStatus, type SessionRest, type Task } from "./protocol.js";
 import { gitCommitExists, hashWorktreeFile, MAX_CITED_FILE_BYTES } from "./repository.js";
 import { removeSessionCredentialFile } from "./session-file.js";
+import { parseCanonicalInstant } from "./time.js";
 import {
   NOTE_DECISION_OUTCOMES,
   NOTE_DEFAULT_DECISION_EXTENT,
@@ -572,6 +573,8 @@ export interface NoteVerbInput {
   replaces?: string;
   dry_run?: boolean;
   expected_head_sequence?: number;
+  eta_at?: string;
+  check_back_at?: string;
 }
 
 /** The acts collab_note records in this build. */
@@ -788,6 +791,23 @@ function parseNoteExpectedHeadSequence(value: unknown): number | undefined {
   return value;
 }
 
+function parseNoteEtaInstant(value: unknown, field: "eta_at" | "check_back_at"): string | undefined {
+  if (value === undefined) return undefined;
+  const canonical = parseCanonicalInstant(typeof value === "string" ? value.trim() : value);
+  if (canonical === null) {
+    throw new CollabError(
+      field === "eta_at" ? "invalid_eta_at" : "invalid_check_back_at",
+      `${field} must be an RFC 3339 timestamp with seconds and a timezone (for example 2026-11-27T15:45:00Z)`,
+      {
+        remedy: {
+          say: `Pass ${field} as an RFC 3339 timestamp with seconds and a timezone such as 2026-11-27T15:45:00Z, or omit it.`,
+        },
+      },
+    );
+  }
+  return canonical;
+}
+
 /** Rewrite the store's head_moved remedy onto the Notes surface (collab_inbox with include: "all"). */
 function headMovedForNote(ctx: NoteVerbContext, error: unknown): unknown {
   if (!(error instanceof CollabError) || error.code !== "head_moved") return error;
@@ -826,6 +846,8 @@ async function noteAct(ctx: NoteVerbContext, input: NoteVerbInput): Promise<Reco
     throw new CollabError("invalid_dry_run", "dry_run is true or false");
   }
   const expectedHead = parseNoteExpectedHeadSequence(input.expected_head_sequence);
+  const etaAt = parseNoteEtaInstant(input.eta_at, "eta_at");
+  const checkBackAt = parseNoteEtaInstant(input.check_back_at, "check_back_at");
   if (input.dry_run === true && expectedHead !== undefined) {
     advice.push("expected_head_sequence is checked when the note is written, not during dry_run.");
   }
@@ -879,9 +901,22 @@ async function noteAct(ctx: NoteVerbContext, input: NoteVerbInput): Promise<Reco
     fields: { ...fields, evidence: evidence.key_lines, to: keyAddressee(ctx, workspaceId, fields.to) },
     // Only a decide has an outcome, so every other act keeps its earlier key.
     ...(act === "decide" ? { outcome } : {}),
+    ...(etaAt !== undefined ? { eta_at: etaAt } : {}),
+    ...(checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}),
+  };
+  const withTiming = (reports: NoteReportInput[]): NoteReportInput[] => {
+    if (etaAt === undefined && checkBackAt === undefined) return reports;
+    return reports.map((report, index) => (index === 0
+      ? {
+          ...report,
+          ...(etaAt !== undefined ? { eta_at: etaAt } : {}),
+          ...(checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}),
+        }
+      : report));
   };
   const plan = (): { planned: PlannedNote; note: string } => {
-    const planned = planNote(ctx, input, { act, fields, target, me, workspaceId, replacedId, evidence });
+    const rawPlanned = planNote(ctx, input, { act, fields, target, me, workspaceId, replacedId, evidence });
+    const planned = { ...rawPlanned, reports: withTiming(rawPlanned.reports) };
     // The final note, with full ids, is checked again before anything is written.
     refuseNoteProblems(planned.fields);
     return { planned, note: renderNote(planned.fields) };
@@ -890,7 +925,7 @@ async function noteAct(ctx: NoteVerbContext, input: NoteVerbInput): Promise<Reco
 
   if (act === "decide") {
     const decided = await decideNote(ctx, binding, credential, {
-      fields, target, evidence, keyInput, advice, read_as: read.read_as, input, outcome, expectedHead,
+      fields, target, evidence, keyInput, advice, read_as: read.read_as, input, outcome, expectedHead, etaAt, checkBackAt,
     });
     return input.dry_run === true ? decided : withCompared(decided);
   }
@@ -1071,6 +1106,8 @@ function dryRunResult(options: {
         task: report.task_id ?? null,
         to: report.to_session_id ?? (report.to_person ? "person" : null),
         about_proposal: report.about_proposal_id ?? null,
+        ...(report.eta_at ? { eta_at: report.eta_at } : {}),
+        ...(report.check_back_at ? { check_back_at: report.check_back_at } : {}),
       })),
       cites: evidence.items.length > 0 ? 1 : 0,
     },
@@ -1632,6 +1669,8 @@ function noteResult(
     recorded_as: planned.recorded_as,
     ...(options.read_as ? { read_as: options.read_as } : {}),
     to,
+    ...(main.eta_at !== undefined ? { eta_at: main.eta_at, overdue: main.overdue, overdue_at: main.overdue_at } : {}),
+    ...(main.check_back_at !== undefined ? { check_back_at: main.check_back_at } : {}),
     evidence: evidenceSummary(options.evidence),
     ...planned.extra,
   };
@@ -2051,9 +2090,11 @@ async function decideNote(
     input: NoteVerbInput;
     outcome: NoteDecisionOutcome;
     expectedHead: number | undefined;
+    etaAt: string | undefined;
+    checkBackAt: string | undefined;
   },
 ): Promise<Record<string, unknown>> {
-  const { target, evidence, advice, input, outcome, expectedHead } = options;
+  const { target, evidence, advice, input, outcome, expectedHead, etaAt, checkBackAt } = options;
   const workspaceId = binding.handle.workspace.id;
   const me = credential.session_id;
   const planContext = { fields: options.fields, target, me, workspaceId, evidence, outcome };
@@ -2122,6 +2163,8 @@ async function decideNote(
         evidence_refs: fresh.evidence_refs,
         receipt_plan: plan.guard,
         ...(expectedHead === undefined ? {} : { expected_head_sequence: expectedHead }),
+        ...(etaAt === undefined ? {} : { eta_at: etaAt }),
+        ...(checkBackAt === undefined ? {} : { check_back_at: checkBackAt }),
       });
     });
     return { plan, receipt: step.value, fresh: step.replayed ? null : fresh as DecidePlan | null };
@@ -2224,6 +2267,8 @@ export interface TakeInput {
   purpose?: string;
   review?: string;
   because?: string;
+  eta_at?: string;
+  check_back_at?: string;
 }
 
 const TASK_TITLE_MAX = 300;
@@ -2241,6 +2286,8 @@ export async function takeVerb(ctx: NoteVerbContext, input: TakeInput): Promise<
   }
   const purpose = oneLine(input.purpose, "purpose", 200, false);
   const because = freeText(input.because, "because", RECOVERY_NOTE_MAX, false);
+  const etaAt = parseNoteEtaInstant(input.eta_at, "eta_at");
+  const checkBackAt = parseNoteEtaInstant(input.check_back_at, "check_back_at");
   if (input.review !== undefined && input.review !== "required" && input.review !== "none") {
     throw new CollabError("invalid_review", "review is required or none", {
       remedy: { say: "review is required (a distinct session must accept the work) or none (you report it done); leave it out for the default." },
@@ -2252,8 +2299,11 @@ export async function takeVerb(ctx: NoteVerbContext, input: TakeInput): Promise<
     });
   }
   const advice: string[] = [];
+  if (!hasTitle && (etaAt !== undefined || checkBackAt !== undefined)) {
+    advice.push("eta_at and check_back_at apply when creating a new task with title; to set or revise an ETA on an existing task, post a collab_note or collab_task_progress.");
+  }
   return hasTitle
-    ? takeNew(ctx, binding, credential, { title: oneLine(input.title, "title", TASK_TITLE_MAX, true)!, purpose, because, review: input.review as "required" | "none" | undefined, paths: input.paths ?? [] }, advice)
+    ? takeNew(ctx, binding, credential, { title: oneLine(input.title, "title", TASK_TITLE_MAX, true)!, purpose, because, review: input.review as "required" | "none" | undefined, paths: input.paths ?? [], etaAt, checkBackAt }, advice)
     : takeExisting(ctx, binding, credential, { task: String(input.task), purpose, because, review: input.review, paths: input.paths }, advice);
 }
 
@@ -2273,7 +2323,7 @@ async function takeNew(
   ctx: NoteVerbContext,
   binding: NoteBinding,
   credential: Credential,
-  options: { title: string; purpose: string | null; because: string | null; review?: "required" | "none"; paths: string[] },
+  options: { title: string; purpose: string | null; because: string | null; review?: "required" | "none"; paths: string[]; etaAt?: string; checkBackAt?: string },
   advice: string[],
 ): Promise<Record<string, unknown>> {
   const workspaceId = binding.handle.workspace.id;
@@ -2282,8 +2332,22 @@ async function takeNew(
   const policy = options.review ? (options.review === "required" ? "accepted" as const : "reported" as const)
     : paths.length > 0 ? "accepted" as const : "reported" as const;
   if (options.because) advice.push("because is for recovering a lapsed lease; a new task needs none, so it was not used.");
-  const keyInput = { title: options.title, paths, purpose: options.purpose, review: options.review ?? null };
-  const retryInput = { title: options.title, ...(options.paths.length ? { paths: options.paths } : {}), ...(options.purpose ? { purpose: options.purpose } : {}), ...(options.review ? { review: options.review } : {}) };
+  const keyInput = {
+    title: options.title,
+    paths,
+    purpose: options.purpose,
+    review: options.review ?? null,
+    ...(options.etaAt !== undefined ? { eta_at: options.etaAt } : {}),
+    ...(options.checkBackAt !== undefined ? { check_back_at: options.checkBackAt } : {}),
+  };
+  const retryInput = {
+    title: options.title,
+    ...(options.paths.length ? { paths: options.paths } : {}),
+    ...(options.purpose ? { purpose: options.purpose } : {}),
+    ...(options.review ? { review: options.review } : {}),
+    ...(options.etaAt !== undefined ? { eta_at: options.etaAt } : {}),
+    ...(options.checkBackAt !== undefined ? { check_back_at: options.checkBackAt } : {}),
+  };
   const { plan, created, claimed, replayed } = await underPlan(ctx, credential, {
     tool: "collab_take",
     input: keyInput,
@@ -2304,6 +2368,8 @@ async function takeNew(
         path_scopes: paths,
         work_mode: workMode,
         completion_policy: policy,
+        ...(options.etaAt !== undefined ? { eta_at: options.etaAt } : {}),
+        ...(options.checkBackAt !== undefined ? { check_back_at: options.checkBackAt } : {}),
       }));
     });
     const recorded: RecordedStep[] = [{ step: 1, what: `task ${created.value.id}, created and open`, id: created.value.id }];

@@ -29351,6 +29351,94 @@ function proveJournalConsistency(epochId, eventHashes, fromSize, toSize = eventH
   };
 }
 
+// src/time.ts
+var ZONED_INSTANT = /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(?:([Zz])|([+-])(\d{2}):(\d{2}))$/;
+function daysInMonth(year, month) {
+  if (month === 2)
+    return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28;
+  return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31;
+}
+function parseZonedInstant(value, options = {}) {
+  if (typeof value !== "string")
+    return null;
+  const match = ZONED_INSTANT.exec(value);
+  if (!match)
+    return null;
+  if (match[6] === undefined && options.seconds !== "optional")
+    return null;
+  if (match[6] === undefined && match[7] !== undefined)
+    return null;
+  const [year, month, day, hour, minute] = match.slice(1, 6).map(Number);
+  const second = Number(match[6] ?? 0);
+  const zulu = match[8] !== undefined;
+  const offsetHours = zulu ? 0 : Number(match[10]);
+  const offsetMinutes = zulu ? 0 : Number(match[11]);
+  if (year < 1 || month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month) || hour > 23 || minute > 59 || second > 59 || offsetHours > 23 || offsetMinutes > 59) {
+    return null;
+  }
+  const millis = Number((match[7] ?? "").slice(0, 3).padEnd(3, "0"));
+  const local = new Date(0);
+  local.setUTCFullYear(year, month - 1, day);
+  local.setUTCHours(hour, minute, second, millis);
+  const sign = match[9] === "-" ? -1 : 1;
+  const instant = local.getTime() - sign * (offsetHours * 60 + offsetMinutes) * 60000;
+  const utcYear = new Date(instant).getUTCFullYear();
+  return Number.isFinite(instant) && utcYear >= 1 && utcYear <= 9999 ? instant : null;
+}
+function minutesSince(at, observedAt) {
+  const age = Date.parse(observedAt) - Date.parse(at);
+  return Number.isFinite(age) ? Math.max(0, Math.floor(age / 60000)) : null;
+}
+function durationSince(ms) {
+  if (!Number.isFinite(ms) || ms < 0)
+    return "?";
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor(s % 86400 / 3600);
+  const m = Math.floor(s % 3600 / 60);
+  if (d > 0)
+    return `${d}d ${h}h`;
+  if (h > 0)
+    return `${h}h ${m}m`;
+  if (m > 0)
+    return `${m}m ${s % 60}s`;
+  return `${s}s`;
+}
+function durationUntil(at, observedAt) {
+  const left = Date.parse(at) - Date.parse(observedAt);
+  if (!Number.isFinite(left) || left <= 0)
+    return "closed";
+  const minutes = Math.ceil(left / 60000);
+  const hours = Math.floor(minutes / 60);
+  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
+}
+var ETA_MIN_GRACE_MS = 10 * 60 * 1000;
+function parseCanonicalInstant(value) {
+  const ms = parseZonedInstant(value);
+  return ms === null ? null : new Date(ms).toISOString();
+}
+function computeEtaGraceMs(setAtMs, etaAtMs) {
+  const estimateMs = Number.isFinite(setAtMs) && Number.isFinite(etaAtMs) ? Math.max(0, etaAtMs - setAtMs) : 0;
+  return Math.max(ETA_MIN_GRACE_MS, Math.floor(estimateMs / 2));
+}
+function computeEtaOverdue(input) {
+  if (!input.eta_at)
+    return { overdue: false, overdue_at: null };
+  const etaMs = parseZonedInstant(input.eta_at) ?? Date.parse(input.eta_at);
+  const setMs = parseZonedInstant(input.set_at) ?? Date.parse(input.set_at);
+  const observedMs = parseZonedInstant(input.observed_at) ?? Date.parse(input.observed_at);
+  if (!Number.isFinite(etaMs))
+    return { overdue: false, overdue_at: null };
+  const graceMs = computeEtaGraceMs(setMs, etaMs);
+  const overdueAtMs = etaMs + graceMs;
+  const overdueAt = new Date(overdueAtMs).toISOString();
+  const active = input.active ?? true;
+  return {
+    overdue: active && Number.isFinite(observedMs) && observedMs >= overdueAtMs,
+    overdue_at: overdueAt
+  };
+}
+
 // src/passkey.ts
 import { createHash as createHash3, createPublicKey, verify } from "crypto";
 var FLAG_USER_PRESENT = 1;
@@ -31976,6 +32064,8 @@ class CollabStoreCore {
     if (sessionOnly.work_mode !== undefined || sessionOnly.completion_policy !== undefined || sessionOnly.expected_base_sha !== undefined) {
       throw new CollabError("session_required_for_v2_task_options", "work_mode, completion_policy, and expected_base_sha require createTaskForSession");
     }
+    const etaAt = input.eta_at === undefined ? undefined : validateEtaInstant(input.eta_at, "eta_at");
+    const checkBackAt = input.check_back_at === undefined ? undefined : validateEtaInstant(input.check_back_at, "check_back_at");
     const normalized = {
       ...normalizeMutation(input),
       workspace_id: input.workspace_id,
@@ -31983,7 +32073,9 @@ class CollabStoreCore {
       title: cleanText(input.title, "title", 300),
       description: optionalText(input.description, "description", MAX_TEXT),
       dependencies: normalizeDependencies(input.dependencies ?? []),
-      path_scopes: normalizePathScopes(input.path_scopes ?? [])
+      path_scopes: normalizePathScopes(input.path_scopes ?? []),
+      ...etaAt !== undefined ? { eta_at: etaAt } : {},
+      ...checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}
     };
     return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.create", normalized, () => {
       this.requireWorkspace(input.workspace_id);
@@ -32009,12 +32101,16 @@ class CollabStoreCore {
         description: normalized.description,
         dependencies: normalized.dependencies,
         path_scopes: normalized.path_scopes,
+        ...etaAt !== undefined ? { eta_at: etaAt } : {},
+        ...checkBackAt !== undefined ? { check_back_at: checkBackAt } : {},
         version: 1
       });
       return this.requireTask(input.workspace_id, id);
     });
   }
   createTaskForSession(input) {
+    const etaAt = input.eta_at === undefined ? undefined : validateEtaInstant(input.eta_at, "eta_at");
+    const checkBackAt = input.check_back_at === undefined ? undefined : validateEtaInstant(input.check_back_at, "check_back_at");
     const normalized = {
       idempotency_key: validateIdempotencyKey(input.idempotency_key),
       id: input.id ? validateId(input.id, "task_id") : undefined,
@@ -32024,7 +32120,9 @@ class CollabStoreCore {
       path_scopes: normalizePathScopes(input.path_scopes ?? []),
       work_mode: input.work_mode ?? "edit",
       completion_policy: input.completion_policy,
-      expected_base_sha: input.expected_base_sha ? validateGitObjectId(input.expected_base_sha) : null
+      expected_base_sha: input.expected_base_sha ? validateGitObjectId(input.expected_base_sha) : null,
+      ...etaAt !== undefined ? { eta_at: etaAt } : {},
+      ...checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}
     };
     if (!["coordination", "read_only", "edit"].includes(normalized.work_mode)) {
       throw new CollabError("invalid_work_mode", "Unsupported task work mode");
@@ -32078,6 +32176,8 @@ class CollabStoreCore {
         work_mode: normalized.work_mode,
         completion_policy: completionPolicy,
         expected_base_sha: normalized.expected_base_sha,
+        ...etaAt !== undefined ? { eta_at: etaAt } : {},
+        ...checkBackAt !== undefined ? { check_back_at: checkBackAt } : {},
         version: 1
       }, session.id);
       return this.requireTask(session.workspace_id, id);
@@ -32257,7 +32357,14 @@ class CollabStoreCore {
   progressTaskForSession(input) {
     const normalized = normalizeSessionLeaseInput(input);
     const message = cleanText(input.message, "message", 2000);
-    return this.mutateAsSession(input, normalized.idempotency_key, "task.progress.v2", { ...normalized.request, message }, (session) => {
+    const etaAt = input.eta_at === undefined ? undefined : validateNullableEtaInstant(input.eta_at, "eta_at");
+    const checkBackAt = input.check_back_at === undefined ? undefined : validateNullableEtaInstant(input.check_back_at, "check_back_at");
+    return this.mutateAsSession(input, normalized.idempotency_key, "task.progress.v2", {
+      ...normalized.request,
+      message,
+      ...etaAt !== undefined ? { eta_at: etaAt } : {},
+      ...checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}
+    }, (session) => {
       const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
       this.requireVersion(row, normalized.expected_version);
       this.requireActiveSessionLease(row, session, normalized.lease_id);
@@ -32269,6 +32376,8 @@ class CollabStoreCore {
         `).run(message, version2, now, row.workspace_id, row.id);
       this.appendEvent(row.workspace_id, "task.progressed", row.id, session.actor, {
         message,
+        ...etaAt !== undefined ? { eta_at: etaAt } : {},
+        ...checkBackAt !== undefined ? { check_back_at: checkBackAt } : {},
         version: version2
       }, session.id);
       return this.requireTask(row.workspace_id, row.id);
@@ -32549,7 +32658,14 @@ class CollabStoreCore {
     });
   }
   progressTask(input) {
-    const normalized = { ...normalizeLeaseInput(input), message: cleanText(input.message, "message", 2000) };
+    const etaAt = input.eta_at === undefined ? undefined : validateNullableEtaInstant(input.eta_at, "eta_at");
+    const checkBackAt = input.check_back_at === undefined ? undefined : validateNullableEtaInstant(input.check_back_at, "check_back_at");
+    const normalized = {
+      ...normalizeLeaseInput(input),
+      message: cleanText(input.message, "message", 2000),
+      ...etaAt !== undefined ? { eta_at: etaAt } : {},
+      ...checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}
+    };
     return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.progress", normalized, () => {
       const row = this.requireTaskRow(input.workspace_id, normalized.task_id);
       this.requireVersion(row, normalized.expected_version);
@@ -32562,6 +32678,8 @@ class CollabStoreCore {
       `).run(normalized.message, version2, now, input.workspace_id, normalized.task_id);
       this.appendEvent(input.workspace_id, "task.progressed", normalized.task_id, normalized.actor, {
         message: normalized.message,
+        ...etaAt !== undefined ? { eta_at: etaAt } : {},
+        ...checkBackAt !== undefined ? { check_back_at: checkBackAt } : {},
         version: version2
       });
       return this.requireTask(input.workspace_id, normalized.task_id);
@@ -32701,6 +32819,8 @@ class CollabStoreCore {
     const expectedHead = input.expected_head_sequence === undefined ? undefined : validateExpectedHeadSequence(input.expected_head_sequence);
     const toSessionId = input.to_session_id ? validateId(input.to_session_id, "to_session_id") : null;
     const alsoToSessionIds = normalizeAlsoToSessionIds(input.also_to_session_ids, toSessionId);
+    const etaAt = input.eta_at === undefined ? undefined : validateEtaInstant(input.eta_at, "eta_at");
+    const checkBackAt = input.check_back_at === undefined ? undefined : validateEtaInstant(input.check_back_at, "check_back_at");
     const normalized = {
       task_id: input.task_id ? validateId(input.task_id, "task_id") : null,
       to_session_id: toSessionId,
@@ -32715,7 +32835,9 @@ class CollabStoreCore {
       authority_scope: optionalText(input.authority_scope, "authority_scope", 1000),
       authority_basis: optionalText(input.authority_basis, "authority_basis", 2000),
       ...input.to_person === true ? { to_person: true } : {},
-      ...alsoToSessionIds.length > 0 ? { also_to_session_ids: alsoToSessionIds } : {}
+      ...alsoToSessionIds.length > 0 ? { also_to_session_ids: alsoToSessionIds } : {},
+      ...etaAt !== undefined ? { eta_at: etaAt } : {},
+      ...checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}
     };
     return this.mutateAsSession(input, input.idempotency_key, "report.append.v2", expectedHead === undefined ? normalized : { ...normalized, expected_head_sequence: expectedHead }, (session) => {
       this.validateReportInput(session, normalized);
@@ -33196,10 +33318,10 @@ class CollabStoreCore {
         if (status && settled.has(status.ai.position))
           awaiting.push(status);
       }
-      const addressed = this.db.query(`
-        SELECT r.* FROM person_addressed_reports p JOIN reports r ON r.id = p.report_id
-        WHERE p.workspace_id = ? ORDER BY r.event_sequence DESC LIMIT 50
-      `).all(workspaceId).map(reportFromRow);
+      const addressed = this.hydrateReports(workspaceId, this.db.query(`
+          SELECT r.* FROM person_addressed_reports p JOIN reports r ON r.id = p.report_id
+          WHERE p.workspace_id = ? ORDER BY r.event_sequence DESC LIMIT 50
+        `).all(workspaceId));
       return { workspace_id: workspaceId, awaiting_person: awaiting, addressed_reports: addressed, unreadable };
     });
     return transaction.deferred();
@@ -33315,7 +33437,7 @@ class CollabStoreCore {
   setAsideFacts(terms, challengeId, reason) {
     const status = this.proposalStatusInternal(terms.workspace_id, terms.report_id);
     const row = this.db.query(`SELECT * FROM reports WHERE id = ?`).get(challengeId);
-    const challenge = row ? reportFromRow(row) : null;
+    const challenge = row ? this.hydrateReport(row) : null;
     const presence = this.challengerPresence(terms.workspace_id, challenge?.from_session_id ?? null);
     this.refuseUnrecordableSetAside(status, challenge, presence);
     return {
@@ -33656,7 +33778,7 @@ class CollabStoreCore {
       ORDER BY event_sequence
       LIMIT ?
     `).all(workspaceId, after, taskId, taskId, toSessionId, toSessionId, limit);
-    return rows.map(reportFromRow);
+    return this.hydrateReports(workspaceId, rows);
   }
   reviewTaskForSession(input) {
     const taskId = validateId(input.task_id, "task_id");
@@ -34046,7 +34168,7 @@ class CollabStoreCore {
           task: this.requireTask(workspaceId, row.task_id)
         })),
         recovery_required: recoveryRequiredFirst(tasks, () => false),
-        reports: reportRows.map(reportFromRow),
+        reports: this.hydrateReports(workspaceId, reportRows),
         events,
         projection_scope: "snapshot_head",
         reports_scope: "event_page"
@@ -34139,7 +34261,7 @@ class CollabStoreCore {
           task: this.requireTask(current.workspace_id, handoff.task_id)
         })),
         recovery_required: recoveryRequiredFirst(tasks, (task) => task.assignee_session_id === current.id),
-        reports: reportRows.map(reportFromRow),
+        reports: this.hydrateReports(current.workspace_id, reportRows),
         events,
         projection_scope: "snapshot_head",
         reports_scope: "event_page",
@@ -35204,6 +35326,8 @@ class CollabStoreCore {
       ...input.about_proposal_id ? { about_proposal_id: input.about_proposal_id } : {},
       ...alsoTo ? { also_to_session_ids: alsoTo } : {},
       ...input.note ? { note: input.note } : {},
+      ...input.eta_at ? { eta_at: input.eta_at } : {},
+      ...input.check_back_at ? { check_back_at: input.check_back_at } : {},
       task_id: input.task_id,
       to_session_id: input.to_session_id,
       kind: input.kind,
@@ -35235,7 +35359,28 @@ class CollabStoreCore {
     const row = this.db.query(`SELECT * FROM reports WHERE id = ?`).get(id);
     if (!row)
       throw new CollabError("report_not_found", `Report '${id}' was not found`);
-    return reportFromRow(row);
+    return this.hydrateReport(row);
+  }
+  hydrateReport(row, observedAt = this.timestamp()) {
+    const eventRow = this.db.query(`
+      SELECT payload_json FROM events WHERE workspace_id = ? AND sequence = ?
+    `).get(row.workspace_id, row.event_sequence);
+    return reportFromRow(row, extractReportTimingMeta(eventRow?.payload_json), observedAt);
+  }
+  hydrateReports(workspaceId, rows, observedAt = this.timestamp()) {
+    if (rows.length === 0)
+      return [];
+    const sequences = rows.map((row) => row.event_sequence);
+    const placeholders = sequences.map(() => "?").join(", ");
+    const eventRows = this.db.query(`
+      SELECT sequence, payload_json FROM events
+      WHERE workspace_id = ? AND sequence IN (${placeholders})
+    `).all(workspaceId, ...sequences);
+    const bySequence = new Map;
+    for (const eventRow of eventRows) {
+      bySequence.set(eventRow.sequence, extractReportTimingMeta(eventRow.payload_json));
+    }
+    return rows.map((row) => reportFromRow(row, bySequence.get(row.event_sequence), observedAt));
   }
   requireReview(id) {
     const row = this.db.query(`SELECT * FROM task_reviews WHERE id = ?`).get(id);
@@ -35524,7 +35669,48 @@ class CollabStoreCore {
     const holder = priorHolder ?? this.leaseHolderRow(row.assignee_session_id);
     return !holder || !leaseHolderPresent(holder, observedAt);
   }
+  taskEtaState(row, observedAt) {
+    const events = this.db.query(`
+      SELECT occurred_at, payload_json FROM events
+      WHERE workspace_id = ? AND entity_id = ? AND type IN ('task.created', 'task.progressed')
+      ORDER BY sequence ASC
+    `).all(row.workspace_id, row.id);
+    let etaAt = null;
+    let etaSetAt = row.created_at;
+    let checkBackAt = null;
+    for (const event of events) {
+      let payload;
+      try {
+        payload = JSON.parse(event.payload_json);
+      } catch {
+        continue;
+      }
+      if (Object.hasOwn(payload, "eta_at")) {
+        if (typeof payload.eta_at === "string") {
+          etaAt = payload.eta_at;
+          etaSetAt = event.occurred_at;
+        } else if (payload.eta_at === null) {
+          etaAt = null;
+        }
+      }
+      if (Object.hasOwn(payload, "check_back_at")) {
+        if (typeof payload.check_back_at === "string") {
+          checkBackAt = payload.check_back_at;
+        } else if (payload.check_back_at === null) {
+          checkBackAt = null;
+        }
+      }
+    }
+    const { overdue, overdue_at } = computeEtaOverdue({
+      set_at: etaSetAt,
+      eta_at: etaAt,
+      observed_at: observedAt,
+      active: row.status !== "completed"
+    });
+    return { eta_at: etaAt, check_back_at: checkBackAt, overdue, overdue_at };
+  }
   taskFromRow(row) {
+    const observedAt = this.timestamp();
     let effectiveStatus = row.status;
     if (this.isExpired(row)) {
       effectiveStatus = row.assignee_session_id ? "recovery_required" : "lease_expired";
@@ -35535,6 +35721,7 @@ class CollabStoreCore {
     }
     const baseCheckpoint = parseCheckpoint(row.base_checkpoint_json);
     const resultCheckpoint = parseCheckpoint(row.result_checkpoint_json);
+    const eta = this.taskEtaState(row, observedAt);
     return {
       id: row.id,
       workspace_id: row.workspace_id,
@@ -35555,7 +35742,7 @@ class CollabStoreCore {
       completion_report_id: row.completion_report_id,
       assignee: row.assignee,
       assignee_session_id: row.assignee_session_id,
-      assignee_liveness: this.assigneeLiveness(row.assignee_session_id),
+      assignee_liveness: this.assigneeLiveness(row.assignee_session_id, observedAt),
       claim_worktree_id: row.claim_worktree_id,
       lease_id: row.lease_id,
       lease_expires_at: row.lease_expires_at,
@@ -35568,6 +35755,8 @@ class CollabStoreCore {
       accepted_by_session_id: row.accepted_by_session_id,
       accepted_at: row.accepted_at,
       review_requested_session_id: this.reviewRequestedSessionId(row),
+      ...eta.eta_at !== null ? { eta_at: eta.eta_at, overdue: eta.overdue, overdue_at: eta.overdue_at } : {},
+      ...eta.check_back_at !== null ? { check_back_at: eta.check_back_at } : {},
       version: row.version,
       created_at: row.created_at,
       updated_at: row.updated_at,
@@ -35939,6 +36128,18 @@ function validateExpectedHeadSequence(value) {
     throw new CollabError("invalid_expected_head_sequence", "expected_head_sequence must be a non-negative integer");
   }
   return value;
+}
+function validateEtaInstant(value, field) {
+  const canonical = parseCanonicalInstant(typeof value === "string" ? value.trim() : value);
+  if (canonical === null) {
+    throw new CollabError(field === "eta_at" ? "invalid_eta_at" : "invalid_check_back_at", `${field} must be an RFC 3339 timestamp with seconds and a timezone (for example 2026-11-27T15:45:00Z)`);
+  }
+  return canonical;
+}
+function validateNullableEtaInstant(value, field) {
+  if (value === null)
+    return null;
+  return validateEtaInstant(value, field);
 }
 function validateRestMode(value) {
   if (value !== "resting" && value !== "ready") {
@@ -36397,7 +36598,26 @@ function checkpointFromWorktreeRow(row, capturedAt) {
     captured_at: capturedAt
   };
 }
-function reportFromRow(row) {
+function extractReportTimingMeta(payloadJson) {
+  if (!payloadJson)
+    return { eta_at: null, check_back_at: null };
+  try {
+    const payload = JSON.parse(payloadJson);
+    return {
+      eta_at: typeof payload.eta_at === "string" ? payload.eta_at : null,
+      check_back_at: typeof payload.check_back_at === "string" ? payload.check_back_at : null
+    };
+  } catch {
+    return { eta_at: null, check_back_at: null };
+  }
+}
+function reportFromRow(row, meta3 = { eta_at: null, check_back_at: null }, observedAt = row.created_at) {
+  const { overdue, overdue_at } = computeEtaOverdue({
+    set_at: row.created_at,
+    eta_at: meta3.eta_at,
+    observed_at: observedAt,
+    active: true
+  });
   return {
     id: row.id,
     workspace_id: row.workspace_id,
@@ -36415,6 +36635,8 @@ function reportFromRow(row) {
     target_report_id: row.target_report_id,
     authority_scope: row.authority_scope,
     authority_basis: row.authority_basis,
+    ...meta3.eta_at !== null ? { eta_at: meta3.eta_at, overdue, overdue_at } : {},
+    ...meta3.check_back_at !== null ? { check_back_at: meta3.check_back_at } : {},
     created_at: row.created_at,
     event_sequence: row.event_sequence
   };
@@ -38076,70 +38298,6 @@ import { realpathSync as realpathSync2 } from "fs";
 
 // src/ballot.ts
 import { createHash as createHash6 } from "crypto";
-
-// src/time.ts
-var ZONED_INSTANT = /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(?:([Zz])|([+-])(\d{2}):(\d{2}))$/;
-function daysInMonth(year, month) {
-  if (month === 2)
-    return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28;
-  return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31;
-}
-function parseZonedInstant(value, options = {}) {
-  if (typeof value !== "string")
-    return null;
-  const match = ZONED_INSTANT.exec(value);
-  if (!match)
-    return null;
-  if (match[6] === undefined && options.seconds !== "optional")
-    return null;
-  if (match[6] === undefined && match[7] !== undefined)
-    return null;
-  const [year, month, day, hour, minute] = match.slice(1, 6).map(Number);
-  const second = Number(match[6] ?? 0);
-  const zulu = match[8] !== undefined;
-  const offsetHours = zulu ? 0 : Number(match[10]);
-  const offsetMinutes = zulu ? 0 : Number(match[11]);
-  if (year < 1 || month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month) || hour > 23 || minute > 59 || second > 59 || offsetHours > 23 || offsetMinutes > 59) {
-    return null;
-  }
-  const millis = Number((match[7] ?? "").slice(0, 3).padEnd(3, "0"));
-  const local = new Date(0);
-  local.setUTCFullYear(year, month - 1, day);
-  local.setUTCHours(hour, minute, second, millis);
-  const sign = match[9] === "-" ? -1 : 1;
-  const instant = local.getTime() - sign * (offsetHours * 60 + offsetMinutes) * 60000;
-  const utcYear = new Date(instant).getUTCFullYear();
-  return Number.isFinite(instant) && utcYear >= 1 && utcYear <= 9999 ? instant : null;
-}
-function minutesSince(at, observedAt) {
-  const age = Date.parse(observedAt) - Date.parse(at);
-  return Number.isFinite(age) ? Math.max(0, Math.floor(age / 60000)) : null;
-}
-function durationSince(ms) {
-  if (!Number.isFinite(ms) || ms < 0)
-    return "?";
-  const s = Math.floor(ms / 1000);
-  const d = Math.floor(s / 86400);
-  const h = Math.floor(s % 86400 / 3600);
-  const m = Math.floor(s % 3600 / 60);
-  if (d > 0)
-    return `${d}d ${h}h`;
-  if (h > 0)
-    return `${h}h ${m}m`;
-  if (m > 0)
-    return `${m}m ${s % 60}s`;
-  return `${s}s`;
-}
-function durationUntil(at, observedAt) {
-  const left = Date.parse(at) - Date.parse(observedAt);
-  if (!Number.isFinite(left) || left <= 0)
-    return "closed";
-  const minutes = Math.ceil(left / 60000);
-  const hours = Math.floor(minutes / 60);
-  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
-}
-
-// src/ballot.ts
 var BALLOT_COMMITMENT_PROTOCOL = "agenttool.collab-ballot/1";
 var BALLOT_METHOD = "approval/1";
 var MIN_BALLOT_OPTIONS = 2;
@@ -39291,6 +39449,8 @@ class CollabStore extends CollabStoreCore {
         posted.push(this.appendReportInternal(session, {
           ...normalized,
           ...report.about_proposal_id ? { about_proposal_id: report.about_proposal_id } : {},
+          ...report.eta_at ? { eta_at: report.eta_at } : {},
+          ...report.check_back_at ? { check_back_at: report.check_back_at } : {},
           note: NOTE_FORMAT
         }));
       }
@@ -40096,7 +40256,7 @@ class CollabStore extends CollabStoreCore {
     let report = null;
     if (event.type === "report.posted" || event.type.startsWith("proposal.")) {
       const reportRow = this.db.query(`SELECT * FROM reports WHERE id = ?`).get(event.entity_id);
-      report = reportRow ? reportFromRow(reportRow) : null;
+      report = reportRow ? this.hydrateReport(reportRow) : null;
     }
     const taskId = event.type.startsWith("task.") ? event.entity_id : event.type.startsWith("handoff.") ? typeof payload.task_id === "string" ? payload.task_id : typeof payload.handoff?.task_id === "string" ? payload.handoff.task_id : null : report?.task_id ?? null;
     const taskRow = taskId ? this.readTaskRow(session.workspace_id, taskId) : null;
@@ -40939,6 +41099,8 @@ class CollabStore extends CollabStoreCore {
   }
   appendDecisionForSession(input) {
     const expectedHead = input.expected_head_sequence === undefined ? undefined : validateExpectedHeadSequence(input.expected_head_sequence);
+    const etaAt = input.eta_at === undefined ? undefined : validateEtaInstant(input.eta_at, "eta_at");
+    const checkBackAt = input.check_back_at === undefined ? undefined : validateEtaInstant(input.check_back_at, "check_back_at");
     if (!NOTE_DECISION_OUTCOMES.includes(input.outcome)) {
       throw new CollabError("invalid_outcome", `outcome is ${NOTE_DECISION_OUTCOMES.join(", ")}`);
     }
@@ -40956,7 +41118,9 @@ class CollabStore extends CollabStoreCore {
       to_session_id: input.to_session_id ? validateId(input.to_session_id, "to_session_id") : null,
       to_person: input.to_person === true,
       evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
-      cite
+      cite,
+      ...etaAt !== undefined ? { eta_at: etaAt } : {},
+      ...checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}
     };
     const request = expectedHead === undefined ? normalized : { ...normalized, expected_head_sequence: expectedHead };
     return this.mutateAsSession(input, input.idempotency_key, "notes.decide.v1", request, (session) => {
@@ -40988,6 +41152,8 @@ class CollabStore extends CollabStoreCore {
       const posted = this.appendReportInternal(session, {
         ...report,
         ...proposal ? { about_proposal_id: proposal.id } : {},
+        ...etaAt !== undefined ? { eta_at: etaAt } : {},
+        ...checkBackAt !== undefined ? { check_back_at: checkBackAt } : {},
         note: NOTE_FORMAT
       });
       return {
@@ -41099,10 +41265,10 @@ class CollabStore extends CollabStoreCore {
       live_voices: new Set(sessions.filter((view) => view.liveness === "live").map((view) => view.voice_id)),
       last_seen: (voice) => sessions.filter((view) => view.voice_id === voice).map((view) => view.last_seen_at).sort().at(-1) ?? null
     } : null;
-    const stances = this.db.query(`
-      SELECT * FROM reports WHERE workspace_id = ? AND target_report_id = ? AND relation IN ('supports', 'challenges')
-      ORDER BY event_sequence
-    `).all(workspaceId, proposalId).map(reportFromRow).map((report) => {
+    const stances = this.hydrateReports(workspaceId, this.db.query(`
+        SELECT * FROM reports WHERE workspace_id = ? AND target_report_id = ? AND relation IN ('supports', 'challenges')
+        ORDER BY event_sequence
+      `).all(workspaceId, proposalId)).map((report) => {
       const session = report.from_session_id ? byId.get(report.from_session_id) ?? null : null;
       const view = challengeViews.get(report.id);
       return this.noteStanceView(workspaceId, report, session, author, context, {
@@ -41398,6 +41564,8 @@ function normalizeNoteReport(report, index) {
   if (!Array.isArray(earlier) || earlier.some((at) => !Number.isInteger(at) || at < 0 || at >= index)) {
     throw new CollabError("invalid_note_reports", "cite_earlier names reports this call posted before this one");
   }
+  const etaAt = report.eta_at === undefined ? undefined : validateEtaInstant(report.eta_at, "eta_at");
+  const checkBackAt = report.check_back_at === undefined ? undefined : validateEtaInstant(report.check_back_at, "check_back_at");
   return {
     kind: report.kind,
     relation: report.relation,
@@ -41409,7 +41577,9 @@ function normalizeNoteReport(report, index) {
     about_proposal_id: report.about_proposal_id ? validateId(report.about_proposal_id, "about_proposal_id") : null,
     evidence_refs: normalizeEvidenceRefs(report.evidence_refs ?? []),
     cite_event: report.cite_event === true,
-    cite_earlier: [...earlier]
+    cite_earlier: [...earlier],
+    ...etaAt !== undefined ? { eta_at: etaAt } : {},
+    ...checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}
   };
 }
 var NOTE_DECISION_OUTCOMES = ["proceed", "do_not_proceed", "no_decision"];
@@ -42651,6 +42821,8 @@ function formatEntry(entry, byId, me, recheck) {
       kind: report.kind,
       ...report.confidence !== "unknown" ? { confidence: report.confidence } : {},
       ...limits ? { limits } : {},
+      ...report.eta_at !== undefined ? { eta_at: report.eta_at, overdue: report.overdue, overdue_at: report.overdue_at } : {},
+      ...report.check_back_at !== undefined ? { check_back_at: report.check_back_at } : {},
       ...flags
     };
   }
@@ -44426,6 +44598,19 @@ function parseNoteExpectedHeadSequence(value) {
   }
   return value;
 }
+function parseNoteEtaInstant(value, field) {
+  if (value === undefined)
+    return;
+  const canonical = parseCanonicalInstant(typeof value === "string" ? value.trim() : value);
+  if (canonical === null) {
+    throw new CollabError(field === "eta_at" ? "invalid_eta_at" : "invalid_check_back_at", `${field} must be an RFC 3339 timestamp with seconds and a timezone (for example 2026-11-27T15:45:00Z)`, {
+      remedy: {
+        say: `Pass ${field} as an RFC 3339 timestamp with seconds and a timezone such as 2026-11-27T15:45:00Z, or omit it.`
+      }
+    });
+  }
+  return canonical;
+}
 function headMovedForNote(ctx, error51) {
   if (!(error51 instanceof CollabError) || error51.code !== "head_moved")
     return error51;
@@ -44458,6 +44643,8 @@ async function noteAct(ctx, input) {
     throw new CollabError("invalid_dry_run", "dry_run is true or false");
   }
   const expectedHead = parseNoteExpectedHeadSequence(input.expected_head_sequence);
+  const etaAt = parseNoteEtaInstant(input.eta_at, "eta_at");
+  const checkBackAt = parseNoteEtaInstant(input.check_back_at, "check_back_at");
   if (input.dry_run === true && expectedHead !== undefined) {
     advice.push("expected_head_sequence is checked when the note is written, not during dry_run.");
   }
@@ -44494,10 +44681,22 @@ async function noteAct(ctx, input) {
   const keyInput = {
     act,
     fields: { ...fields, evidence: evidence.key_lines, to: keyAddressee(ctx, workspaceId, fields.to) },
-    ...act === "decide" ? { outcome } : {}
+    ...act === "decide" ? { outcome } : {},
+    ...etaAt !== undefined ? { eta_at: etaAt } : {},
+    ...checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}
+  };
+  const withTiming = (reports) => {
+    if (etaAt === undefined && checkBackAt === undefined)
+      return reports;
+    return reports.map((report, index) => index === 0 ? {
+      ...report,
+      ...etaAt !== undefined ? { eta_at: etaAt } : {},
+      ...checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}
+    } : report);
   };
   const plan = () => {
-    const planned = planNote(ctx, input, { act, fields, target, me, workspaceId, replacedId, evidence });
+    const rawPlanned = planNote(ctx, input, { act, fields, target, me, workspaceId, replacedId, evidence });
+    const planned = { ...rawPlanned, reports: withTiming(rawPlanned.reports) };
     refuseNoteProblems(planned.fields);
     return { planned, note: renderNote(planned.fields) };
   };
@@ -44512,7 +44711,9 @@ async function noteAct(ctx, input) {
       read_as: read.read_as,
       input,
       outcome,
-      expectedHead
+      expectedHead,
+      etaAt,
+      checkBackAt
     });
     return input.dry_run === true ? decided : withCompared(decided);
   }
@@ -44648,7 +44849,9 @@ function dryRunResult(options) {
         target: report.target_report_id ?? null,
         task: report.task_id ?? null,
         to: report.to_session_id ?? (report.to_person ? "person" : null),
-        about_proposal: report.about_proposal_id ?? null
+        about_proposal: report.about_proposal_id ?? null,
+        ...report.eta_at ? { eta_at: report.eta_at } : {},
+        ...report.check_back_at ? { check_back_at: report.check_back_at } : {}
       })),
       cites: evidence.items.length > 0 ? 1 : 0
     },
@@ -45064,6 +45267,8 @@ function noteResult(ctx, options) {
     recorded_as: planned.recorded_as,
     ...options.read_as ? { read_as: options.read_as } : {},
     to,
+    ...main.eta_at !== undefined ? { eta_at: main.eta_at, overdue: main.overdue, overdue_at: main.overdue_at } : {},
+    ...main.check_back_at !== undefined ? { check_back_at: main.check_back_at } : {},
     evidence: evidenceSummary(options.evidence),
     ...planned.extra
   };
@@ -45378,7 +45583,7 @@ function planDecide(ctx, input, context) {
   };
 }
 async function decideNote(ctx, binding, credential, options) {
-  const { target, evidence, advice, input, outcome, expectedHead } = options;
+  const { target, evidence, advice, input, outcome, expectedHead, etaAt, checkBackAt } = options;
   const workspaceId = binding.handle.workspace.id;
   const me = credential.session_id;
   const planContext = { fields: options.fields, target, me, workspaceId, evidence, outcome };
@@ -45446,7 +45651,9 @@ async function decideNote(ctx, binding, credential, options) {
         to_person: fresh2.addressee.to_person,
         evidence_refs: fresh2.evidence_refs,
         receipt_plan: plan2.guard,
-        ...expectedHead === undefined ? {} : { expected_head_sequence: expectedHead }
+        ...expectedHead === undefined ? {} : { expected_head_sequence: expectedHead },
+        ...etaAt === undefined ? {} : { eta_at: etaAt },
+        ...checkBackAt === undefined ? {} : { check_back_at: checkBackAt }
       });
     });
     return { plan: plan2, receipt: step.value, fresh: step.replayed ? null : fresh2 };
@@ -45541,6 +45748,8 @@ async function takeVerb(ctx, input) {
   }
   const purpose = oneLine(input.purpose, "purpose", 200, false);
   const because = freeText(input.because, "because", RECOVERY_NOTE_MAX, false);
+  const etaAt = parseNoteEtaInstant(input.eta_at, "eta_at");
+  const checkBackAt = parseNoteEtaInstant(input.check_back_at, "check_back_at");
   if (input.review !== undefined && input.review !== "required" && input.review !== "none") {
     throw new CollabError("invalid_review", "review is required or none", {
       remedy: { say: "review is required (a distinct session must accept the work) or none (you report it done); leave it out for the default." }
@@ -45552,7 +45761,10 @@ async function takeVerb(ctx, input) {
     });
   }
   const advice = [];
-  return hasTitle ? takeNew(ctx, binding, credential, { title: oneLine(input.title, "title", TASK_TITLE_MAX, true), purpose, because, review: input.review, paths: input.paths ?? [] }, advice) : takeExisting(ctx, binding, credential, { task: String(input.task), purpose, because, review: input.review, paths: input.paths }, advice);
+  if (!hasTitle && (etaAt !== undefined || checkBackAt !== undefined)) {
+    advice.push("eta_at and check_back_at apply when creating a new task with title; to set or revise an ETA on an existing task, post a collab_note or collab_task_progress.");
+  }
+  return hasTitle ? takeNew(ctx, binding, credential, { title: oneLine(input.title, "title", TASK_TITLE_MAX, true), purpose, because, review: input.review, paths: input.paths ?? [], etaAt, checkBackAt }, advice) : takeExisting(ctx, binding, credential, { task: String(input.task), purpose, because, review: input.review, paths: input.paths }, advice);
 }
 function normalizedPaths(paths) {
   try {
@@ -45573,8 +45785,22 @@ async function takeNew(ctx, binding, credential, options, advice) {
   const policy = options.review ? options.review === "required" ? "accepted" : "reported" : paths.length > 0 ? "accepted" : "reported";
   if (options.because)
     advice.push("because is for recovering a lapsed lease; a new task needs none, so it was not used.");
-  const keyInput = { title: options.title, paths, purpose: options.purpose, review: options.review ?? null };
-  const retryInput = { title: options.title, ...options.paths.length ? { paths: options.paths } : {}, ...options.purpose ? { purpose: options.purpose } : {}, ...options.review ? { review: options.review } : {} };
+  const keyInput = {
+    title: options.title,
+    paths,
+    purpose: options.purpose,
+    review: options.review ?? null,
+    ...options.etaAt !== undefined ? { eta_at: options.etaAt } : {},
+    ...options.checkBackAt !== undefined ? { check_back_at: options.checkBackAt } : {}
+  };
+  const retryInput = {
+    title: options.title,
+    ...options.paths.length ? { paths: options.paths } : {},
+    ...options.purpose ? { purpose: options.purpose } : {},
+    ...options.review ? { review: options.review } : {},
+    ...options.etaAt !== undefined ? { eta_at: options.etaAt } : {},
+    ...options.checkBackAt !== undefined ? { check_back_at: options.checkBackAt } : {}
+  };
   const { plan, created, claimed, replayed } = await underPlan(ctx, credential, {
     tool: "collab_take",
     input: keyInput,
@@ -45595,7 +45821,9 @@ async function takeNew(ctx, binding, credential, options, advice) {
         ...options.purpose ? { description: `Purpose: ${options.purpose}` } : {},
         path_scopes: paths,
         work_mode: workMode,
-        completion_policy: policy
+        completion_policy: policy,
+        ...options.etaAt !== undefined ? { eta_at: options.etaAt } : {},
+        ...options.checkBackAt !== undefined ? { check_back_at: options.checkBackAt } : {}
       }));
     });
     const recorded = [{ step: 1, what: `task ${created2.value.id}, created and open`, id: created2.value.id }];
@@ -47480,7 +47708,9 @@ Legacy session tools: ${legacyInstructions}`
       outcome: exports_external.string().optional().describe("For decide only: proceed (the default), do_not_proceed or no_decision."),
       replaces: exports_external.string().optional().describe("With act challenge: your earlier challenge this one replaces; it is withdrawn in the same transaction."),
       dry_run: exports_external.boolean().optional().describe("Parse, check and render; write nothing."),
-      expected_head_sequence: exports_external.number().optional().describe("Optional compare-and-swap: a whole number 0 or more \u2014 the event_sequence of the last report you read " + "(for example from collab_inbox with include all; not a default inbox read_through that skipped unaddressed items). " + "If another session or the person desk posted any report after it, nothing is written and head_moved returns " + "reports_since, missed_report_ids and a ready collab_inbox call. Your own reports and non-report events do not count. " + "On write, compared_at_sequence echoes the checked value.")
+      expected_head_sequence: exports_external.number().optional().describe("Optional compare-and-swap: a whole number 0 or more \u2014 the event_sequence of the last report you read " + "(for example from collab_inbox with include all; not a default inbox read_through that skipped unaddressed items). " + "If another session or the person desk posted any report after it, nothing is written and head_moved returns " + "reports_since, missed_report_ids and a ready collab_inbox call. Your own reports and non-report events do not count. " + "On write, compared_at_sequence echoes the checked value."),
+      eta_at: exports_external.string().optional().describe("Optional time/1 \xA76 reference-clock ETA (RFC 3339 timestamp with seconds and timezone, for example 2026-11-27T15:45:00Z). " + "Reads compute overdue once observed_at reaches eta_at + max(10m, floor(estimate / 2))."),
+      check_back_at: exports_external.string().optional().describe("Optional time/1 \xA76 reference-clock instant when the waiter will check back if nothing arrives " + "(RFC 3339 timestamp with seconds and timezone, for example 2026-11-27T16:00:00Z).")
     }
   }, async (input) => noteCall(() => noteVerb(noteContext(), input), input));
   server.registerTool("collab_take", {
@@ -47493,7 +47723,9 @@ Legacy session tools: ${legacyInstructions}`
       paths: exports_external.array(exports_external.string()).optional().describe("Repository-relative paths the new task edits."),
       purpose: exports_external.string().optional().describe("Why you take it, at most 200 characters; written into a new task's description only."),
       review: exports_external.string().optional().describe("required | none: override whether a new task waits for review."),
-      because: exports_external.string().optional().describe("Why you recover a lapsed lease (at most 4,000 characters).")
+      because: exports_external.string().optional().describe("Why you recover a lapsed lease (at most 4,000 characters)."),
+      eta_at: exports_external.string().optional().describe("Optional time/1 \xA76 reference-clock ETA for a new task (RFC 3339 with seconds and timezone)."),
+      check_back_at: exports_external.string().optional().describe("Optional time/1 \xA76 check-back instant for a new task (RFC 3339 with seconds and timezone).")
     }
   }, async (input) => noteCall(() => takeVerb(noteContext(), input), input));
   server.registerTool("collab_done", {
@@ -47817,7 +48049,9 @@ Legacy session tools: ${legacyInstructions}`
       path_scopes: exports_external.array(exports_external.string().min(1).max(500)).max(128).optional(),
       work_mode: exports_external.enum(["coordination", "read_only", "edit"]).optional(),
       completion_policy: exports_external.enum(["reported", "accepted"]).optional(),
-      expected_base_sha: exports_external.string().regex(/^[a-fA-F0-9]{40,64}$/).optional()
+      expected_base_sha: exports_external.string().regex(/^[a-fA-F0-9]{40,64}$/).optional(),
+      eta_at: exports_external.string().optional().describe("Optional time/1 \xA76 reference-clock ETA (RFC 3339 timestamp with seconds and timezone, for example 2026-11-27T15:45:00Z). " + "Unfinished tasks read overdue once observed_at reaches eta_at + max(10m, floor(estimate / 2))."),
+      check_back_at: exports_external.string().optional().describe("Optional time/1 \xA76 reference-clock instant when the waiter will check back if nothing arrives " + "(RFC 3339 timestamp with seconds and timezone, for example 2026-11-27T16:00:00Z).")
     }
   }, async ({ workspace_id, actor, task_id, ...input }) => call(() => {
     requireWorkspace(workspace_id);
@@ -47898,7 +48132,11 @@ Legacy session tools: ${legacyInstructions}`
     title: "Post concise task progress",
     description: "Record a result-oriented progress note. Use a structured report when evidence, confidence, disagreement, or authority matters.",
     annotations: localRetrySafeMutation,
-    inputSchema: leaseMutationSchema({ message: exports_external.string().min(1).max(2000) })
+    inputSchema: leaseMutationSchema({
+      message: exports_external.string().min(1).max(2000),
+      eta_at: exports_external.string().nullable().optional().describe("Optional time/1 \xA76 reference-clock ETA update (RFC 3339 timestamp with seconds and timezone), or null to clear."),
+      check_back_at: exports_external.string().nullable().optional().describe("Optional time/1 \xA76 check-back instant update (RFC 3339 timestamp with seconds and timezone), or null to clear.")
+    })
   }, async ({ workspace_id, actor, ...input }) => call(() => {
     requireWorkspace(workspace_id);
     const task = state.binding ? store2.progressTaskForSession({ ...boundCredential(), ...input }) : store2.progressTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
@@ -48034,7 +48272,9 @@ Legacy session tools: ${legacyInstructions}`
       authority_basis: exports_external.string().max(2000).optional(),
       to_person: exports_external.boolean().optional().describe("Also place this report in the person's inbox at the person desk, for example to ask them something. " + "Routing, not access control or authority."),
       expected_head_sequence: exports_external.number().int().nonnegative().optional().describe("Optional compare-and-swap: the event_sequence of the last report you read (from collab_report_list, " + "events.next_anchor.sequence, or collab_inbox with include all; not head_sequence). If another session or " + "the person desk posted any report after it (notes, reports, task completion summaries, review requests or " + "verdicts, proposals or ballots, whoever addressed), nothing is written and head_moved returns reports_since " + "and missed_report_ids; read them with collab_report_list, then send again. Your own reports and non-report " + "events (sessions, claims, leases, task creation/progress/blockers, handoff offers, person proposal acts) do " + "not count. On success, compared_at_sequence echoes the checked value."),
-      also_to_session_ids: exports_external.array(exports_external.string().min(1)).max(MAX_ALSO_TO_SESSIONS).optional().describe(`Optional additional session IDs (at most ${MAX_ALSO_TO_SESSIONS}) to route this report to alongside to_session_id; ` + "payload-only routing, not access control.")
+      also_to_session_ids: exports_external.array(exports_external.string().min(1)).max(MAX_ALSO_TO_SESSIONS).optional().describe(`Optional additional session IDs (at most ${MAX_ALSO_TO_SESSIONS}) to route this report to alongside to_session_id; ` + "payload-only routing, not access control."),
+      eta_at: exports_external.string().optional().describe("Optional time/1 \xA76 reference-clock ETA (RFC 3339 timestamp with seconds and timezone, for example 2026-11-27T15:45:00Z). " + "Reads compute overdue once observed_at reaches eta_at + max(10m, floor(estimate / 2))."),
+      check_back_at: exports_external.string().optional().describe("Optional time/1 \xA76 reference-clock instant when the waiter will check back if nothing arrives " + "(RFC 3339 timestamp with seconds and timezone, for example 2026-11-27T16:00:00Z).")
     }
   }, async ({ workspace_id, ...input }) => call(() => {
     requireWorkspace(workspace_id);

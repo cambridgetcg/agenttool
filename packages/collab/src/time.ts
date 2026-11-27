@@ -87,3 +87,61 @@ export function durationUntil(at: string, observedAt: string): string {
   const hours = Math.floor(minutes / 60);
   return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
 }
+
+/** time/1 §6 minimum grace added after an ETA before it reads overdue: 10 minutes. */
+export const ETA_MIN_GRACE_MS = 10 * 60 * 1000;
+
+/**
+ * Parse a strict time/1 zoned RFC 3339 instant (seconds and zone required) and
+ * return its canonical UTC ISO-8601 form, or null when invalid.
+ */
+export function parseCanonicalInstant(value: unknown): string | null {
+  const ms = parseZonedInstant(value);
+  return ms === null ? null : new Date(ms).toISOString();
+}
+
+/**
+ * time/1 §6 grace window: the larger of 10 minutes and half the stated estimate
+ * (`eta_at - set_at`, floored to whole milliseconds, clamped at 0 when the
+ * stated ETA is at or before `set_at`).
+ */
+export function computeEtaGraceMs(setAtMs: number, etaAtMs: number): number {
+  const estimateMs = Number.isFinite(setAtMs) && Number.isFinite(etaAtMs)
+    ? Math.max(0, etaAtMs - setAtMs)
+    : 0;
+  return Math.max(ETA_MIN_GRACE_MS, Math.floor(estimateMs / 2));
+}
+
+export interface EtaOverdueStatus {
+  overdue: boolean;
+  overdue_at: string | null;
+}
+
+/**
+ * time/1 §6 derived overdue state at `observed_at`.
+ *
+ * - Without `eta_at`: `{ overdue: false, overdue_at: null }`.
+ * - With `eta_at`: `overdue_at = eta_at + max(10 minutes, floor(max(0, eta_at - set_at) / 2))`.
+ * - `overdue` is true once `observed_at >= overdue_at` and `active` is true
+ *   (completed tasks are never overdue).
+ */
+export function computeEtaOverdue(input: {
+  set_at: string;
+  eta_at: string | null;
+  observed_at: string;
+  active?: boolean;
+}): EtaOverdueStatus {
+  if (!input.eta_at) return { overdue: false, overdue_at: null };
+  const etaMs = parseZonedInstant(input.eta_at) ?? Date.parse(input.eta_at);
+  const setMs = parseZonedInstant(input.set_at) ?? Date.parse(input.set_at);
+  const observedMs = parseZonedInstant(input.observed_at) ?? Date.parse(input.observed_at);
+  if (!Number.isFinite(etaMs)) return { overdue: false, overdue_at: null };
+  const graceMs = computeEtaGraceMs(setMs, etaMs);
+  const overdueAtMs = etaMs + graceMs;
+  const overdueAt = new Date(overdueAtMs).toISOString();
+  const active = input.active ?? true;
+  return {
+    overdue: active && Number.isFinite(observedMs) && observedMs >= overdueAtMs,
+    overdue_at: overdueAt,
+  };
+}
