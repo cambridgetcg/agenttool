@@ -182,8 +182,8 @@
         "details": "Project bearer; explicit identity_id must name an active owned identity. Content is server-readable; embedding is optional."
       },
       "cost": {
-        "project_credits": 1,
-        "details": "One project credit is reserved per admitted bounded attempt, including an unsuccessful attempt after reservation."
+        "project_credits": 0,
+        "details": "Free floor: no credits. Each admitted write counts against daily per-project and per-identity request and byte quotas and a global storage cap, all checked in Postgres inside the write transaction; a refused or failed write is not counted. Without a configured storage cap, writes are refused (503 free_floor_unconfigured)."
       },
       "availability": {
         "state": "source_implemented",
@@ -292,8 +292,8 @@
         "details": "Project bearer. Supply query text or a locally generated 1536-number query_embedding; embedding takes precedence if both are supplied."
       },
       "cost": {
-        "project_credits": 3,
-        "details": "Three project credits are reserved per admitted search attempt before recall, including failures after reservation. Embedding inference is caller-owned and separate."
+        "project_credits": 0,
+        "details": "Free floor: no credits. Each admitted search counts against a daily per-project quota checked in Postgres before recall, including failures after admission. Embedding inference is caller-owned and separate."
       },
       "availability": {
         "state": "source_implemented",

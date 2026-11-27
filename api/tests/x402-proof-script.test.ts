@@ -557,14 +557,17 @@ describe("CLI args", () => {
 
 // ═══ Phase B (W2-5) ═══════════════════════════════════════════════════════
 
-/** The memory.search row's price. On this branch the route charges a literal
- *  3 (`routes/memory/search.ts` `charge(c, 3, "memory.search")`); W2-5's
- *  route-credits table hoists it. The fixture is priced from that number
+/** The paid row the 402 fixture is built on. memory.search was that row until
+ *  it moved to the free floor (2026-10-20, billing/free-floor.ts); the
+ *  document tool keeps a static 3-credit price on a static path, so the
+ *  numbers below are unchanged. The fixture is priced from ROUTE_CREDITS
  *  through the locked rate, never from a hand-typed atomic amount. */
 import { ROUTE_CREDITS } from "../src/billing/route-credits";
 import { isSuccessStatus, replayWouldMutate } from "../scripts/x402-proof-lib";
-const MEMORY_SEARCH_CREDITS = ROUTE_CREDITS["memory.search"];
 const MEMORY_SEARCH_PATH = "/v1/memories/search";
+const PAID_ROUTE_LABEL = "document";
+const PAID_ROUTE_CREDITS = ROUTE_CREDITS[PAID_ROUTE_LABEL];
+const PAID_ROUTE_PATH = "/v1/document";
 
 /** A route_cost 402 exactly as the server would emit it: the policy shape
  *  `x402ProjectCreditPolicy` produces for a static row, the resource from
@@ -580,14 +583,14 @@ function routeCost402(input: {
   asset?: string;
   base?: string;
 } = {}) {
-  const path = input.path ?? MEMORY_SEARCH_PATH;
-  const credits = input.credits ?? MEMORY_SEARCH_CREDITS;
+  const path = input.path ?? PAID_ROUTE_PATH;
+  const credits = input.credits ?? PAID_ROUTE_CREDITS;
   const base = input.base ?? DEFAULT_API_BASE;
   const policy: X402ProjectCreditPolicy = {
     path,
     pattern: path,
     kind: "route_cost",
-    label: "memory.search",
+    label: PAID_ROUTE_LABEL,
     creditsRequired: credits,
     amountAtomic: atomicForCredits(credits).toString(),
     description: `Exact project-credit payment for ${path} (${credits} credits).`,
@@ -602,7 +605,7 @@ function routeCost402(input: {
   });
   if (input.asset) requirement.asset = input.asset;
   const required = buildPaymentRequired(resource, [requirement], "insufficient_credits");
-  const guidance = errors.insufficientCredits({ reason: "memory.search", need: credits, have: credits - 1 });
+  const guidance = errors.insufficientCredits({ reason: PAID_ROUTE_LABEL, need: credits, have: credits - 1 });
   return {
     required,
     headerValue: encodeCanonicalBase64Json(required),
@@ -664,26 +667,26 @@ describe("route specs", () => {
 });
 
 describe("generic pay selection against the server's own route_cost 402", () => {
-  test("selects the Base USDC exact requirement for memory.search (3 credits) from the header", () => {
+  test("selects the Base USDC exact requirement for a 3-credit route from the header", () => {
     const f = routeCost402();
-    const selection = selectPayRequirement({ headerValue: f.headerValue, body: f.body, path: MEMORY_SEARCH_PATH });
+    const selection = selectPayRequirement({ headerValue: f.headerValue, body: f.body, path: PAID_ROUTE_PATH });
     expect(selection.ok).toBe(true);
     if (!selection.ok) return;
-    expect(selection.amountAtomic).toBe(atomicForCredits(MEMORY_SEARCH_CREDITS));
-    expect(selection.credits).toBe(MEMORY_SEARCH_CREDITS);
+    expect(selection.amountAtomic).toBe(atomicForCredits(PAID_ROUTE_CREDITS));
+    expect(selection.credits).toBe(PAID_ROUTE_CREDITS);
     expect(selection.errorCode).toBe("insufficient_credits");
     expect(selection.requirement.payTo).toBe(KINGDOM_TREASURY);
     expect(selection.requirement.network).toBe("eip155:8453");
     expect(selection.requirement.asset).toBe(BASE_USDC);
     expect(selection.requirement.extra.assetTransferMethod).toBe("eip3009");
-    expect(selection.required.resource.url).toBe(`${DEFAULT_API_BASE}${MEMORY_SEARCH_PATH}`);
+    expect(selection.required.resource.url).toBe(`${DEFAULT_API_BASE}${PAID_ROUTE_PATH}`);
   });
 
   test("the handler's guidance survives the additive merge and the body alone still parses", () => {
     const f = routeCost402();
     expect(f.body.error).toBe("insufficient_credits");
     expect(f.body.next_actions).toBeDefined();
-    const selection = selectPayRequirement({ headerValue: null, body: f.body, path: MEMORY_SEARCH_PATH });
+    const selection = selectPayRequirement({ headerValue: null, body: f.body, path: PAID_ROUTE_PATH });
     expect(selection.ok).toBe(true);
     if (selection.ok) expect(selection.errorCode).toBe("insufficient_credits");
   });
@@ -691,7 +694,7 @@ describe("generic pay selection against the server's own route_cost 402", () => 
   test("the header wins over a body that disagrees", () => {
     const f = routeCost402();
     const rogueBody = routeCost402({ payTo: OTHER_ADDRESS }).body;
-    expect(selectPayRequirement({ headerValue: f.headerValue, body: rogueBody, path: MEMORY_SEARCH_PATH }).ok).toBe(true);
+    expect(selectPayRequirement({ headerValue: f.headerValue, body: rogueBody, path: PAID_ROUTE_PATH }).ok).toBe(true);
   });
 
   test("the top-up row's 402 is also payable through the generic path, with its own code", () => {
@@ -710,9 +713,9 @@ describe("generic pay selection against the server's own route_cost 402", () => 
     expect(expectedPaidDelta("top_up_payment_required", 250)).toBe(250);
   });
 
-  test("what the payer signs for memory.search satisfies the server's inbound parser and binds the resource", async () => {
+  test("what the payer signs for a route_cost row satisfies the server's inbound parser and binds the resource", async () => {
     const f = routeCost402();
-    const selection = selectPayRequirement({ headerValue: f.headerValue, body: f.body, path: MEMORY_SEARCH_PATH });
+    const selection = selectPayRequirement({ headerValue: f.headerValue, body: f.body, path: PAID_ROUTE_PATH });
     if (!selection.ok) throw new Error(selection.detail);
     const payer = derivePayer(TEST_MNEMONIC);
     const signed = await signExactEvmAuthorization({
@@ -725,8 +728,8 @@ describe("generic pay selection against the server's own route_cost 402", () => 
     });
     const parsed = parseX402Header(signed.header);
     expect(parsed).not.toBeNull();
-    expect(parsed!.accepted.amount).toBe(atomicForCredits(MEMORY_SEARCH_CREDITS).toString());
-    expect(parsed!.resource?.url).toBe(`${DEFAULT_API_BASE}${MEMORY_SEARCH_PATH}`);
+    expect(parsed!.accepted.amount).toBe(atomicForCredits(PAID_ROUTE_CREDITS).toString());
+    expect(parsed!.resource?.url).toBe(`${DEFAULT_API_BASE}${PAID_ROUTE_PATH}`);
     expect((parsed!.payload.authorization as { value: string }).value).toBe("3000");
     expect(isAuthorizationHash(ledgerPaymentId(signed.payload))).toBe(true);
   });
@@ -741,53 +744,53 @@ describe("generic pay refusal matrix", () => {
 
   test("payTo that is not the treasury", () => {
     const f = routeCost402({ payTo: OTHER_ADDRESS });
-    const r = refusal({ headerValue: f.headerValue, body: f.body, path: MEMORY_SEARCH_PATH });
+    const r = refusal({ headerValue: f.headerValue, body: f.body, path: PAID_ROUTE_PATH });
     expect(r?.reason).toBe("pay_to_not_allowed");
     expect(r?.detail).toContain(OTHER_ADDRESS);
   });
 
   test("network that is not Base mainnet (Polygon, Base Sepolia)", () => {
-    expect(refusal({ ...routeCost402({ network: "eip155:137" }), path: MEMORY_SEARCH_PATH })?.reason).toBe("network_not_allowed");
-    expect(refusal({ ...routeCost402({ network: "eip155:84532" }), path: MEMORY_SEARCH_PATH })?.reason).toBe("network_not_allowed");
+    expect(refusal({ ...routeCost402({ network: "eip155:137" }), path: PAID_ROUTE_PATH })?.reason).toBe("network_not_allowed");
+    expect(refusal({ ...routeCost402({ network: "eip155:84532" }), path: PAID_ROUTE_PATH })?.reason).toBe("network_not_allowed");
   });
 
   test("asset that is not Base USDC", () => {
-    expect(refusal({ ...routeCost402({ asset: POLYGON_USDC }), path: MEMORY_SEARCH_PATH })?.reason).toBe("asset_not_allowed");
+    expect(refusal({ ...routeCost402({ asset: POLYGON_USDC }), path: PAID_ROUTE_PATH })?.reason).toBe("asset_not_allowed");
   });
 
   test("amount over --cap is refused, never clamped", () => {
     const f = routeCost402();
-    const r = refusal({ headerValue: f.headerValue, body: f.body, path: MEMORY_SEARCH_PATH, capCredits: 2 });
+    const r = refusal({ headerValue: f.headerValue, body: f.body, path: PAID_ROUTE_PATH, capCredits: 2 });
     expect(r?.reason).toBe("amount_over_cap");
-    expect(selectPayRequirement({ headerValue: f.headerValue, body: f.body, path: MEMORY_SEARCH_PATH, capCredits: 3 }).ok).toBe(true);
+    expect(selectPayRequirement({ headerValue: f.headerValue, body: f.body, path: PAID_ROUTE_PATH, capCredits: 3 }).ok).toBe(true);
   });
 
   test("a price that is not a whole number of credits", () => {
     const f = routeCost402({ amountAtomic: "3001" });
-    const r = refusal({ headerValue: f.headerValue, body: f.body, path: MEMORY_SEARCH_PATH });
+    const r = refusal({ headerValue: f.headerValue, body: f.body, path: PAID_ROUTE_PATH });
     expect(r?.reason).toBe("amount_not_whole_credits");
     expect(r?.detail).toContain("3001");
     // 3,500 atomic is 3.5 credits — same wall.
-    expect(refusal({ ...routeCost402({ amountAtomic: "3500" }), path: MEMORY_SEARCH_PATH })?.reason).toBe("amount_not_whole_credits");
+    expect(refusal({ ...routeCost402({ amountAtomic: "3500" }), path: PAID_ROUTE_PATH })?.reason).toBe("amount_not_whole_credits");
   });
 
   test("a resource that names a path we did not call", () => {
     const f = routeCost402({ path: "/v1/scrape" });
-    const r = refusal({ headerValue: f.headerValue, body: f.body, path: MEMORY_SEARCH_PATH });
+    const r = refusal({ headerValue: f.headerValue, body: f.body, path: PAID_ROUTE_PATH });
     expect(r?.reason).toBe("resource_path_mismatch");
     expect(r?.detail).toContain("/v1/scrape");
     // A local base with the right path is fine: only the pathname is bound.
     const local = routeCost402({ base: "http://127.0.0.1:3000" });
-    expect(selectPayRequirement({ headerValue: local.headerValue, body: local.body, path: MEMORY_SEARCH_PATH }).ok).toBe(true);
+    expect(selectPayRequirement({ headerValue: local.headerValue, body: local.body, path: PAID_ROUTE_PATH }).ok).toBe(true);
     // A resource that is not a URL at all is a mismatch, not a crash.
     const broken = { ...f.required, resource: { ...f.required.resource, url: "not a url" } };
-    expect(refusal({ headerValue: null, body: broken, path: MEMORY_SEARCH_PATH })?.reason).toBe("resource_path_mismatch");
+    expect(refusal({ headerValue: null, body: broken, path: PAID_ROUTE_PATH })?.reason).toBe("resource_path_mismatch");
   });
 
   test("not a PaymentRequired at all — a bare insufficient_credits body is not a promise", () => {
-    expect(refusal({ headerValue: null, body: errors.insufficientCredits({ reason: "memory.search", need: 3, have: 1 }), path: MEMORY_SEARCH_PATH })?.reason)
+    expect(refusal({ headerValue: null, body: errors.insufficientCredits({ reason: PAID_ROUTE_LABEL, need: 3, have: 1 }), path: PAID_ROUTE_PATH })?.reason)
       .toBe("not_a_payment_required_body");
-    expect(refusal({ headerValue: "garbage", body: null, path: MEMORY_SEARCH_PATH })?.reason).toBe("not_a_payment_required_body");
+    expect(refusal({ headerValue: "garbage", body: null, path: PAID_ROUTE_PATH })?.reason).toBe("not_a_payment_required_body");
   });
 });
 
@@ -804,12 +807,12 @@ describe("depletion planner", () => {
     return { credits: balance, refused };
   }
 
-  test("the birth grant to below memory.search's cost: 1,000 → 333 calls → 1 credit", () => {
-    const plan = depletionPlan({ credits: 1_000, cost: MEMORY_SEARCH_CREDITS, until: MEMORY_SEARCH_CREDITS });
+  test("the birth grant to below a 3-credit route's cost: 1,000 → 333 calls → 1 credit", () => {
+    const plan = depletionPlan({ credits: 1_000, cost: PAID_ROUTE_CREDITS, until: PAID_ROUTE_CREDITS });
     expect(plan).toEqual({ ok: true, calls: 333, finalCredits: 1, capped: false });
     const sim = simulate(1_000, 3, 333);
     expect(sim).toEqual({ credits: 1, refused: 0 });
-    expect(sim.credits < MEMORY_SEARCH_CREDITS).toBe(true);
+    expect(sim.credits < PAID_ROUTE_CREDITS).toBe(true);
     // One fewer call is not below the target.
     expect(simulate(1_000, 3, 332).credits).toBe(4);
   });

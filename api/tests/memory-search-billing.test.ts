@@ -5,8 +5,9 @@ import type { ProjectContext } from "../src/auth/middleware";
 import { ROUTE_CREDITS } from "../src/billing/route-credits";
 import { createMemorySearchRoutes } from "../src/routes/memory/search";
 
-function fixture(failure?: "reservation" | "recall" | "finalize") {
+function fixture(failure?: "quota" | "reservation" | "recall" | "finalize") {
   const events: string[] = [];
+  const quota: Array<{ projectId: string; action: string }> = [];
   let success = false;
   const reservation = {
     creditsUsed: ROUTE_CREDITS["memory.search"], creditsRemaining: 7,
@@ -29,6 +30,10 @@ function fixture(failure?: "reservation" | "recall" | "finalize") {
   });
   app.onError((error, c) => c.json({ error: "request_failed" }, error instanceof HTTPException ? error.status : 500));
   app.route("/", createMemorySearchRoutes({
+    consumeFreeFloor: async (request) => {
+      quota.push({ projectId: request.projectId, action: request.action });
+      if (failure === "quota") throw new HTTPException(429);
+    },
     reserveCharge: async (_c, amount, reason) => {
       expect(amount).toBe(ROUTE_CREDITS["memory.search"]);
       expect(reason).toBe("memory.search");
@@ -47,7 +52,7 @@ function fixture(failure?: "reservation" | "recall" | "finalize") {
     },
   }));
   return {
-    events, succeeded: () => success,
+    events, quota, succeeded: () => success,
     request: (body: unknown) => app.request("/", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -60,6 +65,21 @@ describe("memory search attempt receipts", () => {
     const f = fixture();
     expect((await f.request({})).status).toBe(400);
     expect(f.events).toEqual([]);
+  });
+
+  test("search is on the free floor: it costs 0 credits and takes the project quota first", async () => {
+    expect(ROUTE_CREDITS["memory.search"]).toBe(0);
+    const f = fixture();
+    expect((await f.request({ query: "hello" })).status).toBe(200);
+    expect(f.quota).toEqual([{ projectId: "project-search", action: "memory.search" }]);
+    expect(f.events).toEqual(["reserve", "recall", "finalize"]);
+  });
+
+  test("an over-quota search never reserves or begins recall", async () => {
+    const f = fixture("quota");
+    expect((await f.request({ query: "hello" })).status).toBe(429);
+    expect(f.events).toEqual([]);
+    expect(f.succeeded()).toBe(false);
   });
 
   test("unfunded search never begins recall", async () => {

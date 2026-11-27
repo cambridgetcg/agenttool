@@ -97,7 +97,15 @@ mock.module("../src/services/wake/push", () => ({
   }),
 }));
 
-const reserveForTest = mock(async () => {
+const freeFloorRequests: Array<{ action: string; identityId?: string | null; bytes?: number }> = [];
+const freeFloorForTest = mock(async (database: unknown, request: { action: string; identityId?: string | null; bytes?: number }) => {
+  operationOrder.push(database === mockDb && inTransaction ? "free-floor:tx" : "free-floor:outside");
+  freeFloorRequests.push({ action: request.action, identityId: request.identityId, bytes: request.bytes });
+});
+
+const reserveForTest = mock(async (_c: unknown, amount: number) => {
+  // Memory writes are on the free floor: the receipt is reserved at 0 credits.
+  expect(amount).toBe(0);
   operationOrder.push("reserve");
   reservations.push("memory.write");
   return {
@@ -133,6 +141,7 @@ const routeApp = () => {
     reserve: reserveForTest as never,
     finalize: finalizeForTest as never,
     database: mockDb as never,
+    freeFloor: freeFloorForTest as never,
   }));
   return app;
 };
@@ -198,10 +207,16 @@ describe("POST /v1/memories billing order", () => {
     expect(insertedValues).toHaveLength(1);
     expect(finalizedReservations).toEqual(["usage-event"]);
     expect(lockedIdentitySelectCalls).toBe(1);
+    expect(freeFloorRequests.at(-1)).toEqual({
+      action: "memory.write",
+      identityId: IDENTITY_ID,
+      bytes: Buffer.byteLength("bill the completed write") + 2,
+    });
     expect(operationOrder).toEqual([
       "reserve",
       "transaction:start",
       "identity-lock:share",
+      "free-floor:tx",
       "memory-insert:tx",
       "finalize:tx",
       "transaction:commit",
@@ -271,6 +286,7 @@ describe("POST /v1/memories billing order", () => {
       "reserve",
       "transaction:start",
       "identity-lock:share",
+      "free-floor:tx",
       "memory-insert:tx",
       "finalize:tx",
       "transaction:rollback",
