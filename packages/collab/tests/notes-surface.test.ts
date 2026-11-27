@@ -46,6 +46,14 @@ const MERKLE_TOOLS = ["collab_journal_proof"];
  * collab_journal_verify. A listed field sits just before binding_key and is never required.
  */
 const ADDED_INPUT_FIELDS: Record<string, Record<string, unknown>> = {
+  collab_workspace_status: {
+    fields: {
+      description: 'Optional projection for recent_reports: "full" (the default) returns full report bodies; '
+        + '"headers" returns compact report headers (first-line summary and body_chars) without bodies.',
+      type: "string",
+      enum: ["full", "headers"],
+    },
+  },
   collab_report_append: {
     expected_head_sequence: {
       description: "Optional compare-and-swap: the event_sequence of the last report you read (from collab_report_list, "
@@ -59,6 +67,16 @@ const ADDED_INPUT_FIELDS: Record<string, Record<string, unknown>> = {
       minimum: 0,
       maximum: Number.MAX_SAFE_INTEGER,
     },
+    also_to_session_ids: {
+      description: "Optional additional session IDs (at most 8) to route this report to alongside to_session_id; "
+        + "payload-only routing, not access control.",
+      maxItems: 8,
+      type: "array",
+      items: {
+        type: "string",
+        minLength: 1,
+      },
+    },
   },
   collab_journal_verify: {
     expected_root: {
@@ -71,6 +89,14 @@ const ADDED_INPUT_FIELDS: Record<string, Record<string, unknown>> = {
       type: "integer",
       minimum: 0,
       maximum: Number.MAX_SAFE_INTEGER,
+    },
+  },
+  collab_report_list: {
+    fields: {
+      description: 'Optional report projection: "full" (the default) returns full report bodies; '
+        + '"headers" returns compact headers (first-line summary and body_chars) without bodies.',
+      type: "string",
+      enum: ["full", "headers"],
     },
   },
 };

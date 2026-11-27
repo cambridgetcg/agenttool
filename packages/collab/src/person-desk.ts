@@ -62,7 +62,7 @@ export const PERSON_DESK_USAGE =
   + " | reject --proposal <id> --reason <text> [--passkey-assertion <path>|-]"
   + " | set-aside --proposal <id> --challenge <report id> --reason <text> [--passkey-assertion <path>|-]"
   + " | ceremony --proposal <id> --act agree|reject|set-aside [--challenge <report id>] [--reason <text>] [--via <ssh-destination>] [--port <n>] [--no-open]"
-  + " | say --workspace <id> --body <text> [--proposal <id>] --idempotency-key <key>"
+  + " | say --workspace <id> --body <text> [--proposal <id>] [--to <session>] --idempotency-key <key>"
   + " | propose --workspace <id> --question <text> --criteria <text> --extent <text>"
   + " [--known-conflicts <text>] [--topic <text>] [--consult-seconds <n>] --idempotency-key <key>"
   + " | withdraw --workspace <id> --proposal <id> --reason <text> --idempotency-key <key>"
@@ -95,7 +95,7 @@ export const VERB_OPTIONS: Record<Verb, { required: string[]; optional: string[]
   reject: { required: ["proposal", "reason"], optional: ["passkey-assertion"] },
   "set-aside": { required: ["proposal", "challenge", "reason"], optional: ["passkey-assertion"] },
   ceremony: { required: ["proposal", "act"], optional: ["reason", "challenge", "via", "port", "no-open"] },
-  say: { required: ["workspace", "body", "idempotency-key"], optional: ["proposal"] },
+  say: { required: ["workspace", "body", "idempotency-key"], optional: ["proposal", "to"] },
   propose: {
     required: ["workspace", "question", "criteria", "extent", "idempotency-key"],
     optional: ["known-conflicts", "topic", "consult-seconds"],
@@ -119,7 +119,7 @@ export const REMOTE_VERBS = new Set<Verb>([
 const STRING_OPTIONS = [
   "workspace", "proposal", "limit", "act", "reason", "passkey-assertion", "body",
   "idempotency-key", "question", "criteria", "extent", "known-conflicts", "topic",
-  "consult-seconds", "file", "credential", "db", "via", "port", "label", "challenge",
+  "consult-seconds", "file", "credential", "db", "via", "port", "label", "challenge", "to",
 ] as const;
 const BOOLEAN_OPTIONS = ["ceremony", "no-open"] as const;
 
@@ -336,6 +336,7 @@ function runVerb(
           idempotency_key: values["idempotency-key"]!,
           body: values.body!,
           proposal_report_id: values.proposal,
+          to_session_id: values.to,
         }),
       });
     case "propose":

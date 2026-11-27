@@ -42,7 +42,7 @@ interface WaitReceipt {
   skipped_held_events?: number;
 }
 
-const USAGE = "usage: collab-doorbell-watch --session <id> [--db <path>] [--host-bin <path>] [--all] "
+const USAGE = "usage: collab-doorbell-watch --session <id> [--db <path>] [--host-bin <path>] [--all | --open] [--stdout] "
   + "[--from-cursor] [--include-own] [--cycle-ms <ms>] [--min-gap-ms <ms>] [--retry-base-ms <ms>] [--max-hours <h>] [--once]";
 
 /** Consecutive failed rings after which the watcher stops (spec 9). */
@@ -56,6 +56,8 @@ const { values } = parseArgs({
     db: { type: "string" },
     "host-bin": { type: "string" },
     all: { type: "boolean" },
+    open: { type: "boolean" },
+    stdout: { type: "boolean" },
     "from-cursor": { type: "boolean" },
     "include-own": { type: "boolean" },
     "cycle-ms": { type: "string" },
@@ -98,15 +100,20 @@ const testMaxRaw = process.env.AGENTTOOL_COLLAB_DOORBELL_TEST_MAX_MS ?? "";
 const testMaxMs = /^[1-9]\d{0,8}$/.test(testMaxRaw) ? Number(testMaxRaw) : null;
 const maxMs = testMaxMs ?? maxHoursMs;
 const addressed = values.all !== true;
+const openBroadcasts = values.open === true;
+if (openBroadcasts && !addressed) fail("--open cannot be combined with --all");
+const stdoutMode = values.stdout === true;
 const socket = process.env.CLAUDE_CODE_MESSAGING_SOCKET ?? "";
 const token = process.env.CLAUDE_CODE_MESSAGING_TOKEN;
-if (!socket) fail("CLAUDE_CODE_MESSAGING_SOCKET is not set; start this from the Claude Code session to be rung");
+if (!stdoutMode && !socket) {
+  fail("CLAUDE_CODE_MESSAGING_SOCKET is not set; start this from the Claude Code session to be rung, or pass --stdout");
+}
 if (!existsSync(dbPath)) fail(`no collab journal at ${dbPath}`);
 if (!existsSync(hostBin)) fail(`no agenttool-collab-host bundle at ${hostBin}`);
 
 // Claude Code names a session's socket after its pid; otherwise only the socket is watched.
-const socketName = basename(socket, ".sock");
-const ownerPid = /^\d+$/.test(socketName) ? Number(socketName) : null;
+const socketName = socket ? basename(socket, ".sock") : "";
+const ownerPid = !stdoutMode && /^\d+$/.test(socketName) ? Number(socketName) : null;
 const credentialFile = join(dirname(dbPath), "collab-sessions", `${sessionId}.json`);
 const stateDir = join(dirname(dbPath), "collab-doorbell");
 mkdirSync(stateDir, { recursive: true, mode: 0o700 });
@@ -189,12 +196,16 @@ function sessionActive(): boolean {
   return row?.status === "active";
 }
 
-const ownerGone = () => (ownerPid !== null && !alive(ownerPid)) || !existsSync(socket);
+const ownerGone = () => stdoutMode ? false : ((ownerPid !== null && !alive(ownerPid)) || !existsSync(socket));
+if (stdoutMode) {
+  process.stdout.on("error", () => stop("stdout_closed"));
+}
 
 function waitOnce(after: Anchor, waitMs = cycleMs): Promise<WaitReceipt> {
   const args = [hostBin, "wait", "--session", sessionId, "--db", dbPath,
     "--after-anchor", JSON.stringify(after), "--wait-ms", String(waitMs)];
   if (addressed) args.push("--addressed");
+  if (addressed && openBroadcasts) args.push("--open");
   if (values["include-own"]) args.push("--include-own");
   return new Promise((resolveReceipt) => {
     const proc = spawn(process.execPath, args, { stdio: ["ignore", "pipe", "ignore"] });
@@ -220,6 +231,24 @@ function waitOnce(after: Anchor, waitMs = cycleMs): Promise<WaitReceipt> {
  * The auth line lets Claude Code verify a post from its own child on macOS.
  */
 function ring(text: string): Promise<boolean> {
+  if (stdoutMode) {
+    const singleLine = text.replace(/[\r\n]+/g, " ");
+    return new Promise((resolveRing) => {
+      try {
+        process.stdout.write(`${singleLine}\n`, (error) => {
+          if (error) {
+            log({ event: "ring_failed", code: (error as NodeJS.ErrnoException).code ?? "error" });
+            resolveRing(false);
+          } else {
+            resolveRing(true);
+          }
+        });
+      } catch (error) {
+        log({ event: "ring_failed", code: (error as NodeJS.ErrnoException).code ?? "error" });
+        resolveRing(false);
+      }
+    });
+  }
   const line = JSON.stringify({ type: "user", message: { role: "user", content: text } });
   return new Promise((resolveRing) => {
     // Connect only once the line is ready: the inbox closes a silent connection after 30 s.
@@ -301,6 +330,8 @@ let unrungSinceRing = 0;
 let recheck = false;
 log({
   event: "start", pid: process.pid, workspace_id: workspaceId, after_sequence: anchor.sequence, addressed,
+  ...(openBroadcasts ? { open: true } : {}),
+  ...(stdoutMode ? { stdout: true } : {}),
   ...(testMaxMs === null ? {} : { test_max_ms: testMaxMs }),
 });
 
@@ -342,7 +373,11 @@ while (true) {
     if (ownerGone()) stop("owner_gone");
     const from = receipt.next_anchor;
     const covered = head();
-    const what = addressed ? "at least one routed to this session" : "at least one from another session";
+    const what = !addressed
+      ? "at least one from another session"
+      : openBroadcasts
+        ? "at least one routed to this session or open to the table"
+        : "at least one routed to this session";
     // Not added to the running count yet: a failed ring keeps its anchor, and
     // the retry's wait counts this pass's held events again.
     const unrung = unrungSinceRing + (receipt.skipped_held_events ?? 0);

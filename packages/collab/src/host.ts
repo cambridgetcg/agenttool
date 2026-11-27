@@ -52,6 +52,7 @@ import {
 import { CollabStore } from "./store-notes.js";
 import {
   isAddressedTo,
+  isOpenTableReport,
   knockReadThrough,
   restFromDeclaration,
   type AddressedEventRow,
@@ -74,7 +75,7 @@ export const COLLAB_HOST_USAGE =
   "usage: agenttool-collab-host end (--session-file <path> | --seat-ref <ref> [--seat-ref <ref>...]) --reason <text>"
   + " [--release-leases] [--db <path>]"
   + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]"
-  + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]"
+  + " [--wait-ms <ms>] [--include-own] [--addressed [--open]] [--db <path>]"
   + ` | agenttool-collab-host person ... (${PERSON_DESK_USAGE})`
   + " | agenttool-collab-host person-remote (SSH forced command; reads a JSON argv from SSH_ORIGINAL_COMMAND)";
 export const COLLAB_KNOCKS_USAGE =
@@ -268,6 +269,8 @@ export interface HostWaitOptions {
   include_own: boolean;
   /** Ring only for events whose routing fields name this session (CollabStore.eventAddressesSession). */
   addressed?: boolean;
+  /** With addressed: also ring for open table broadcast reports (isOpenTableReport). Held by any declared rest. */
+  open?: boolean;
 }
 
 export interface HostWaitClock {
@@ -460,7 +463,9 @@ export function waitForSessionEvents(
       headSequence = page.head_sequence;
       for (const event of page.events) {
         const own = event.session_id === credential.session_id;
-        const routed = !options.addressed || store.eventAddressesSession(event, session.id);
+        const routed = !options.addressed
+          || store.eventAddressesSession(event, session.id)
+          || (options.open === true && isOpenTableReport(event, session.id));
         const rings = (options.include_own || !own) && routed;
         if (rings && restAllows(event)) return receipt("ready", headSequence);
         observed = { epoch_id: event.epoch_id, sequence: event.sequence, hash: event.hash };
@@ -691,6 +696,7 @@ function runEndOrWait(
           wait_ms: args.wait_ms,
           include_own: args.include_own,
           addressed: args.addressed,
+          open: args.open,
         }, clock),
         0,
       );
@@ -730,7 +736,7 @@ type HostArgs =
   | ({ command: "wait"; db?: string; session_file?: string; session?: string } & HostWaitOptions);
 
 const END_ONLY_OPTIONS = ["reason", "release-leases", "seat-ref"] as const;
-const WAIT_ONLY_OPTIONS = ["session", "after-anchor", "wait-ms", "include-own", "addressed"] as const;
+const WAIT_ONLY_OPTIONS = ["session", "after-anchor", "wait-ms", "include-own", "addressed", "open"] as const;
 
 function parseHostArgs(argv: string[]): HostArgs {
   let parsed: ReturnType<typeof parseHostOptions>;
@@ -835,6 +841,11 @@ function parseWaitArgs(values: ReturnType<typeof parseHostOptions>["values"]): H
   if (values["after-anchor"] !== undefined) {
     afterAnchor = parseAnchor(values["after-anchor"]);
   }
+  const addressed = values.addressed === true;
+  const open = values.open === true;
+  if (open && !addressed) {
+    throw new CollabError("usage_error", `--open requires --addressed; ${COLLAB_HOST_USAGE}`);
+  }
   return {
     command: "wait",
     session_file: sessionFile,
@@ -842,7 +853,8 @@ function parseWaitArgs(values: ReturnType<typeof parseHostOptions>["values"]): H
     after_anchor: afterAnchor,
     wait_ms: waitMs,
     include_own: values["include-own"] === true,
-    addressed: values.addressed === true,
+    addressed,
+    open,
     db: values.db,
   };
 }
@@ -890,6 +902,7 @@ function parseHostOptions(argv: string[]) {
       "wait-ms": { type: "string" },
       "include-own": { type: "boolean" },
       addressed: { type: "boolean" },
+      open: { type: "boolean" },
     },
   });
 }

@@ -28860,6 +28860,7 @@ var SESSION_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
 var MAX_REST_REASON_LENGTH = 200;
 var EVIDENCE_REF_PREFIXES = ["artifact:", "event:", "report:", "checkpoint:"];
 var EVIDENCE_REFS_DESCRIPTION = "Evidence references point inside this workspace's journal and start with artifact:, event:, " + "report:, or checkpoint: (a task's base_checkpoint_digest or result_checkpoint_digest), " + 'for example "artifact:artifact_<id>".';
+var MAX_ALSO_TO_SESSIONS = 8;
 var CONSENT_RULE = "consent/v1";
 var CONSENT_RULE_V2 = "consent/v2";
 var CONSENT_RULES = [CONSENT_RULE, CONSENT_RULE_V2];
@@ -29141,6 +29142,7625 @@ function assertPrivateDirectory(path) {
 }
 function isOwnedByCurrentUser2(uid) {
   return typeof process.getuid !== "function" || uid === process.getuid();
+}
+
+// src/store.ts
+import { Database } from "bun:sqlite";
+import { createHash as createHash5, randomBytes, randomUUID as randomUUID3, timingSafeEqual } from "crypto";
+import {
+  chmodSync as chmodSync3,
+  closeSync as closeSync6,
+  existsSync as existsSync4,
+  lstatSync as lstatSync4,
+  mkdirSync as mkdirSync3,
+  openSync as openSync6
+} from "fs";
+import { dirname as dirname4, isAbsolute as isAbsolute4, join as join5, posix, resolve as resolve5 } from "path";
+
+// src/merkle.ts
+import { createHash as createHash2 } from "crypto";
+var JOURNAL_MERKLE_LEAF_DOMAIN = "agenttool.collab/journal-leaf/v1";
+var RFC6962_EMPTY_ROOT = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+var SHA256_HEX_RE = /^[0-9a-f]{64}$/;
+var LEAF_PREFIX = new Uint8Array([0]);
+var NODE_PREFIX = new Uint8Array([1]);
+var UTF8 = new TextEncoder;
+function isSha256Hex(value) {
+  return typeof value === "string" && SHA256_HEX_RE.test(value);
+}
+function assertSha256Hex(value, label) {
+  if (!isSha256Hex(value)) {
+    throw new RangeError(`${label} must be 64 lowercase hexadecimal characters`);
+  }
+}
+function isValidEpochId(value) {
+  return typeof value === "string" && value.length > 0 && !value.includes("\x00");
+}
+function assertValidEpochId(epochId) {
+  if (!isValidEpochId(epochId)) {
+    throw new RangeError("epoch_id must be a non-empty string containing no NUL bytes");
+  }
+}
+function assertSafeNonNegativeInt(value, label) {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new RangeError(`${label} must be a non-negative safe integer`);
+  }
+}
+function largestPowerOfTwoLessThan(n) {
+  if (!Number.isSafeInteger(n) || n < 2) {
+    throw new RangeError("largestPowerOfTwoLessThan requires a safe integer >= 2");
+  }
+  let k = 1;
+  while (k * 2 < n)
+    k *= 2;
+  return k;
+}
+function rfc6962LeafHash(data) {
+  const bytes = typeof data === "string" ? UTF8.encode(data) : data;
+  return createHash2("sha256").update(LEAF_PREFIX).update(bytes).digest("hex");
+}
+function rfc6962NodeHash(leftHex, rightHex) {
+  assertSha256Hex(leftHex, "left");
+  assertSha256Hex(rightHex, "right");
+  return createHash2("sha256").update(NODE_PREFIX).update(Buffer.from(leftHex, "hex")).update(Buffer.from(rightHex, "hex")).digest("hex");
+}
+function subtreeRoot(leafHashes, start, end) {
+  const n = end - start;
+  if (n === 0)
+    return RFC6962_EMPTY_ROOT;
+  if (n === 1)
+    return leafHashes[start];
+  const k = largestPowerOfTwoLessThan(n);
+  return rfc6962NodeHash(subtreeRoot(leafHashes, start, start + k), subtreeRoot(leafHashes, start + k, end));
+}
+function rfc6962InclusionProof(leafHashes, leafIndex, treeSize = leafHashes.length) {
+  assertSafeNonNegativeInt(treeSize, "tree_size");
+  assertSafeNonNegativeInt(leafIndex, "leaf_index");
+  if (treeSize < 1 || treeSize > leafHashes.length) {
+    throw new RangeError(`tree_size (${treeSize}) must be in [1, ${leafHashes.length}]`);
+  }
+  if (leafIndex >= treeSize) {
+    throw new RangeError(`leaf_index (${leafIndex}) must be < tree_size (${treeSize})`);
+  }
+  for (let i = 0;i < treeSize; i += 1) {
+    assertSha256Hex(leafHashes[i], `leaf_hashes[${i}]`);
+  }
+  const path = [];
+  const walk = (m, start, end) => {
+    const n = end - start;
+    if (n <= 1)
+      return;
+    const k = largestPowerOfTwoLessThan(n);
+    if (m < k) {
+      walk(m, start, start + k);
+      path.push(subtreeRoot(leafHashes, start + k, end));
+    } else {
+      walk(m - k, start + k, end);
+      path.push(subtreeRoot(leafHashes, start, start + k));
+    }
+  };
+  walk(leafIndex, 0, treeSize);
+  return path;
+}
+function rfc6962ConsistencyProof(leafHashes, fromSize, toSize = leafHashes.length) {
+  assertSafeNonNegativeInt(fromSize, "from_size");
+  assertSafeNonNegativeInt(toSize, "to_size");
+  if (fromSize > toSize) {
+    throw new RangeError(`from_size (${fromSize}) must be <= to_size (${toSize})`);
+  }
+  if (toSize > leafHashes.length) {
+    throw new RangeError(`to_size (${toSize}) exceeds available leaves (${leafHashes.length})`);
+  }
+  for (let i = 0;i < toSize; i += 1) {
+    assertSha256Hex(leafHashes[i], `leaf_hashes[${i}]`);
+  }
+  if (fromSize === 0 || fromSize === toSize)
+    return [];
+  const path = [];
+  const subproof = (m, start, end, complete) => {
+    const n = end - start;
+    if (m === n) {
+      if (!complete)
+        path.push(subtreeRoot(leafHashes, start, end));
+      return;
+    }
+    const k = largestPowerOfTwoLessThan(n);
+    if (m <= k) {
+      subproof(m, start, start + k, complete);
+      path.push(subtreeRoot(leafHashes, start + k, end));
+    } else {
+      subproof(m - k, start + k, end, false);
+      path.push(subtreeRoot(leafHashes, start, start + k));
+    }
+  };
+  subproof(fromSize, 0, toSize, true);
+  return path;
+}
+function journalLeafPreimage(epochId, sequence, eventHash) {
+  assertValidEpochId(epochId);
+  if (!Number.isSafeInteger(sequence) || sequence < 1) {
+    throw new RangeError("sequence must be a safe integer >= 1");
+  }
+  assertSha256Hex(eventHash, "event_hash");
+  return UTF8.encode(`${JOURNAL_MERKLE_LEAF_DOMAIN}\x00${epochId}\x00${sequence}\x00${eventHash}`);
+}
+function journalLeafHash(epochId, sequence, eventHash) {
+  return rfc6962LeafHash(journalLeafPreimage(epochId, sequence, eventHash));
+}
+function buildJournalLeafHashes(epochId, eventHashes, limit) {
+  assertValidEpochId(epochId);
+  const leaves = new Array(limit);
+  for (let i = 0;i < limit; i += 1) {
+    leaves[i] = journalLeafHash(epochId, i + 1, eventHashes[i]);
+  }
+  return leaves;
+}
+function journalMerkleRoot(epochId, eventHashes) {
+  assertValidEpochId(epochId);
+  if (eventHashes.length === 0)
+    return RFC6962_EMPTY_ROOT;
+  const leaves = buildJournalLeafHashes(epochId, eventHashes, eventHashes.length);
+  return subtreeRoot(leaves, 0, leaves.length);
+}
+function proveJournalInclusion(epochId, eventHashes, sequence, treeSize = eventHashes.length) {
+  assertValidEpochId(epochId);
+  assertSafeNonNegativeInt(treeSize, "tree_size");
+  if (!Number.isSafeInteger(sequence) || sequence < 1) {
+    throw new RangeError("sequence must be a safe integer >= 1");
+  }
+  if (treeSize > eventHashes.length) {
+    throw new RangeError(`tree_size (${treeSize}) exceeds available events (${eventHashes.length})`);
+  }
+  if (sequence > treeSize) {
+    throw new RangeError(`sequence (${sequence}) must be <= tree_size (${treeSize})`);
+  }
+  const leaves = buildJournalLeafHashes(epochId, eventHashes, treeSize);
+  const root = subtreeRoot(leaves, 0, treeSize);
+  const path = rfc6962InclusionProof(leaves, sequence - 1, treeSize);
+  return {
+    epoch_id: epochId,
+    sequence,
+    event_hash: eventHashes[sequence - 1],
+    leaf_hash: leaves[sequence - 1],
+    tree_size: treeSize,
+    root,
+    path
+  };
+}
+function proveJournalConsistency(epochId, eventHashes, fromSize, toSize = eventHashes.length) {
+  assertValidEpochId(epochId);
+  assertSafeNonNegativeInt(fromSize, "from_size");
+  assertSafeNonNegativeInt(toSize, "to_size");
+  if (fromSize > toSize) {
+    throw new RangeError(`from_size (${fromSize}) must be <= to_size (${toSize})`);
+  }
+  if (toSize > eventHashes.length) {
+    throw new RangeError(`to_size (${toSize}) exceeds available events (${eventHashes.length})`);
+  }
+  const leaves = buildJournalLeafHashes(epochId, eventHashes, toSize);
+  const fromRoot = subtreeRoot(leaves, 0, fromSize);
+  const toRoot = subtreeRoot(leaves, 0, toSize);
+  const path = rfc6962ConsistencyProof(leaves, fromSize, toSize);
+  return {
+    epoch_id: epochId,
+    from_size: fromSize,
+    to_size: toSize,
+    from_root: fromRoot,
+    to_root: toRoot,
+    path
+  };
+}
+
+// src/passkey.ts
+import { createHash as createHash3, createPublicKey, verify } from "crypto";
+var FLAG_USER_PRESENT = 1;
+var FLAG_USER_VERIFIED = 4;
+var BASE64URL = /^[A-Za-z0-9_-]*$/;
+function base64urlDecode(value, field, maxBytes = 64 * 1024) {
+  if (typeof value !== "string" || !BASE64URL.test(value) || value.length === 0) {
+    throw new CollabError("passkey_assertion_invalid", `${field} must be non-empty base64url`);
+  }
+  const bytes = Buffer.from(value, "base64url");
+  if (bytes.length > maxBytes) {
+    throw new CollabError("passkey_assertion_invalid", `${field} exceeds ${maxBytes} bytes`);
+  }
+  return bytes;
+}
+function sha256(bytes) {
+  return createHash3("sha256").update(bytes).digest();
+}
+function personActChallenge(input) {
+  const challenge_bytes = canonicalJson({ protocol: PERSON_ACT_PROTOCOL, ...input });
+  return { challenge_bytes, challenge: sha256(challenge_bytes).toString("base64url") };
+}
+var ASSERTION_FIELDS = new Set(["credential_id", "authenticator_data", "client_data_json", "signature", "user_handle"]);
+function normalizePasskeyAssertion(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new CollabError("passkey_assertion_invalid", "The assertion must be a JSON object");
+  }
+  const input = value;
+  const unknown2 = Object.keys(input).filter((key) => !ASSERTION_FIELDS.has(key));
+  if (unknown2.length > 0) {
+    throw new CollabError("passkey_assertion_invalid", "The assertion has fields WebAuthn does not define", { fields: unknown2 });
+  }
+  const field = (name, maxBytes) => {
+    base64urlDecode(input[name], name, maxBytes);
+    return input[name];
+  };
+  const userHandle = input.user_handle === undefined || input.user_handle === null ? null : field("user_handle", 64);
+  return {
+    credential_id: field("credential_id", 1023),
+    authenticator_data: field("authenticator_data", 4096),
+    client_data_json: field("client_data_json", 4096),
+    signature: field("signature", 256),
+    user_handle: userHandle
+  };
+}
+function normalizePasskeyEnrollment(input) {
+  base64urlDecode(input.credential_id, "credential_id", 1023);
+  if (typeof input.public_key_spki !== "string") {
+    throw new CollabError("passkey_key_invalid", "public_key_spki must be base64url DER");
+  }
+  parsePasskeyPublicKey(input.public_key_spki);
+  if (input.algorithm !== -7) {
+    throw new CollabError("passkey_key_invalid", "Only ES256 (COSE algorithm -7) passkeys are supported");
+  }
+  const scope = validatePasskeyScope(input.rp_id, input.origin);
+  let label = null;
+  if (input.label !== undefined && input.label !== null) {
+    if (typeof input.label !== "string" || input.label.trim().length > 80 || /[\u0000-\u001f\u007f]/.test(input.label)) {
+      throw new CollabError("passkey_label_invalid", "label must be at most 80 characters without control characters");
+    }
+    label = input.label.trim() || null;
+  }
+  return {
+    credential_id: input.credential_id,
+    public_key_spki: input.public_key_spki,
+    algorithm: -7,
+    ...scope,
+    label
+  };
+}
+function parsePasskeyPublicKey(spki) {
+  const der = base64urlDecode(spki, "public_key_spki", 1024);
+  let key;
+  try {
+    key = createPublicKey({ key: der, format: "der", type: "spki" });
+  } catch {
+    throw new CollabError("passkey_key_invalid", "public_key_spki is not a DER SubjectPublicKeyInfo");
+  }
+  if (key.asymmetricKeyType !== "ec" || key.asymmetricKeyDetails?.namedCurve !== "prime256v1") {
+    throw new CollabError("passkey_key_invalid", "Only ES256 (P-256) passkeys are supported");
+  }
+  return key;
+}
+function passkeyFingerprint(spki) {
+  return sha256(base64urlDecode(spki, "public_key_spki", 1024)).toString("hex");
+}
+function validatePasskeyScope(rpId, origin) {
+  if (typeof rpId !== "string" || !/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(rpId)) {
+    throw new CollabError("passkey_scope_invalid", "rp_id must be a lowercase host name");
+  }
+  let url2;
+  try {
+    url2 = new URL(String(origin));
+  } catch {
+    throw new CollabError("passkey_scope_invalid", "origin must be a URL origin");
+  }
+  const secure = url2.protocol === "https:" || url2.protocol === "http:" && url2.hostname === "localhost";
+  const hostMatches = url2.hostname === rpId || url2.hostname.endsWith(`.${rpId}`);
+  if (!secure || !hostMatches || url2.origin !== origin) {
+    throw new CollabError("passkey_scope_invalid", "origin must be an https origin (or http://localhost) whose host is rp_id or one of its subdomains");
+  }
+  return { rp_id: rpId, origin: url2.origin };
+}
+function verifyPasskeyAssertion(input) {
+  const { passkey, assertion } = input;
+  if (assertion.credential_id !== passkey.credential_id) {
+    throw new CollabError("passkey_not_enrolled", "The assertion names a different credential");
+  }
+  const clientDataBytes = base64urlDecode(assertion.client_data_json, "client_data_json");
+  const authenticatorData = base64urlDecode(assertion.authenticator_data, "authenticator_data");
+  const signature = base64urlDecode(assertion.signature, "signature", 256);
+  let clientData;
+  try {
+    const parsed = JSON.parse(clientDataBytes.toString("utf8"));
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+      throw new Error("not an object");
+    clientData = parsed;
+  } catch {
+    throw new CollabError("passkey_assertion_invalid", "client_data_json is not a JSON object");
+  }
+  if (clientData.type !== "webauthn.get") {
+    throw new CollabError("passkey_assertion_invalid", "client data type must be webauthn.get");
+  }
+  if (clientData.challenge !== input.expected_challenge) {
+    throw new CollabError("passkey_challenge_mismatch", "The assertion signs a different act; request a fresh challenge for the current state");
+  }
+  if (clientData.origin !== passkey.origin || clientData.crossOrigin === true) {
+    throw new CollabError("passkey_origin_mismatch", "The assertion came from another origin");
+  }
+  if (authenticatorData.length < 37) {
+    throw new CollabError("passkey_assertion_invalid", "authenticator_data is too short");
+  }
+  if (!authenticatorData.subarray(0, 32).equals(sha256(passkey.rp_id))) {
+    throw new CollabError("passkey_rp_mismatch", "The assertion is for another relying party");
+  }
+  const flags = authenticatorData[32];
+  if ((flags & FLAG_USER_PRESENT) === 0 || (flags & FLAG_USER_VERIFIED) === 0) {
+    throw new CollabError("passkey_user_not_verified", "The authenticator did not report user presence and user verification");
+  }
+  const signCount = authenticatorData.readUInt32BE(33);
+  if ((signCount !== 0 || passkey.sign_count !== 0) && signCount <= passkey.sign_count) {
+    throw new CollabError("passkey_counter_regressed", "The signature counter did not increase");
+  }
+  const signed = Buffer.concat([authenticatorData, sha256(clientDataBytes)]);
+  const valid = verify("sha256", signed, { key: parsePasskeyPublicKey(passkey.public_key_spki), dsaEncoding: "der" }, signature);
+  if (!valid)
+    throw new CollabError("passkey_signature_invalid", "The passkey signature does not verify");
+  return { sign_count: signCount };
+}
+
+// src/proposal.ts
+function proposalBytes(content, rule = CONSENT_RULE) {
+  return canonicalJson({ protocol: PROPOSAL_BYTES_PROTOCOL, rule, ...content });
+}
+function aiPosition(input) {
+  const closed = Date.parse(input.now) >= Date.parse(input.closes_at);
+  const others = [...new Set(input.snapshot_voice_ids)].filter((voice) => voice !== input.author_voice_id).sort();
+  const lone = others.length === 0;
+  const qualifying_support_indexes = input.support_voice_ids.flatMap((voice, index) => lone || voice !== input.author_voice_id ? [index] : []);
+  const supported = new Set(qualifying_support_indexes.map((index) => input.support_voice_ids[index]));
+  const awaiting_voice_ids = others.filter((voice) => !supported.has(voice));
+  const result = (position) => ({
+    position,
+    closed,
+    qualifying_support_indexes,
+    awaiting_voice_ids
+  });
+  if (input.obsoleted)
+    return result(input.obsoleted);
+  const hasSupport = qualifying_support_indexes.length > 0;
+  if (!closed) {
+    if (input.unresolved_challenge)
+      return result("challenged");
+    return result(hasSupport && awaiting_voice_ids.length === 0 ? "consented" : "open");
+  }
+  if (input.unresolved_challenge)
+    return result("split");
+  return result(hasSupport ? "consented" : "lapsed");
+}
+
+// src/repository.ts
+import { createHash as createHash4 } from "crypto";
+import {
+  closeSync as closeSync5,
+  constants as fsConstants,
+  existsSync as existsSync3,
+  fstatSync as fstatSync3,
+  lstatSync as lstatSync3,
+  openSync as openSync5,
+  readlinkSync,
+  readSync as readSync3,
+  realpathSync,
+  statSync
+} from "fs";
+import { dirname as dirname3, isAbsolute as isAbsolute3, join as join4, relative, resolve as resolve4, sep } from "path";
+import { spawnSync as spawnSync2 } from "child_process";
+var GIT_TIMEOUT_MS = 5000;
+var MAX_GIT_OUTPUT = 1024 * 1024;
+var MAX_UNTRACKED_FILES = 1e4;
+var MAX_UNTRACKED_BYTES = 64 * 1024 * 1024;
+var MAX_UNTRACKED_HASH_MS = 2000;
+var MAX_SUCCESSOR_PATHS = 128;
+var MAX_SUCCESSOR_BYTES = 64 * 1024 * 1024;
+var MAX_SUCCESSOR_INSPECT_MS = 5000;
+var GIT_OBJECT_ID = /^[0-9a-f]{40,64}$/;
+var RAW_DIFF_HEADER = /^:([0-7]{6}) ([0-7]{6}) ([0-9a-f]{40,64}) ([0-9a-f]{40,64}) ([A-Z])$/;
+
+class RepositoryProbeTimeout extends Error {
+  constructor() {
+    super("Repository discovery exhausted its Git time budget");
+  }
+}
+function inspectRepository(rootInput, explicitRepositoryKey, metadataOnly = false, options = {}) {
+  const requested = resolve4(rootInput);
+  if (!existsSync3(requested) || !statSync(requested).isDirectory()) {
+    throw new CollabError("workspace_not_directory", "Workspace root must be an existing directory", { root_path: requested });
+  }
+  const requestedRoot = realpathSync(requested);
+  const topLevel = mayFindRepository(requestedRoot) ? gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"], options) : null;
+  const rootPath = topLevel && existsSync3(topLevel) ? realpathSync(topLevel) : requestedRoot;
+  const explicitKey = explicitRepositoryKey?.trim();
+  if (!topLevel) {
+    const repositoryKey2 = explicitKey ? `explicit:${sha2562(explicitKey)}` : `local-path:${sha2562(rootPath)}`;
+    return {
+      requested_root_path: requestedRoot,
+      root_path: rootPath,
+      repository_key: repositoryKey2,
+      git_common_dir_hash: null,
+      worktree_fingerprint: `path:${sha2562(rootPath)}`,
+      checkpoint: {
+        worktree_id: worktreeId(rootPath, `path:${rootPath}`),
+        head_sha: null,
+        branch: null,
+        dirty: null,
+        captured_at: new Date().toISOString()
+      }
+    };
+  }
+  const commonDirOutput = gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-common-dir"], options) ?? gitOutput(rootPath, ["rev-parse", "--git-common-dir"], options);
+  const gitDirOutput = gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-dir"], options) ?? gitOutput(rootPath, ["rev-parse", "--git-dir"], options);
+  if (!commonDirOutput || !gitDirOutput) {
+    throw new CollabError("git_identity_unavailable", "Git recognized the repository but its local identity could not be resolved", { root_path: rootPath });
+  }
+  const commonDir = realpathIfPresent(resolveGitPath(rootPath, commonDirOutput));
+  const gitDir = realpathIfPresent(resolveGitPath(rootPath, gitDirOutput));
+  const commonDirHash = sha2562(commonDir);
+  const repositoryKey = explicitKey ? `explicit:${sha2562(explicitKey)}` : `local-git:${commonDirHash}`;
+  const fingerprint = `git:${sha2562(`${commonDir}\x00${gitDir}`)}`;
+  const id = worktreeId(rootPath, fingerprint);
+  return {
+    requested_root_path: requestedRoot,
+    root_path: rootPath,
+    repository_key: repositoryKey,
+    portable_repository_key: explicitKey || options.portable === false ? null : portableRepositoryKey(rootPath, options),
+    git_common_dir_hash: commonDirHash,
+    worktree_fingerprint: fingerprint,
+    checkpoint: metadataOnly ? { worktree_id: id, head_sha: null, branch: null, dirty: null, captured_at: new Date().toISOString() } : captureRepoCheckpoint(rootPath, id)
+  };
+}
+function portableRepositoryKey(rootPath, optionsOrDeadline = {}) {
+  const options = typeof optionsOrDeadline === "number" ? { deadline: optionsOrDeadline } : optionsOrDeadline;
+  const origin = gitOutput(rootPath, ["config", "--get-all", "remote.origin.url"], options);
+  const remote = origin ?? gitOutput(rootPath, ["config", "--get-all", "remote.github.url"], options);
+  const canonical = remote ? canonicalRepositoryRemote(remote) : null;
+  if (!canonical || gitOutput(rootPath, ["rev-parse", "--is-shallow-repository"], options) !== "false")
+    return null;
+  const roots = successorGit(rootPath, ["rev-list", "--max-parents=0", "HEAD"], MAX_GIT_OUTPUT, options);
+  if (roots.timed_out && options.deadline !== undefined)
+    throw new RepositoryProbeTimeout;
+  if (!roots.ok)
+    return null;
+  const root = roots.stdout.toString("utf8").trim();
+  if (!GIT_OBJECT_ID.test(root))
+    return null;
+  return `git-root-remote:v1:${sha2562(`${root}\x00${canonical}`)}`;
+}
+function canonicalRepositoryRemote(value) {
+  if (/[\s\x00-\x1f\x7f]/.test(value) || value.includes("::") || value.includes("://") && !/^(https?|ssh|git):\/\//i.test(value))
+    return null;
+  let host;
+  let path;
+  let port = "";
+  try {
+    if (/^(https?|ssh|git):\/\//i.test(value)) {
+      const url2 = new URL(value);
+      if (url2.search || url2.hash)
+        return null;
+      host = url2.hostname.toLowerCase();
+      path = url2.pathname;
+      port = url2.port && !(url2.protocol === "ssh:" && url2.port === "22" || url2.protocol === "git:" && url2.port === "9418") ? `:${url2.port}` : "";
+    } else {
+      const scp = /^(?:[^/@:]+@)?([^/:]+):(.+)$/.exec(value);
+      if (!scp)
+        return null;
+      host = scp[1].toLowerCase();
+      path = scp[2];
+    }
+    path = path.replace(/^\/+|\/+$/g, "").replace(/\.git$/i, "");
+    if (!host || !path || path.split("/").some((part) => !part || part === "." || part === "..") || /[%\\?#]/.test(path))
+      return null;
+    return `${host}${port}/${path.toLowerCase()}`;
+  } catch {
+    return null;
+  }
+}
+function captureRepoCheckpoint(rootPath, id) {
+  const head = gitOutput(rootPath, ["rev-parse", "--verify", "HEAD"]);
+  if (!head) {
+    return {
+      worktree_id: id,
+      head_sha: null,
+      branch: null,
+      dirty: null,
+      captured_at: new Date().toISOString()
+    };
+  }
+  const branch = gitOutput(rootPath, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
+  const pathStateBefore = gitBytes(rootPath, [
+    "status",
+    "--porcelain=v1",
+    "-z",
+    "--untracked-files=all"
+  ]);
+  const indexDigest = gitDigest(rootPath, ["ls-files", "-s", "-z"]);
+  const trackedState = gitBytes(rootPath, [
+    "diff",
+    "--no-ext-diff",
+    "--binary",
+    "HEAD",
+    "--"
+  ]);
+  const untrackedPaths = gitBytes(rootPath, [
+    "ls-files",
+    "--others",
+    "--exclude-standard",
+    "-z"
+  ]);
+  const untrackedDigest = untrackedPaths.ok ? digestUntrackedContent(rootPath, untrackedPaths.stdout) : null;
+  const pathStateAfter = gitBytes(rootPath, [
+    "status",
+    "--porcelain=v1",
+    "-z",
+    "--untracked-files=all"
+  ]);
+  const stablePathState = pathStateBefore.ok && pathStateAfter.ok && pathStateBefore.stdout.equals(pathStateAfter.stdout);
+  return {
+    worktree_id: id,
+    head_sha: /^[0-9a-f]{40,64}$/i.test(head) ? head.toLowerCase() : null,
+    branch,
+    dirty: pathStateAfter.ok ? pathStateAfter.stdout.length > 0 : null,
+    algorithm: "git-state/v1",
+    index_sha256: indexDigest,
+    state_sha256: trackedState.ok && stablePathState && untrackedDigest ? sha256Bytes(Buffer.concat([
+      trackedState.stdout,
+      Buffer.from([0]),
+      pathStateAfter.stdout,
+      Buffer.from([0]),
+      Buffer.from(untrackedDigest, "hex")
+    ])) : null,
+    source: "server_observed",
+    captured_at: new Date().toISOString()
+  };
+}
+function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
+  const refuse = (reason) => ({
+    ok: false,
+    commit_sha: commitSha,
+    reason
+  });
+  if (!GIT_OBJECT_ID.test(commitSha) || !GIT_OBJECT_ID.test(parentSha)) {
+    return refuse("The checkpoint HEADs are not Git object IDs");
+  }
+  const commitObject = successorGit(rootPath, ["cat-file", "commit", commitSha]);
+  if (!commitObject.ok)
+    return refuse(`Git could not read commit ${commitSha}`);
+  const headerEnd = commitObject.stdout.indexOf(`
+
+`);
+  const parents = commitObject.stdout.subarray(0, headerEnd === -1 ? commitObject.stdout.length : headerEnd).toString("utf8").split(`
+`).filter((line) => line.startsWith("parent ")).map((line) => line.slice("parent ".length));
+  if (parents.length > 1) {
+    return refuse(`HEAD ${commitSha} is a merge commit, not one fast-forward commit`);
+  }
+  if (parents[0] !== parentSha) {
+    const descends = successorGitExitCode(rootPath, [
+      "merge-base",
+      "--is-ancestor",
+      parentSha,
+      commitSha
+    ]) === 0;
+    return refuse(descends ? `HEAD ${commitSha} is more than one commit ahead of the result checkpoint HEAD ${parentSha}` : `HEAD ${commitSha} does not descend from the result checkpoint HEAD ${parentSha}`);
+  }
+  const diff = successorGit(rootPath, [
+    "diff-tree",
+    "-r",
+    "-z",
+    "--raw",
+    "--no-renames",
+    "--ignore-submodules=none",
+    parentSha,
+    commitSha,
+    "--"
+  ]);
+  const fields = diff.ok ? splitNul(diff.stdout) : null;
+  if (!fields || fields.length % 2 !== 0) {
+    return refuse(`Git could not list the paths commit ${commitSha} changes`);
+  }
+  if (fields.length / 2 > MAX_SUCCESSOR_PATHS) {
+    return refuse(`Commit ${commitSha} changes more than ${MAX_SUCCESSOR_PATHS} paths`);
+  }
+  const budget = { bytes: MAX_SUCCESSOR_BYTES, deadline: performance.now() + MAX_SUCCESSOR_INSPECT_MS };
+  const changes = [];
+  for (let index = 0;index < fields.length; index += 2) {
+    const header = RAW_DIFF_HEADER.exec(fields[index].toString("utf8"));
+    const pathBytes = fields[index + 1];
+    if (!header || !safeGitRelativePath(pathBytes)) {
+      return refuse(`Git reported a change in commit ${commitSha} that cannot be read safely`);
+    }
+    const path = pathBytes.toString("utf8");
+    const [, oldMode, mode, , blob, status] = header;
+    const modeVouched = status === "A" || status === "M" && oldMode === mode;
+    if (status === "D" || mode !== "100644" && mode !== "100755" || !modeVouched) {
+      changes.push({ path, blob_sha256: null });
+      continue;
+    }
+    if (performance.now() > budget.deadline || budget.bytes <= 0) {
+      return refuse(`Inspecting commit ${commitSha} exceeded its bounds`);
+    }
+    const content = successorGit(rootPath, ["cat-file", "blob", blob], budget.bytes);
+    if (!content.ok) {
+      return refuse(`Git could not read the committed bytes of ${path} within the inspection bounds`);
+    }
+    budget.bytes -= content.stdout.length;
+    changes.push({ path, blob_sha256: sha256Bytes(content.stdout) });
+  }
+  return { ok: true, commit_sha: commitSha, parent_sha: parentSha, changes };
+}
+var MAX_CITED_FILE_BYTES = 16 * 1024 * 1024;
+function hashWorktreeFile(rootPath, cited, maxBytes = MAX_CITED_FILE_BYTES) {
+  let root;
+  try {
+    root = realpathSync(rootPath);
+  } catch {
+    return { status: "unreadable", path: null };
+  }
+  if (cited.includes("\x00") || cited.includes("\\"))
+    return { status: "outside", path: null };
+  const candidate = resolve4(root, cited);
+  const inside = relative(root, candidate);
+  if (!inside || inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute3(inside)) {
+    return { status: "outside", path: null };
+  }
+  let walked = root;
+  let isFile = false;
+  const parts = inside.split(sep);
+  for (const [index, part] of parts.entries()) {
+    walked = `${walked}${sep}${part}`;
+    let stat;
+    try {
+      stat = lstatSync3(walked);
+    } catch (error51) {
+      return { status: error51.code === "ENOENT" ? "missing" : "unreadable", path: inside };
+    }
+    if (stat.isSymbolicLink())
+      return { status: "symlink", path: inside };
+    if (index < parts.length - 1 && !stat.isDirectory())
+      return { status: "missing", path: inside };
+    isFile = stat.isFile();
+  }
+  if (!isFile)
+    return { status: "not_a_file", path: inside };
+  let descriptor = null;
+  try {
+    descriptor = openSync5(walked, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
+    const before = fstatSync3(descriptor);
+    if (!before.isFile())
+      return { status: "not_a_file", path: inside };
+    if (before.size > maxBytes)
+      return { status: "too_large", path: inside };
+    const hash2 = createHash4("sha256");
+    const buffer = Buffer.allocUnsafe(64 * 1024);
+    let total = 0;
+    while (true) {
+      const count = readSync3(descriptor, buffer, 0, buffer.length, null);
+      if (count === 0)
+        break;
+      total += count;
+      if (total > maxBytes)
+        return { status: "too_large", path: inside };
+      hash2.update(buffer.subarray(0, count));
+    }
+    const after = fstatSync3(descriptor);
+    if (before.ino !== after.ino || before.size !== after.size || before.mtimeMs !== after.mtimeMs) {
+      return { status: "changed_while_read", path: inside };
+    }
+    return { status: "hashed", path: inside, sha256: hash2.digest("hex"), size: total };
+  } catch (error51) {
+    return { status: error51.code === "ELOOP" ? "symlink" : "unreadable", path: inside };
+  } finally {
+    if (descriptor !== null)
+      closeSync5(descriptor);
+  }
+}
+function gitCommitExists(rootPath, sha, options = {}) {
+  if (!/^[0-9a-f]{7,64}$/i.test(sha))
+    return false;
+  const inRepository = runGit(rootPath, ["rev-parse", "--git-dir"], options);
+  if (!inRepository.ok)
+    return null;
+  const timeout = gitTimeout(options);
+  if (timeout <= 0)
+    return null;
+  const result = spawnRepositoryGit(["-C", rootPath, ...SUCCESSOR_GIT_ARGS, "cat-file", "-e", `${sha}^{commit}`], {
+    timeout,
+    stdio: ["ignore", "ignore", "ignore"],
+    env: successorGitEnv()
+  }, options);
+  if (spawnFailed(result))
+    return null;
+  return result.status === 0;
+}
+function mayFindRepository(rootPath) {
+  if (process.env.GIT_DIR || process.env.GIT_WORK_TREE)
+    return true;
+  for (let directory = rootPath;; directory = dirname3(directory)) {
+    try {
+      lstatSync3(join4(directory, ".git"));
+      return true;
+    } catch (error51) {
+      const code = error51.code;
+      if (code !== "ENOENT" && code !== "ENOTDIR")
+        return true;
+    }
+    if (dirname3(directory) === directory)
+      return false;
+  }
+}
+function exitedDespiteTimeout(result) {
+  return result.error?.code === "ETIMEDOUT" && result.status !== null && result.signal == null;
+}
+function spawnFailed(result) {
+  return result.error != null && !exitedDespiteTimeout(result);
+}
+function spawnTimedOut(result) {
+  return result.error?.code === "ETIMEDOUT" && !exitedDespiteTimeout(result);
+}
+function worktreeId(rootPath, fingerprint) {
+  return `wt_${sha2562(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
+}
+function resolveGitPath(rootPath, value) {
+  return value.startsWith("/") ? value : resolve4(rootPath, value);
+}
+function realpathIfPresent(path) {
+  return existsSync3(path) ? realpathSync(path) : resolve4(path);
+}
+function gitOutput(rootPath, args, options = {}) {
+  const result = runGit(rootPath, args, options);
+  if (result.timed_out && options.deadline !== undefined)
+    throw new RepositoryProbeTimeout;
+  if (!result.ok)
+    return null;
+  const value = result.stdout.trim();
+  return value.length > 0 ? value : null;
+}
+function runGit(rootPath, args, options) {
+  const timeout = gitTimeout(options);
+  if (timeout <= 0)
+    return { ok: false, timed_out: true, stdout: "" };
+  const result = spawnRepositoryGit(["-C", rootPath, ...args], {
+    encoding: "utf8",
+    timeout,
+    maxBuffer: MAX_GIT_OUTPUT,
+    stdio: ["ignore", "pipe", "ignore"],
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" }
+  }, options);
+  return {
+    ok: result.status === 0 && !spawnFailed(result),
+    timed_out: spawnTimedOut(result),
+    stdout: typeof result.stdout === "string" ? result.stdout : ""
+  };
+}
+function gitDigest(rootPath, args) {
+  const result = gitBytes(rootPath, args);
+  return result.ok ? sha256Bytes(result.stdout) : null;
+}
+function gitBytes(rootPath, args, maxBuffer = MAX_GIT_OUTPUT) {
+  const result = spawnSync2("git", ["-C", rootPath, ...args], {
+    timeout: GIT_TIMEOUT_MS,
+    maxBuffer,
+    stdio: ["ignore", "pipe", "ignore"]
+  });
+  return {
+    ok: result.status === 0 && !spawnFailed(result),
+    stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0)
+  };
+}
+var SUCCESSOR_GIT_ARGS = ["-c", "core.commitGraph=false", "--no-replace-objects"];
+function successorGitEnv() {
+  return { ...process.env, GIT_GRAFT_FILE: "/dev/null/agenttool-collab-no-grafts" };
+}
+function successorGit(rootPath, args, maxBuffer = MAX_GIT_OUTPUT, options = {}) {
+  const timeout = gitTimeout(options);
+  if (timeout <= 0)
+    return { ok: false, timed_out: true, stdout: Buffer.alloc(0) };
+  const result = spawnRepositoryGit(["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
+    timeout,
+    maxBuffer,
+    stdio: ["ignore", "pipe", "ignore"],
+    env: successorGitEnv()
+  }, options);
+  return {
+    ok: result.status === 0 && !spawnFailed(result),
+    timed_out: spawnTimedOut(result),
+    stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0)
+  };
+}
+function spawnRepositoryGit(args, options, probe) {
+  return probe.spawn ? probe.spawn(args, options) : spawnSync2("git", args, options);
+}
+function gitTimeout(options) {
+  return options.deadline === undefined ? GIT_TIMEOUT_MS : Math.min(GIT_TIMEOUT_MS, Math.ceil(options.deadline - (options.now ?? (() => performance.now()))()));
+}
+function successorGitExitCode(rootPath, args) {
+  const result = spawnSync2("git", ["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
+    timeout: GIT_TIMEOUT_MS,
+    stdio: ["ignore", "ignore", "ignore"],
+    env: successorGitEnv()
+  });
+  return spawnFailed(result) ? null : result.status;
+}
+function digestUntrackedContent(rootPath, paths) {
+  const entries = splitNul(paths);
+  if (!entries || entries.length > MAX_UNTRACKED_FILES)
+    return null;
+  const budget = {
+    remainingBytes: MAX_UNTRACKED_BYTES,
+    deadline: performance.now() + MAX_UNTRACKED_HASH_MS
+  };
+  const aggregate = createHash4("sha256");
+  aggregate.update("agenttool.collab/untracked-state/v1\x00");
+  for (const entry of entries) {
+    if (performance.now() > budget.deadline)
+      return null;
+    if (!safeGitRelativePath(entry))
+      return null;
+    const absolute = Buffer.concat([
+      Buffer.from(rootPath),
+      Buffer.from("/"),
+      entry
+    ]);
+    let stat;
+    try {
+      stat = lstatSync3(absolute);
+      aggregate.update(lengthPrefix(entry.length));
+      aggregate.update(entry);
+      if (stat.isSymbolicLink()) {
+        const target = readlinkSync(absolute, { encoding: "buffer" });
+        if (target.length > budget.remainingBytes || performance.now() > budget.deadline) {
+          return null;
+        }
+        budget.remainingBytes -= target.length;
+        aggregate.update("symlink\x00");
+        aggregate.update(lengthPrefix(target.length));
+        aggregate.update(target);
+      } else if (stat.isFile()) {
+        const digest = digestStableFile(absolute, budget);
+        if (!digest)
+          return null;
+        aggregate.update("file\x00");
+        aggregate.update(lengthPrefix(stat.mode & 73));
+        aggregate.update(digest);
+      } else {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+  }
+  return aggregate.digest("hex");
+}
+function digestStableFile(path, budget) {
+  let descriptor = null;
+  try {
+    descriptor = openSync5(path, "r");
+    const before = fstatSync3(descriptor);
+    if (!before.isFile() || before.size > budget.remainingBytes || performance.now() > budget.deadline)
+      return null;
+    const hash2 = createHash4("sha256");
+    const buffer = Buffer.allocUnsafe(64 * 1024);
+    while (true) {
+      if (performance.now() > budget.deadline)
+        return null;
+      const count = readSync3(descriptor, buffer, 0, buffer.length, null);
+      if (count === 0)
+        break;
+      hash2.update(buffer.subarray(0, count));
+    }
+    const after = fstatSync3(descriptor);
+    if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mode !== after.mode || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs)
+      return null;
+    budget.remainingBytes -= before.size;
+    return hash2.digest();
+  } catch {
+    return null;
+  } finally {
+    if (descriptor !== null)
+      closeSync5(descriptor);
+  }
+}
+function splitNul(value) {
+  if (value.length === 0)
+    return [];
+  const entries = [];
+  let start = 0;
+  for (let index = 0;index < value.length; index += 1) {
+    if (value[index] !== 0)
+      continue;
+    if (index === start)
+      return null;
+    entries.push(value.subarray(start, index));
+    start = index + 1;
+  }
+  return start === value.length ? entries : null;
+}
+function safeGitRelativePath(value) {
+  if (value.length === 0 || value[0] === 47)
+    return false;
+  let start = 0;
+  for (let index = 0;index <= value.length; index += 1) {
+    if (index !== value.length && value[index] !== 47)
+      continue;
+    const component = value.subarray(start, index);
+    if (component.length === 0 || component.length === 1 && component[0] === 46 || component.length === 2 && component[0] === 46 && component[1] === 46)
+      return false;
+    start = index + 1;
+  }
+  return true;
+}
+function lengthPrefix(value) {
+  const prefix = Buffer.allocUnsafe(8);
+  prefix.writeBigUInt64BE(BigInt(value));
+  return prefix;
+}
+function sha2562(value) {
+  return createHash4("sha256").update(value).digest("hex");
+}
+function sha256Bytes(value) {
+  return createHash4("sha256").update(value).digest("hex");
+}
+
+// src/store.ts
+var GENESIS_HASH = "0".repeat(64);
+var APPLICATION_ID = 1096041292;
+var HARDENED_PREVIEW_SCHEMA_VERSION = 2;
+var SCHEMA_VERSION = 3;
+var DEFAULT_LEASE_SECONDS = 15 * 60;
+var MAX_LEASE_SECONDS = 60 * 60;
+var REPOSITORY_DISCOVERY_MS = 250;
+var MAX_TEXT = 8000;
+var MAX_REPORT_BODY = 9000;
+var MAX_DEPENDENCIES = 128;
+var MAX_PATH_SCOPES = 128;
+var MAX_PATH_SCOPE_LENGTH = 500;
+var MAX_PATH_SCOPES_TOTAL = 16000;
+var MAX_REPORT_REFS = 128;
+var MAX_REPORT_REF_LENGTH = 2000;
+var DEFAULT_PRESENCE_SECONDS = 2 * 60;
+var MAX_PRESENCE_SECONDS = 60 * 60;
+var MAX_SESSION_CAPABILITIES = 32;
+var MAX_SESSION_CAPABILITY_LENGTH = 100;
+var DEFAULT_SESSION_LIST_LIMIT = 100;
+var MAX_SESSION_LIST_LIMIT = 500;
+var DEFAULT_NEXT_EVENT_LIMIT = 50;
+var MAX_NEXT_EVENT_LIMIT = 50;
+var SESSION_TOKEN_BYTES = 32;
+var SESSION_END_RECOVERY_NOTE = "collab_session_end with release_leases released this expired lease from its own session";
+var PRESENCE_SESSION_COLUMNS = [
+  "id",
+  "workspace_id",
+  "epoch_id",
+  "client_instance_id",
+  "actor_label",
+  "actor_key",
+  "runtime_kind",
+  "provider_label",
+  "model_label",
+  "declared_capabilities_json",
+  "version",
+  "joined_at",
+  "last_seen_at",
+  "presence_expires_at",
+  "left_at"
+];
+var COORDINATION_SESSION_COLUMNS = [
+  "id",
+  "workspace_id",
+  "worktree_id",
+  "actor",
+  "role",
+  "parent_session_id",
+  "status",
+  "generation",
+  "token_hash",
+  "joined_at",
+  "last_seen_at",
+  "ended_at",
+  "cursor_epoch_id",
+  "cursor_sequence",
+  "cursor_hash",
+  "cursor_version",
+  "reset_generation",
+  "cursor_recovery_required"
+];
+var SQLITE_BUSY_RETRY_MS = 15000;
+var V2_GUARD_TRIGGERS = [
+  "tasks_v2_insert_guard",
+  "tasks_v2_update_guard",
+  "tasks_v2_delete_guard",
+  "artifacts_v2_insert_guard",
+  "handoffs_v2_insert_guard"
+];
+
+class CollabStoreCore {
+  db;
+  now;
+  filesystemPath;
+  migrationFailpoint;
+  revealFailpoint;
+  repositoryDiscovery;
+  eventReader;
+  closed = false;
+  ambientReceiptPlan = null;
+  resumeAwaySince = new Map;
+  constructor(path, options = {}) {
+    this.now = options.now ?? (() => new Date);
+    this.migrationFailpoint = options.migration_failpoint;
+    this.revealFailpoint = options.reveal_failpoint;
+    this.repositoryDiscovery = {
+      ...options.repository_discovery,
+      budget_ms: options.repository_discovery?.budget_ms ?? REPOSITORY_DISCOVERY_MS,
+      now: options.repository_discovery?.now ?? (() => performance.now())
+    };
+    const databasePath = path === ":memory:" ? path : resolve5(path);
+    if (databasePath !== ":memory:") {
+      const parent = dirname4(databasePath);
+      const parentAlreadyExisted = existsSync4(parent);
+      mkdirSync3(parent, { recursive: true, mode: 448 });
+      if (!parentAlreadyExisted)
+        chmodSync3(parent, 448);
+      if (existsSync4(databasePath)) {
+        assertSafeDatabaseFile(databasePath);
+      } else {
+        try {
+          const descriptor = openSync6(databasePath, "wx", 384);
+          closeSync6(descriptor);
+        } catch (error51) {
+          if (error51.code !== "EEXIST")
+            throw error51;
+          assertSafeDatabaseFile(databasePath);
+        }
+      }
+      this.filesystemPath = databasePath;
+    }
+    this.db = new Database(databasePath, { create: true, strict: true });
+    try {
+      this.db.exec("PRAGMA busy_timeout = 5000");
+      this.preflightDatabase();
+      this.initialize();
+    } catch (error51) {
+      this.db.close();
+      throw error51;
+    }
+  }
+  close() {
+    this.closed = true;
+    this.eventReader?.close();
+    this.eventReader = undefined;
+    this.db.close();
+  }
+  nonblockingEventReader() {
+    if (this.closed)
+      throw new CollabError("store_closed", "The collaboration store is closed");
+    if (!this.filesystemPath) {
+      if (this.db.inTransaction) {
+        throw new CollabError("event_read_busy", "Finish the active transaction before observing events");
+      }
+      return this.db;
+    }
+    if (!this.eventReader) {
+      const reader = new Database(this.filesystemPath, { readonly: true, strict: true });
+      try {
+        reader.exec("PRAGMA busy_timeout = 0; PRAGMA query_only = ON");
+        this.eventReader = reader;
+      } catch (error51) {
+        reader.close();
+        throw error51;
+      }
+    }
+    return this.eventReader;
+  }
+  defaultSessionCredentialPath(sessionId) {
+    if (!this.filesystemPath) {
+      throw new CollabError("session_file_path_required", "An explicit credential file path is required for an in-memory database");
+    }
+    const id = validateId(sessionId, "session_id");
+    return join5(dirname4(this.filesystemPath), "collab-sessions", `${id}.json`);
+  }
+  initialize() {
+    this.db.exec("PRAGMA foreign_keys = ON");
+    this.db.exec("PRAGMA busy_timeout = 5000");
+    const legacyPreparation = this.prepareLegacyMigration();
+    const migrate = this.db.transaction(() => {
+      const applicationId = pragmaNumber(this.db, "application_id");
+      const userVersion = pragmaNumber(this.db, "user_version");
+      if (applicationId !== 0 && applicationId !== APPLICATION_ID) {
+        throw new CollabError("database_application_mismatch", "The SQLite file belongs to another application", { expected_application_id: APPLICATION_ID, actual_application_id: applicationId });
+      }
+      if (userVersion > SCHEMA_VERSION) {
+        throw new CollabError("database_version_too_new", "The collaboration database was created by a newer package version", { supported_schema_version: SCHEMA_VERSION, actual_schema_version: userVersion });
+      }
+      const tables = this.tableNames();
+      if (tables.length === 0) {
+        this.createLegacySchema();
+        this.migrationFailpoint?.("legacy_schema_created");
+      } else {
+        this.validateLegacyOrV2Shape(userVersion);
+      }
+      const versionAfterLock = pragmaNumber(this.db, "user_version");
+      if (versionAfterLock < HARDENED_PREVIEW_SCHEMA_VERSION) {
+        this.migrateToV2(legacyPreparation);
+      } else if (versionAfterLock === HARDENED_PREVIEW_SCHEMA_VERSION) {
+        this.migrateHardenedPreviewToV3();
+      }
+      this.validateV2Shape("coordination_sessions", [
+        HARDENED_PREVIEW_SCHEMA_VERSION,
+        SCHEMA_VERSION
+      ]);
+      this.validateAllJournals();
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS repository_aliases (
+          worktree_id TEXT PRIMARY KEY REFERENCES worktrees(id),
+          portable_key TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS repository_aliases_key_idx ON repository_aliases(portable_key);
+        CREATE TABLE IF NOT EXISTS repository_discovery (
+          worktree_id TEXT PRIMARY KEY REFERENCES worktrees(id),
+          fingerprint TEXT NOT NULL,
+          outcome TEXT NOT NULL CHECK (outcome IN ('checked', 'unresolvable'))
+        );
+        CREATE TABLE IF NOT EXISTS session_lease_lapses (
+          lease_id TEXT PRIMARY KEY,
+          effective_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS proposal_terms (
+          report_id TEXT PRIMARY KEY REFERENCES reports(id),
+          workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+          rule TEXT NOT NULL,
+          criteria TEXT NOT NULL,
+          extent TEXT NOT NULL,
+          known_conflicts TEXT,
+          origin TEXT NOT NULL CHECK (origin IN ('ai', 'person_relayed')),
+          topic TEXT,
+          closes_at TEXT NOT NULL,
+          voices_json TEXT NOT NULL,
+          author_voice_id TEXT NOT NULL,
+          proposal_sha256 TEXT NOT NULL,
+          opened_event_id TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS proposal_terms_workspace_idx
+          ON proposal_terms(workspace_id, created_at);
+        CREATE TABLE IF NOT EXISTS proposal_person_acts (
+          id TEXT PRIMARY KEY,
+          workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+          proposal_report_id TEXT NOT NULL REFERENCES proposal_terms(report_id),
+          proposal_sha256 TEXT NOT NULL,
+          act TEXT NOT NULL CHECK (act IN ('agree', 'reject')),
+          party TEXT NOT NULL CHECK (party IN ('person')),
+          basis TEXT NOT NULL CHECK (basis IN ('relayed_by_session', 'controlling_terminal', 'user_verified_passkey')),
+          reason TEXT,
+          -- No foreign key: additive tables never reference the session table,
+          -- which the schema-2 preview upgrade renames.
+          relayed_by_session_id TEXT,
+          ai_snapshot_json TEXT NOT NULL,
+          proof_json TEXT,
+          created_at TEXT NOT NULL,
+          event_sequence INTEGER NOT NULL,
+          CHECK (act = 'reject' OR basis <> 'relayed_by_session')
+        );
+        CREATE INDEX IF NOT EXISTS proposal_person_acts_proposal_idx
+          ON proposal_person_acts(proposal_report_id, event_sequence);
+        CREATE TABLE IF NOT EXISTS person_passkeys (
+          credential_id TEXT PRIMARY KEY,
+          public_key_spki TEXT NOT NULL,
+          algorithm INTEGER NOT NULL CHECK (algorithm = -7),
+          rp_id TEXT NOT NULL,
+          origin TEXT NOT NULL,
+          label TEXT,
+          fingerprint TEXT NOT NULL,
+          sign_count INTEGER NOT NULL DEFAULT 0,
+          enrolled_at TEXT NOT NULL,
+          revoked_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS person_addressed_reports (
+          report_id TEXT PRIMARY KEY REFERENCES reports(id),
+          workspace_id TEXT NOT NULL REFERENCES workspaces(id)
+        );
+        CREATE TABLE IF NOT EXISTS session_parent_attestations (
+          session_id TEXT PRIMARY KEY,
+          parent_session_id TEXT NOT NULL,
+          basis TEXT NOT NULL CHECK (basis IN ('same_mcp_process')),
+          attested_at TEXT NOT NULL
+        );
+        -- Collab Notes view state (spec 8.1): what the notes surface last showed
+        -- each session. Never journaled and never cited, so it can be lost or
+        -- rebuilt without harm; no foreign keys, so older builds never see it.
+        CREATE TABLE IF NOT EXISTS note_marks (
+          workspace_id TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          shown_through_sequence INTEGER NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (workspace_id, session_id)
+        );
+        CREATE TABLE IF NOT EXISTS note_shown (
+          workspace_id TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          item_id TEXT NOT NULL,
+          shown_at TEXT NOT NULL,
+          PRIMARY KEY (workspace_id, session_id, item_id)
+        );
+        -- Which ballots may still need a reveal, so housekeeping finds due
+        -- ones without scanning events. state is open or closed.
+        CREATE TABLE IF NOT EXISTS note_ballots (
+          workspace_id TEXT NOT NULL,
+          ballot_id TEXT NOT NULL,
+          closes_at TEXT NOT NULL,
+          state TEXT NOT NULL,
+          PRIMARY KEY (workspace_id, ballot_id)
+        );
+        CREATE INDEX IF NOT EXISTS note_ballots_state_idx ON note_ballots(workspace_id, state, closes_at);
+        -- consent/v2 set-asides: one row per proposal.challenge_set_aside
+        -- event, rebuilt from those events on every open, so losing it loses
+        -- nothing the journal records. No foreign keys; older builds ignore it.
+        CREATE TABLE IF NOT EXISTS proposal_set_asides (
+          id TEXT PRIMARY KEY,
+          workspace_id TEXT NOT NULL,
+          proposal_report_id TEXT NOT NULL,
+          challenge_report_id TEXT NOT NULL,
+          set_aside_json TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          event_sequence INTEGER NOT NULL,
+          UNIQUE (workspace_id, challenge_report_id)
+        );
+        CREATE INDEX IF NOT EXISTS proposal_set_asides_proposal_idx
+          ON proposal_set_asides(workspace_id, proposal_report_id, event_sequence);
+      `);
+      this.db.exec(`
+        INSERT OR IGNORE INTO note_ballots (workspace_id, ballot_id, closes_at, state)
+        SELECT workspace_id, entity_id, json_extract(payload_json, '$.closes_at'), 'open' FROM events
+        WHERE type = 'ballot.opened' AND json_type(payload_json, '$.closes_at') = 'text';
+        UPDATE note_ballots SET state = 'closed' WHERE state <> 'closed' AND EXISTS (
+          SELECT 1 FROM events e WHERE e.workspace_id = note_ballots.workspace_id
+            AND e.type = 'ballot.closed' AND e.entity_id = note_ballots.ballot_id
+        );
+        INSERT OR IGNORE INTO proposal_set_asides (
+          id, workspace_id, proposal_report_id, challenge_report_id, set_aside_json, created_at, event_sequence
+        )
+        SELECT json_extract(payload_json, '$.set_aside.id'), workspace_id, entity_id,
+          json_extract(payload_json, '$.set_aside.challenge_report_id'), json_extract(payload_json, '$.set_aside'),
+          occurred_at, sequence
+        FROM events
+        WHERE type = 'proposal.challenge_set_aside'
+          AND json_type(payload_json, '$.set_aside.id') = 'text'
+          AND json_type(payload_json, '$.set_aside.challenge_report_id') = 'text'
+        ORDER BY workspace_id, sequence;
+      `);
+      if (this.tableNames().includes("proposal_rejections") && this.db.query(`SELECT 1 FROM proposal_rejections LIMIT 1`).get()) {
+        throw new CollabError("preview_journal_unsupported", "This journal holds rejections from the unreleased consent preview; use a fresh journal");
+      }
+      this.db.exec(`PRAGMA application_id = ${APPLICATION_ID}`);
+      this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+    });
+    retrySqliteBusy(() => migrate.immediate());
+    if (this.db.filename !== ":memory:") {
+      retrySqliteBusy(() => this.db.exec("PRAGMA journal_mode = WAL"));
+    }
+    this.tightenFileModes();
+  }
+  preflightDatabase() {
+    const applicationId = pragmaNumber(this.db, "application_id");
+    const userVersion = pragmaNumber(this.db, "user_version");
+    if (applicationId !== 0 && applicationId !== APPLICATION_ID) {
+      throw new CollabError("database_application_mismatch", "The SQLite file belongs to another application", { expected_application_id: APPLICATION_ID, actual_application_id: applicationId });
+    }
+    if (userVersion > SCHEMA_VERSION) {
+      throw new CollabError("database_version_too_new", "The collaboration database was created by a newer package version", { supported_schema_version: SCHEMA_VERSION, actual_schema_version: userVersion });
+    }
+    if (this.tableNames().length > 0) {
+      this.validateLegacyOrV2Shape(userVersion);
+      if (userVersion >= HARDENED_PREVIEW_SCHEMA_VERSION) {
+        this.db.transaction(() => this.validateAllJournals()).deferred();
+      }
+    }
+  }
+  prepareLegacyMigration() {
+    if (this.tableNames().length === 0 || pragmaNumber(this.db, "user_version") >= HARDENED_PREVIEW_SCHEMA_VERSION)
+      return [];
+    const workspaces = this.db.query(`
+      SELECT id, root_path FROM workspaces ORDER BY id
+    `).all();
+    const prepared = workspaces.map((workspace) => ({
+      ...workspace,
+      identity: safeRepositoryIdentity(workspace.root_path)
+    }));
+    assertDistinctLegacyWorktreeIdentities(prepared);
+    return prepared;
+  }
+  createLegacySchema() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS workspaces (
+        id TEXT PRIMARY KEY,
+        epoch_id TEXT NOT NULL,
+        root_path TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        event_head_sequence INTEGER NOT NULL DEFAULT 0,
+        event_head_hash TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS tasks (
+        id TEXT NOT NULL,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+        title TEXT NOT NULL,
+        description TEXT,
+        status TEXT NOT NULL CHECK(status IN ('open', 'claimed', 'blocked', 'completed')),
+        dependencies_json TEXT NOT NULL,
+        path_scopes_json TEXT NOT NULL,
+        assignee TEXT,
+        lease_id TEXT,
+        lease_expires_at TEXT,
+        blocker TEXT,
+        latest_progress TEXT,
+        version INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        completed_at TEXT,
+        PRIMARY KEY (workspace_id, id)
+      );
+      CREATE INDEX IF NOT EXISTS tasks_workspace_status_idx
+        ON tasks(workspace_id, status, lease_expires_at);
+      CREATE TABLE IF NOT EXISTS artifacts (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK(kind IN ('file', 'commit', 'test', 'data', 'url', 'other')),
+        uri TEXT NOT NULL,
+        sha256 TEXT,
+        media_type TEXT,
+        label TEXT,
+        attached_by TEXT NOT NULL,
+        attached_at TEXT NOT NULL,
+        FOREIGN KEY (workspace_id, task_id) REFERENCES tasks(workspace_id, id)
+      );
+      CREATE INDEX IF NOT EXISTS artifacts_task_idx ON artifacts(workspace_id, task_id, attached_at);
+      CREATE TABLE IF NOT EXISTS decisions (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+        topic TEXT NOT NULL,
+        decision TEXT NOT NULL,
+        rationale TEXT,
+        recorded_by TEXT NOT NULL,
+        recorded_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS decisions_workspace_idx ON decisions(workspace_id, recorded_at);
+      CREATE TABLE IF NOT EXISTS handoffs (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        from_actor TEXT NOT NULL,
+        to_actor TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('pending', 'accepted', 'declined', 'expired')),
+        offered_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        resolved_at TEXT,
+        FOREIGN KEY (workspace_id, task_id) REFERENCES tasks(workspace_id, id)
+      );
+      CREATE INDEX IF NOT EXISTS handoffs_target_idx
+        ON handoffs(workspace_id, to_actor, status, expires_at);
+      CREATE TABLE IF NOT EXISTS events (
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+        epoch_id TEXT NOT NULL,
+        sequence INTEGER NOT NULL,
+        id TEXT NOT NULL UNIQUE,
+        protocol TEXT NOT NULL,
+        type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        occurred_at TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        prev_hash TEXT NOT NULL,
+        hash TEXT NOT NULL,
+        PRIMARY KEY (workspace_id, sequence)
+      );
+      CREATE TABLE IF NOT EXISTS mutations (
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+        actor TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        request_hash TEXT NOT NULL,
+        response_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (workspace_id, actor, idempotency_key)
+      );
+    `);
+  }
+  migrateToV2(preparedWorkspaces) {
+    if (this.hasColumn("workspaces", "repository_key")) {
+      throw new CollabError("database_partial_migration", "The collaboration database has v0.2 columns without a committed schema version");
+    }
+    const journalHeads = this.db.query(`
+      SELECT id, epoch_id, event_head_sequence, event_head_hash
+      FROM workspaces ORDER BY id
+    `).all();
+    const currentWorkspaces = this.db.query(`
+      SELECT id, root_path FROM workspaces ORDER BY id
+    `).all();
+    if (canonicalJson(currentWorkspaces) !== canonicalJson(preparedWorkspaces.map(({ id, root_path }) => ({ id, root_path })))) {
+      throw new CollabError("migration_source_changed", "Legacy workspace roots changed while migration identities were prepared; retry startup");
+    }
+    const identities = new Map(preparedWorkspaces.map((workspace) => [workspace.id, workspace.identity]));
+    this.db.exec(`
+      ALTER TABLE workspaces
+        ADD COLUMN repository_key TEXT NOT NULL DEFAULT '';
+
+      ALTER TABLE tasks
+        ADD COLUMN coordination_mode TEXT NOT NULL DEFAULT 'legacy_v1'
+        CHECK(coordination_mode IN ('legacy_v1', 'session_v2'));
+      ALTER TABLE tasks
+        ADD COLUMN work_mode TEXT NOT NULL DEFAULT 'coordination'
+        CHECK(work_mode IN ('coordination', 'read_only', 'edit'));
+      ALTER TABLE tasks
+        ADD COLUMN completion_policy TEXT NOT NULL DEFAULT 'reported'
+        CHECK(completion_policy IN ('reported', 'accepted'));
+      ALTER TABLE tasks
+        ADD COLUMN review_status TEXT NOT NULL DEFAULT 'legacy_unreviewed'
+        CHECK(review_status IN ('legacy_unreviewed', 'not_required', 'pending', 'accepted', 'changes_requested'));
+      ALTER TABLE tasks ADD COLUMN review_generation INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE tasks ADD COLUMN expected_base_sha TEXT;
+      ALTER TABLE tasks ADD COLUMN base_checkpoint_json TEXT;
+      ALTER TABLE tasks ADD COLUMN result_checkpoint_json TEXT;
+      ALTER TABLE tasks ADD COLUMN completion_report_id TEXT;
+      ALTER TABLE tasks ADD COLUMN assignee_session_id TEXT;
+      ALTER TABLE tasks ADD COLUMN claim_worktree_id TEXT;
+      ALTER TABLE tasks ADD COLUMN reported_by TEXT;
+      ALTER TABLE tasks ADD COLUMN reported_by_session_id TEXT;
+      ALTER TABLE tasks ADD COLUMN reported_at TEXT;
+      ALTER TABLE tasks ADD COLUMN accepted_by TEXT;
+      ALTER TABLE tasks ADD COLUMN accepted_by_session_id TEXT;
+      ALTER TABLE tasks ADD COLUMN accepted_at TEXT;
+
+      ALTER TABLE artifacts ADD COLUMN attached_by_session_id TEXT;
+      ALTER TABLE handoffs ADD COLUMN from_session_id TEXT;
+      ALTER TABLE handoffs ADD COLUMN to_session_id TEXT;
+      ALTER TABLE events ADD COLUMN session_id TEXT;
+
+      CREATE TABLE repositories (
+        key TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE worktrees (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+        repository_key TEXT NOT NULL REFERENCES repositories(key),
+        root_path TEXT NOT NULL UNIQUE,
+        git_common_dir_hash TEXT,
+        fingerprint TEXT NOT NULL,
+        branch TEXT,
+        head_sha TEXT,
+        dirty INTEGER,
+        registered_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL
+      );
+      CREATE INDEX worktrees_repository_idx
+        ON worktrees(repository_key, workspace_id);
+
+      CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+        epoch_id TEXT NOT NULL,
+        client_instance_id TEXT NOT NULL,
+        actor_label TEXT NOT NULL,
+        actor_key TEXT NOT NULL UNIQUE,
+        runtime_kind TEXT NOT NULL,
+        provider_label TEXT,
+        model_label TEXT,
+        declared_capabilities_json TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        joined_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        presence_expires_at TEXT NOT NULL,
+        left_at TEXT,
+        UNIQUE (workspace_id, client_instance_id)
+      );
+      CREATE INDEX IF NOT EXISTS sessions_workspace_presence_idx
+        ON sessions(workspace_id, left_at, presence_expires_at);
+
+      CREATE TABLE coordination_sessions (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+        worktree_id TEXT NOT NULL REFERENCES worktrees(id),
+        actor TEXT NOT NULL,
+        role TEXT,
+        parent_session_id TEXT REFERENCES coordination_sessions(id),
+        status TEXT NOT NULL CHECK(status IN ('active', 'ended')),
+        generation INTEGER NOT NULL,
+        token_hash TEXT NOT NULL,
+        joined_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        ended_at TEXT,
+        cursor_epoch_id TEXT NOT NULL,
+        cursor_sequence INTEGER NOT NULL,
+        cursor_hash TEXT NOT NULL,
+        cursor_version INTEGER NOT NULL DEFAULT 0,
+        reset_generation INTEGER NOT NULL DEFAULT 0,
+        cursor_recovery_required INTEGER NOT NULL DEFAULT 0
+          CHECK(cursor_recovery_required IN (0, 1))
+      );
+      CREATE INDEX coordination_sessions_workspace_status_idx
+        ON coordination_sessions(workspace_id, status, last_seen_at);
+
+      CREATE TABLE reports (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+        task_id TEXT,
+        from_session_id TEXT REFERENCES coordination_sessions(id),
+        from_actor TEXT NOT NULL,
+        to_session_id TEXT REFERENCES coordination_sessions(id),
+        kind TEXT NOT NULL CHECK(kind IN ('observation', 'inference', 'proposal', 'decision')),
+        body TEXT NOT NULL,
+        evidence_refs_json TEXT NOT NULL,
+        confidence TEXT NOT NULL CHECK(confidence IN ('high', 'medium', 'low', 'unknown')),
+        confidence_basis TEXT,
+        limits TEXT,
+        relation TEXT NOT NULL CHECK(relation IN ('informs', 'supports', 'challenges', 'corrects', 'withdraws', 'supersedes', 'resolves')),
+        target_report_id TEXT REFERENCES reports(id),
+        authority_scope TEXT,
+        authority_basis TEXT,
+        created_at TEXT NOT NULL,
+        event_sequence INTEGER NOT NULL,
+        FOREIGN KEY (workspace_id, task_id) REFERENCES tasks(workspace_id, id)
+      );
+      CREATE INDEX reports_workspace_event_idx
+        ON reports(workspace_id, event_sequence);
+      CREATE INDEX reports_target_idx ON reports(target_report_id);
+
+      CREATE TABLE task_reviews (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        review_generation INTEGER NOT NULL,
+        outcome TEXT NOT NULL CHECK(outcome IN ('accepted', 'changes_requested')),
+        summary TEXT NOT NULL,
+        reviewer_actor TEXT NOT NULL,
+        reviewer_session_id TEXT NOT NULL REFERENCES coordination_sessions(id),
+        created_at TEXT NOT NULL,
+        event_sequence INTEGER NOT NULL,
+        UNIQUE(workspace_id, task_id, review_generation),
+        FOREIGN KEY (workspace_id, task_id) REFERENCES tasks(workspace_id, id)
+      );
+
+      CREATE TABLE task_recoveries (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        prior_lease_id TEXT NOT NULL,
+        prior_session_id TEXT,
+        recovered_by_session_id TEXT NOT NULL REFERENCES coordination_sessions(id),
+        action TEXT NOT NULL CHECK(action IN ('takeover', 'release', 'block')),
+        note TEXT NOT NULL,
+        prior_checkpoint_json TEXT,
+        new_lease_id TEXT,
+        recovered_at TEXT NOT NULL,
+        event_sequence INTEGER NOT NULL,
+        UNIQUE(workspace_id, task_id, prior_lease_id),
+        FOREIGN KEY (workspace_id, task_id) REFERENCES tasks(workspace_id, id)
+      );
+
+      CREATE TABLE session_cursor_resets (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES coordination_sessions(id),
+        from_epoch_id TEXT NOT NULL,
+        from_sequence INTEGER NOT NULL,
+        from_hash TEXT NOT NULL,
+        to_epoch_id TEXT NOT NULL,
+        to_sequence INTEGER NOT NULL,
+        to_hash TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        reset_generation INTEGER NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE v2_write_guard (
+        nonce TEXT PRIMARY KEY,
+        enabled INTEGER NOT NULL CHECK(enabled = 1)
+      );
+
+      CREATE TABLE schema_migrations (
+        version INTEGER PRIMARY KEY,
+        protocol TEXT NOT NULL,
+        applied_at TEXT NOT NULL
+      );
+    `);
+    this.migrationFailpoint?.("v2_tables_created");
+    const now = this.timestamp();
+    const workspaces = this.db.query(`
+      SELECT id, root_path FROM workspaces ORDER BY created_at, id
+    `).all();
+    for (const workspace of workspaces) {
+      const identity = identities.get(workspace.id);
+      if (!identity) {
+        throw new CollabError("migration_identity_missing", "A prepared legacy repository identity is missing", { workspace_id: workspace.id });
+      }
+      this.db.query(`INSERT OR IGNORE INTO repositories (key, created_at) VALUES (?, ?)`).run(identity.repository_key, now);
+      this.db.query(`UPDATE workspaces SET repository_key = ? WHERE id = ?`).run(identity.repository_key, workspace.id);
+      this.db.query(`
+        INSERT INTO worktrees (
+          id, workspace_id, repository_key, root_path, git_common_dir_hash, fingerprint,
+          branch, head_sha, dirty, registered_at, last_seen_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(identity.checkpoint.worktree_id, workspace.id, identity.repository_key, identity.root_path, identity.git_common_dir_hash, identity.worktree_fingerprint, identity.checkpoint.branch, identity.checkpoint.head_sha, booleanToSql(identity.checkpoint.dirty), now, now);
+    }
+    this.migrationFailpoint?.("v1_rows_backfilled");
+    this.db.exec(`
+      CREATE INDEX workspaces_repository_idx ON workspaces(repository_key);
+
+      CREATE TRIGGER tasks_v2_insert_guard
+      BEFORE INSERT ON tasks
+      WHEN NEW.coordination_mode = 'session_v2'
+        AND NOT EXISTS (SELECT 1 FROM v2_write_guard WHERE enabled = 1)
+      BEGIN
+        SELECT RAISE(ABORT, 'agenttool_collab_v2_write_requires_v2_client');
+      END;
+
+      CREATE TRIGGER tasks_v2_update_guard
+      BEFORE UPDATE ON tasks
+      WHEN (OLD.coordination_mode = 'session_v2' OR NEW.coordination_mode = 'session_v2')
+        AND NOT EXISTS (SELECT 1 FROM v2_write_guard WHERE enabled = 1)
+      BEGIN
+        SELECT RAISE(ABORT, 'agenttool_collab_v2_write_requires_v2_client');
+      END;
+
+      CREATE TRIGGER tasks_v2_delete_guard
+      BEFORE DELETE ON tasks
+      WHEN OLD.coordination_mode = 'session_v2'
+        AND NOT EXISTS (SELECT 1 FROM v2_write_guard WHERE enabled = 1)
+      BEGIN
+        SELECT RAISE(ABORT, 'agenttool_collab_v2_write_requires_v2_client');
+      END;
+
+      CREATE TRIGGER artifacts_v2_insert_guard
+      BEFORE INSERT ON artifacts
+      WHEN EXISTS (
+        SELECT 1 FROM tasks
+        WHERE workspace_id = NEW.workspace_id AND id = NEW.task_id
+          AND coordination_mode = 'session_v2'
+      )
+        AND NOT EXISTS (SELECT 1 FROM v2_write_guard WHERE enabled = 1)
+      BEGIN
+        SELECT RAISE(ABORT, 'agenttool_collab_v2_write_requires_v2_client');
+      END;
+
+      CREATE TRIGGER handoffs_v2_insert_guard
+      BEFORE INSERT ON handoffs
+      WHEN EXISTS (
+        SELECT 1 FROM tasks
+        WHERE workspace_id = NEW.workspace_id AND id = NEW.task_id
+          AND coordination_mode = 'session_v2'
+      )
+        AND NOT EXISTS (SELECT 1 FROM v2_write_guard WHERE enabled = 1)
+      BEGIN
+        SELECT RAISE(ABORT, 'agenttool_collab_v2_write_requires_v2_client');
+      END;
+    `);
+    this.migrationFailpoint?.("v2_guards_created");
+    const headsAfter = this.db.query(`
+      SELECT id, epoch_id, event_head_sequence, event_head_hash
+      FROM workspaces ORDER BY id
+    `).all();
+    if (canonicalJson(headsAfter) !== canonicalJson(journalHeads)) {
+      throw new CollabError("migration_journal_changed", "Migration attempted to change a pre-existing journal head");
+    }
+    const foreignKeyFailures = this.db.query(`PRAGMA foreign_key_check`).all();
+    if (foreignKeyFailures.length > 0) {
+      throw new CollabError("migration_foreign_key_failure", "Migration would leave invalid foreign-key references", { failures: foreignKeyFailures.length });
+    }
+    const integrity = this.db.query(`PRAGMA integrity_check`).get();
+    if (integrity.integrity_check !== "ok") {
+      throw new CollabError("migration_integrity_failure", "SQLite integrity verification failed during migration");
+    }
+    const insertMigration = this.db.query(`
+      INSERT INTO schema_migrations (version, protocol, applied_at)
+      VALUES (?, ?, ?)
+    `);
+    insertMigration.run(HARDENED_PREVIEW_SCHEMA_VERSION, COLLAB_COORDINATION_PROTOCOL, now);
+    insertMigration.run(SCHEMA_VERSION, COLLAB_COORDINATION_PROTOCOL, now);
+    this.migrationFailpoint?.("v2_verified");
+  }
+  migrateHardenedPreviewToV3() {
+    this.validateV2Shape("sessions", [HARDENED_PREVIEW_SCHEMA_VERSION]);
+    const journalHeads = this.db.query(`
+      SELECT id, epoch_id, event_head_sequence, event_head_hash
+      FROM workspaces ORDER BY id
+    `).all();
+    const sessionRows = this.db.query(`
+      SELECT * FROM sessions ORDER BY id
+    `).all();
+    this.db.exec(`
+      ALTER TABLE sessions RENAME TO coordination_sessions;
+      DROP INDEX sessions_workspace_status_idx;
+      CREATE INDEX coordination_sessions_workspace_status_idx
+        ON coordination_sessions(workspace_id, status, last_seen_at);
+
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+        epoch_id TEXT NOT NULL,
+        client_instance_id TEXT NOT NULL,
+        actor_label TEXT NOT NULL,
+        actor_key TEXT NOT NULL UNIQUE,
+        runtime_kind TEXT NOT NULL,
+        provider_label TEXT,
+        model_label TEXT,
+        declared_capabilities_json TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        joined_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        presence_expires_at TEXT NOT NULL,
+        left_at TEXT,
+        UNIQUE (workspace_id, client_instance_id)
+      );
+      CREATE INDEX sessions_workspace_presence_idx
+        ON sessions(workspace_id, left_at, presence_expires_at);
+    `);
+    this.migrationFailpoint?.("v3_session_planes_created");
+    const migratedRows = this.db.query(`
+      SELECT * FROM coordination_sessions ORDER BY id
+    `).all();
+    if (canonicalJson(migratedRows) !== canonicalJson(sessionRows)) {
+      throw new CollabError("migration_session_rows_changed", "Credential-bound preview session rows changed during the v0.3 table rename");
+    }
+    const headsAfter = this.db.query(`
+      SELECT id, epoch_id, event_head_sequence, event_head_hash
+      FROM workspaces ORDER BY id
+    `).all();
+    if (canonicalJson(headsAfter) !== canonicalJson(journalHeads)) {
+      throw new CollabError("migration_journal_changed", "Migration attempted to change a pre-existing journal head");
+    }
+    this.db.query(`
+      INSERT INTO schema_migrations (version, protocol, applied_at)
+      VALUES (?, ?, ?)
+    `).run(SCHEMA_VERSION, COLLAB_COORDINATION_PROTOCOL, this.timestamp());
+    if (this.db.query("PRAGMA foreign_key_check").all().length > 0) {
+      throw new CollabError("migration_foreign_key_failure", "Migration would leave invalid foreign-key references");
+    }
+    const integrity = this.db.query("PRAGMA integrity_check").get();
+    if (integrity.integrity_check !== "ok") {
+      throw new CollabError("migration_integrity_failure", "SQLite integrity verification failed during migration");
+    }
+    this.migrationFailpoint?.("v3_verified");
+  }
+  tableNames() {
+    const rows = this.db.query(`
+      SELECT name FROM sqlite_master
+      WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+      ORDER BY name
+    `).all();
+    return rows.map((row) => row.name);
+  }
+  hasColumn(table, column) {
+    return this.tableColumns(table).includes(column);
+  }
+  tableColumns(table) {
+    const rows = this.db.query(`PRAGMA table_info(${quoteIdentifier(table)})`).all();
+    return rows.map((row) => row.name);
+  }
+  hasExactColumns(table, columns) {
+    return canonicalJson(this.tableColumns(table)) === canonicalJson(columns);
+  }
+  validateLegacyOrV2Shape(userVersion) {
+    const required2 = {
+      workspaces: [
+        "id",
+        "epoch_id",
+        "root_path",
+        "name",
+        "created_at",
+        "event_head_sequence",
+        "event_head_hash"
+      ],
+      tasks: [
+        "id",
+        "workspace_id",
+        "title",
+        "description",
+        "status",
+        "dependencies_json",
+        "path_scopes_json",
+        "assignee",
+        "lease_id",
+        "lease_expires_at",
+        "blocker",
+        "latest_progress",
+        "version",
+        "created_at",
+        "updated_at",
+        "completed_at"
+      ],
+      artifacts: [
+        "id",
+        "workspace_id",
+        "task_id",
+        "kind",
+        "uri",
+        "sha256",
+        "media_type",
+        "label",
+        "attached_by",
+        "attached_at"
+      ],
+      decisions: [
+        "id",
+        "workspace_id",
+        "topic",
+        "decision",
+        "rationale",
+        "recorded_by",
+        "recorded_at"
+      ],
+      handoffs: [
+        "id",
+        "workspace_id",
+        "task_id",
+        "from_actor",
+        "to_actor",
+        "summary",
+        "status",
+        "offered_at",
+        "expires_at",
+        "resolved_at"
+      ],
+      events: [
+        "workspace_id",
+        "epoch_id",
+        "sequence",
+        "id",
+        "protocol",
+        "type",
+        "entity_id",
+        "actor",
+        "occurred_at",
+        "payload_json",
+        "prev_hash",
+        "hash"
+      ],
+      mutations: [
+        "workspace_id",
+        "actor",
+        "idempotency_key",
+        "operation",
+        "request_hash",
+        "response_json",
+        "created_at"
+      ]
+    };
+    this.requireColumns(required2, "The SQLite file is not a complete agenttool collaboration database");
+    const names = new Set(this.tableNames());
+    const hasV2Marker = names.has("coordination_sessions") || names.has("schema_migrations") || this.hasColumn("workspaces", "repository_key") || this.hasColumn("tasks", "coordination_mode") || this.hasColumn("events", "session_id");
+    if (userVersion < HARDENED_PREVIEW_SCHEMA_VERSION) {
+      if (hasV2Marker || pragmaNumber(this.db, "application_id") !== 0 || names.has("sessions") && !this.hasExactColumns("sessions", PRESENCE_SESSION_COLUMNS)) {
+        throw new CollabError("database_partial_migration", "The collaboration database has unrecognized hardened objects without a committed schema version");
+      }
+      return;
+    }
+    if (userVersion === HARDENED_PREVIEW_SCHEMA_VERSION) {
+      if (names.has("coordination_sessions")) {
+        throw new CollabError("database_partial_migration", "The hardened preview database has an unexpected coordination-session table name");
+      }
+      this.validateV2Shape("sessions", [HARDENED_PREVIEW_SCHEMA_VERSION]);
+      return;
+    }
+    if (userVersion === SCHEMA_VERSION) {
+      this.validateV2Shape("coordination_sessions", [
+        HARDENED_PREVIEW_SCHEMA_VERSION,
+        SCHEMA_VERSION
+      ]);
+    }
+  }
+  validateV2Shape(sessionTable, expectedMigrationVersions) {
+    const required2 = {
+      workspaces: ["repository_key"],
+      tasks: [
+        "coordination_mode",
+        "work_mode",
+        "completion_policy",
+        "review_status",
+        "review_generation",
+        "expected_base_sha",
+        "base_checkpoint_json",
+        "result_checkpoint_json",
+        "completion_report_id",
+        "assignee_session_id",
+        "claim_worktree_id",
+        "reported_by",
+        "reported_by_session_id",
+        "reported_at",
+        "accepted_by",
+        "accepted_by_session_id",
+        "accepted_at"
+      ],
+      artifacts: ["attached_by_session_id"],
+      handoffs: ["from_session_id", "to_session_id"],
+      events: ["session_id"],
+      repositories: ["key", "created_at"],
+      worktrees: [
+        "id",
+        "workspace_id",
+        "repository_key",
+        "root_path",
+        "git_common_dir_hash",
+        "fingerprint",
+        "branch",
+        "head_sha",
+        "dirty",
+        "registered_at",
+        "last_seen_at"
+      ],
+      [sessionTable]: [...COORDINATION_SESSION_COLUMNS],
+      reports: [
+        "id",
+        "workspace_id",
+        "task_id",
+        "from_session_id",
+        "from_actor",
+        "to_session_id",
+        "kind",
+        "body",
+        "evidence_refs_json",
+        "confidence",
+        "confidence_basis",
+        "limits",
+        "relation",
+        "target_report_id",
+        "authority_scope",
+        "authority_basis",
+        "created_at",
+        "event_sequence"
+      ],
+      task_reviews: [
+        "id",
+        "workspace_id",
+        "task_id",
+        "review_generation",
+        "outcome",
+        "summary",
+        "reviewer_actor",
+        "reviewer_session_id",
+        "created_at",
+        "event_sequence"
+      ],
+      task_recoveries: [
+        "id",
+        "workspace_id",
+        "task_id",
+        "prior_lease_id",
+        "prior_session_id",
+        "recovered_by_session_id",
+        "action",
+        "note",
+        "prior_checkpoint_json",
+        "new_lease_id",
+        "recovered_at",
+        "event_sequence"
+      ],
+      session_cursor_resets: [
+        "id",
+        "session_id",
+        "from_epoch_id",
+        "from_sequence",
+        "from_hash",
+        "to_epoch_id",
+        "to_sequence",
+        "to_hash",
+        "reason",
+        "reset_generation",
+        "created_at"
+      ],
+      v2_write_guard: ["nonce", "enabled"],
+      schema_migrations: ["version", "protocol", "applied_at"]
+    };
+    this.requireColumns(required2, "The hardened collaboration schema is incomplete");
+    if (!this.hasExactColumns(sessionTable, COORDINATION_SESSION_COLUMNS)) {
+      throw new CollabError("database_schema_mismatch", "The credential-bound coordination session table has an unexpected shape");
+    }
+    if (sessionTable === "coordination_sessions" && !this.hasExactColumns("sessions", PRESENCE_SESSION_COLUMNS)) {
+      throw new CollabError("database_schema_mismatch", "The self-declared presence session table has an unexpected shape");
+    }
+    const triggers = this.db.query(`
+      SELECT name, sql FROM sqlite_master
+      WHERE type = 'trigger' AND name IN (${V2_GUARD_TRIGGERS.map(() => "?").join(", ")})
+    `).all(...V2_GUARD_TRIGGERS);
+    const byName = new Map(triggers.map((trigger) => [trigger.name, trigger.sql ?? ""]));
+    for (const trigger of V2_GUARD_TRIGGERS) {
+      const sql = byName.get(trigger);
+      if (!sql || !sql.includes("v2_write_guard") || !sql.includes("agenttool_collab_v2_write_requires_v2_client")) {
+        throw new CollabError("database_schema_mismatch", "A required v0.2 write guard is missing or malformed", { trigger });
+      }
+    }
+    const migrationRows = this.db.query(`
+      SELECT version, protocol FROM schema_migrations ORDER BY version
+    `).all();
+    if (canonicalJson(migrationRows.map((row) => row.version)) !== canonicalJson(expectedMigrationVersions) || migrationRows.some((row) => row.protocol !== COLLAB_COORDINATION_PROTOCOL)) {
+      throw new CollabError("database_migration_receipt_invalid", "The collaboration schema migration ledger is missing or inconsistent");
+    }
+    const staleGuards = this.db.query(`SELECT COUNT(*) AS count FROM v2_write_guard`).get();
+    if (staleGuards.count !== 0) {
+      throw new CollabError("database_write_guard_invalid", "The v0.2 write guard contains unexpected persistent state");
+    }
+    if (this.db.query(`PRAGMA foreign_key_check`).all().length > 0) {
+      throw new CollabError("database_foreign_key_failure", "The collaboration database contains invalid foreign-key references");
+    }
+  }
+  requireColumns(required2, message) {
+    const names = new Set(this.tableNames());
+    for (const [table, columns] of Object.entries(required2)) {
+      if (!names.has(table)) {
+        throw new CollabError("database_schema_mismatch", message, {
+          missing_table: table
+        });
+      }
+      for (const column of columns) {
+        if (!this.hasColumn(table, column)) {
+          throw new CollabError("database_schema_mismatch", message, {
+            table,
+            missing_column: column
+          });
+        }
+      }
+    }
+  }
+  validateAllJournals() {
+    const workspaces = this.db.query(`SELECT id FROM workspaces ORDER BY id`).all();
+    for (const workspace of workspaces) {
+      if (!this.verifyJournalRows(workspace.id)) {
+        throw new CollabError("database_journal_invalid", "A workspace event journal failed hash-chain verification", { workspace_id: workspace.id });
+      }
+    }
+  }
+  tightenFileModes() {
+    if (!this.filesystemPath)
+      return;
+    for (const path of [this.filesystemPath, `${this.filesystemPath}-wal`, `${this.filesystemPath}-shm`]) {
+      if (!existsSync4(path))
+        continue;
+      const stat = lstatSync4(path);
+      if (!stat.isFile() || stat.isSymbolicLink() || typeof process.getuid === "function" && stat.uid !== process.getuid()) {
+        throw new CollabError("database_sidecar_unsafe", "A collaboration database or sidecar path is not a regular file owned by this user", { operation: "tighten_database_file_mode" });
+      }
+      chmodSync3(path, 384);
+    }
+  }
+  discoverRepositoryKey(budget, probe) {
+    const now = this.repositoryDiscovery.now();
+    const fullSlice = budget.deadline === undefined;
+    budget.deadline ??= now + this.repositoryDiscovery.budget_ms;
+    if (now >= budget.deadline)
+      return;
+    try {
+      return probe({ ...this.repositoryDiscovery, deadline: budget.deadline });
+    } catch (error51) {
+      if (error51 instanceof RepositoryProbeTimeout && !fullSlice)
+        return;
+      return null;
+    }
+  }
+  prepareRepositoryAliases(budget) {
+    const rows = this.db.query(`
+      SELECT w.* FROM worktrees w
+      LEFT JOIN repository_discovery d ON d.worktree_id = w.id AND d.fingerprint = w.fingerprint
+      WHERE d.worktree_id IS NULL AND w.repository_key LIKE 'local-git:%'
+      ORDER BY w.id
+    `).iterate();
+    const prepared = [];
+    for (const row of rows) {
+      const key = this.discoverRepositoryKey(budget, (options) => {
+        const identity = inspectRepository(row.root_path, undefined, true, options);
+        if (identity.repository_key === row.repository_key && identity.worktree_fingerprint === row.fingerprint) {
+          return identity.portable_repository_key ?? null;
+        }
+        return null;
+      });
+      if (key === undefined)
+        break;
+      prepared.push({ row, key });
+    }
+    return prepared;
+  }
+  recordRepositoryAlias(worktreeId2, key) {
+    if (key)
+      this.db.query(`INSERT OR IGNORE INTO repository_aliases (worktree_id, portable_key) VALUES (?, ?)`).run(worktreeId2, key);
+  }
+  recordRepositoryDiscovery(worktreeId2, fingerprint, key) {
+    if (key === undefined)
+      return;
+    this.recordRepositoryAlias(worktreeId2, key);
+    this.db.query(`INSERT INTO repository_discovery (worktree_id, fingerprint, outcome) VALUES (?, ?, ?)
+      ON CONFLICT(worktree_id) DO UPDATE SET fingerprint = excluded.fingerprint, outcome = excluded.outcome`).run(worktreeId2, fingerprint, key ? "checked" : "unresolvable");
+  }
+  repositoryPartitions(identity) {
+    return this.db.query(`
+      SELECT DISTINCT w.id FROM workspaces w
+      LEFT JOIN worktrees t ON t.workspace_id = w.id
+      WHERE w.repository_key = ? OR t.repository_key = ?
+      ORDER BY w.created_at, w.id
+    `).all(identity.repository_key, identity.repository_key);
+  }
+  portableRepositoryWorkspace(key) {
+    if (!key)
+      return;
+    const pending = this.db.query(`SELECT 1 FROM worktrees w LEFT JOIN repository_discovery d
+      ON d.worktree_id = w.id AND d.fingerprint = w.fingerprint
+      WHERE d.worktree_id IS NULL AND w.repository_key LIKE 'local-git:%' LIMIT 1`).get();
+    if (pending)
+      return;
+    const matches = this.db.query(`SELECT DISTINCT w.workspace_id AS id FROM worktrees w
+      JOIN repository_aliases a ON a.worktree_id = w.id WHERE a.portable_key = ? LIMIT 2`).all(key);
+    return matches.length === 1 ? matches[0] : undefined;
+  }
+  openWorkspace(input) {
+    const actor = validateActor(input.actor);
+    const identity = inspectRepository(input.root_path, input.repository_key, false, { portable: false });
+    const budget = {};
+    const cached2 = this.db.query(`SELECT a.portable_key FROM repository_discovery d
+      LEFT JOIN repository_aliases a ON a.worktree_id = d.worktree_id
+      WHERE d.worktree_id = ? AND d.fingerprint = ?`).get(identity.checkpoint.worktree_id, identity.worktree_fingerprint);
+    const registered = this.db.query(`SELECT 1 FROM worktrees WHERE root_path = ?`).get(identity.root_path);
+    const aliases = !registered && this.repositoryPartitions(identity).length === 0 && identity.repository_key.startsWith("local-git:") ? this.prepareRepositoryAliases(budget) : [];
+    identity.portable_repository_key = cached2 ? cached2.portable_key : identity.repository_key.startsWith("local-git:") ? this.discoverRepositoryKey(budget, (options) => portableRepositoryKey(identity.root_path, options)) : null;
+    const created = this.db.transaction(() => {
+      const now = this.timestamp();
+      for (const { row, key } of aliases) {
+        const current = this.requireWorktreeRow(row.id);
+        if (current.root_path !== row.root_path || current.fingerprint !== row.fingerprint || current.repository_key !== row.repository_key || current.workspace_id !== row.workspace_id) {
+          continue;
+        }
+        this.recordRepositoryDiscovery(row.id, row.fingerprint, key);
+      }
+      const existingWorktree = this.db.query(`
+        SELECT * FROM worktrees WHERE root_path = ?
+      `).get(identity.root_path);
+      if (existingWorktree) {
+        if (existingWorktree.repository_key !== identity.repository_key || existingWorktree.fingerprint !== identity.worktree_fingerprint) {
+          throw new CollabError("worktree_identity_changed", "This path now resolves to a different repository/worktree identity", {
+            root_path: identity.root_path,
+            registered_worktree_id: existingWorktree.id
+          });
+        }
+        this.recordRepositoryDiscovery(existingWorktree.id, identity.worktree_fingerprint, identity.portable_repository_key);
+        this.touchWorktree(existingWorktree, identity.checkpoint, now);
+        return this.requireWorkspace(existingWorktree.workspace_id);
+      }
+      const partitions = this.repositoryPartitions(identity);
+      if (partitions.length > 1) {
+        throw new CollabError("repository_partitioned", "Multiple preserved journals require explicit reconciliation", {
+          workspace_ids: partitions.map((partition) => partition.id)
+        });
+      }
+      const repositoryWorkspace = partitions[0] ?? this.portableRepositoryWorkspace(identity.portable_repository_key);
+      const id = repositoryWorkspace?.id ?? `ws_${sha2563(identity.repository_key).slice(0, 24)}`;
+      const existing = this.getWorkspace(id);
+      if (existing && !repositoryWorkspace) {
+        throw new CollabError("workspace_identity_collision", "Workspace identity collision");
+      }
+      if (existing) {
+        this.registerWorktree(existing.id, identity, now, actor, true);
+        this.recordRepositoryDiscovery(identity.checkpoint.worktree_id, identity.worktree_fingerprint, identity.portable_repository_key);
+        return this.requireWorkspace(existing.id);
+      }
+      const epochId = `epoch_${randomUUID3()}`;
+      const name = cleanText(input.name ?? identity.root_path.split("/").at(-1) ?? id, "name", 200);
+      this.db.query(`INSERT OR IGNORE INTO repositories (key, created_at) VALUES (?, ?)`).run(identity.repository_key, now);
+      this.db.query(`
+        INSERT INTO workspaces
+          (id, epoch_id, root_path, repository_key, name, created_at,
+            event_head_sequence, event_head_hash)
+        VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+      `).run(id, epochId, identity.root_path, identity.repository_key, name, now, GENESIS_HASH);
+      this.registerWorktree(id, identity, now, actor, false);
+      this.recordRepositoryDiscovery(identity.checkpoint.worktree_id, identity.worktree_fingerprint, identity.portable_repository_key);
+      this.appendEvent(id, "workspace.opened", id, actor, {
+        root_path: identity.root_path,
+        repository_key: identity.repository_key,
+        worktree_id: identity.checkpoint.worktree_id,
+        name,
+        rights_profile: "xenia.rights/0.1"
+      });
+      return this.requireWorkspace(id);
+    }).immediate();
+    this.tightenFileModes();
+    return created;
+  }
+  getWorkspace(workspaceId, db = this.db) {
+    const row = db.query(`
+      SELECT id, epoch_id, root_path, repository_key, name, created_at,
+        event_head_sequence, event_head_hash
+      FROM workspaces WHERE id = ?
+    `).get(workspaceId);
+    return row ? { ...row } : null;
+  }
+  getWorktree(workspaceId, rootPath) {
+    const identity = inspectRepository(rootPath);
+    const row = this.db.query(`
+      SELECT * FROM worktrees WHERE workspace_id = ? AND root_path = ?
+    `).get(workspaceId, identity.root_path);
+    return row ? worktreeFromRow(row) : null;
+  }
+  joinSession(input) {
+    const normalized = {
+      workspace_id: validateId(input.workspace_id, "workspace_id"),
+      client_instance_id: validateId(input.client_instance_id, "client_instance_id"),
+      actor_label: validateActor(input.actor_label),
+      runtime_kind: validateRuntimeKind(input.runtime_kind),
+      provider_label: optionalText(input.provider_label, "provider_label", 100),
+      model_label: optionalText(input.model_label, "model_label", 200),
+      declared_capabilities: normalizeSessionCapabilities(input.declared_capabilities ?? []),
+      ttl_seconds: validatePresenceTtl(input.ttl_seconds)
+    };
+    const workspace = this.requireWorkspace(normalized.workspace_id);
+    const transaction = this.db.transaction(() => {
+      const existing = this.readPresenceSessionByClient(normalized.workspace_id, normalized.client_instance_id);
+      if (existing) {
+        requireMatchingPresenceSessionJoin(existing, normalized);
+        if (existing.left_at) {
+          throw new CollabError("session_instance_ended", "This presence session already left; use a new client_instance_id", { session_id: existing.id });
+        }
+        return presenceSessionFromRow(existing, this.timestamp());
+      }
+      const now = this.timestamp();
+      const id = `session_${randomUUID3()}`;
+      const actorKey = `session:${id}`;
+      this.db.query(`
+        INSERT INTO sessions (
+          id, workspace_id, epoch_id, client_instance_id, actor_label, actor_key,
+          runtime_kind, provider_label, model_label, declared_capabilities_json,
+          version, joined_at, last_seen_at, presence_expires_at, left_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, NULL)
+      `).run(id, workspace.id, workspace.epoch_id, normalized.client_instance_id, normalized.actor_label, actorKey, normalized.runtime_kind, normalized.provider_label, normalized.model_label, canonicalJson(normalized.declared_capabilities), now, now, addSeconds(now, normalized.ttl_seconds));
+      return presenceSessionFromRow(this.requirePresenceSessionRow(id), now);
+    });
+    const session = transaction.immediate();
+    this.tightenFileModes();
+    return session;
+  }
+  getSession(sessionId) {
+    return presenceSessionFromRow(this.requirePresenceSessionRow(validateId(sessionId, "session_id")), this.timestamp());
+  }
+  listSessions(workspaceId, presence, limit) {
+    const id = validateId(workspaceId, "workspace_id");
+    this.requireWorkspace(id);
+    if (presence !== undefined && presence !== "live" && presence !== "stale" && presence !== "left") {
+      throw new CollabError("invalid_presence", "presence must be live, stale, or left");
+    }
+    const observedAt = this.timestamp();
+    const boundedLimit = validateSessionListLimit(limit);
+    let rows;
+    if (presence === "live") {
+      rows = this.db.query(`
+        SELECT * FROM sessions
+        WHERE workspace_id = ? AND left_at IS NULL AND presence_expires_at > ?
+        ORDER BY joined_at DESC, id DESC LIMIT ?
+      `).all(id, observedAt, boundedLimit);
+    } else if (presence === "stale") {
+      rows = this.db.query(`
+        SELECT * FROM sessions
+        WHERE workspace_id = ? AND left_at IS NULL AND presence_expires_at <= ?
+        ORDER BY joined_at DESC, id DESC LIMIT ?
+      `).all(id, observedAt, boundedLimit);
+    } else if (presence === "left") {
+      rows = this.db.query(`
+        SELECT * FROM sessions
+        WHERE workspace_id = ? AND left_at IS NOT NULL
+        ORDER BY joined_at DESC, id DESC LIMIT ?
+      `).all(id, boundedLimit);
+    } else {
+      rows = this.db.query(`
+        SELECT * FROM sessions
+        WHERE workspace_id = ?
+        ORDER BY joined_at DESC, id DESC LIMIT ?
+      `).all(id, boundedLimit);
+    }
+    return rows.map((row) => presenceSessionFromRow(row, observedAt));
+  }
+  heartbeatSession(input) {
+    const normalized = {
+      session_id: validateId(input.session_id, "session_id"),
+      idempotency_key: validateIdempotencyKey(input.idempotency_key),
+      expected_version: validateExpectedVersion(input.expected_version),
+      ttl_seconds: validatePresenceTtl(input.ttl_seconds)
+    };
+    const initial = this.requirePresenceSessionRow(normalized.session_id);
+    return this.mutate(initial.workspace_id, initial.actor_key, normalized.idempotency_key, "session.heartbeat", normalized, () => {
+      const row = this.requirePresenceSessionRow(normalized.session_id);
+      requirePresenceSessionVersion(row, normalized.expected_version);
+      if (row.left_at) {
+        throw new CollabError("session_left", "An explicitly left presence session cannot heartbeat", { session_id: row.id });
+      }
+      const now = this.timestamp();
+      this.db.query(`
+          UPDATE sessions
+          SET version = ?, last_seen_at = ?, presence_expires_at = ?
+          WHERE id = ?
+        `).run(row.version + 1, now, addSeconds(now, normalized.ttl_seconds), row.id);
+      return presenceSessionFromRow(this.requirePresenceSessionRow(row.id), now);
+    });
+  }
+  leaveSession(input) {
+    const normalized = {
+      session_id: validateId(input.session_id, "session_id"),
+      idempotency_key: validateIdempotencyKey(input.idempotency_key),
+      expected_version: validateExpectedVersion(input.expected_version)
+    };
+    const initial = this.requirePresenceSessionRow(normalized.session_id);
+    return this.mutate(initial.workspace_id, initial.actor_key, normalized.idempotency_key, "session.leave", normalized, () => {
+      const row = this.requirePresenceSessionRow(normalized.session_id);
+      requirePresenceSessionVersion(row, normalized.expected_version);
+      const now = this.timestamp();
+      if (!row.left_at) {
+        this.db.query(`
+            UPDATE sessions SET version = ?, left_at = ? WHERE id = ?
+          `).run(row.version + 1, now, row.id);
+      }
+      return presenceSessionFromRow(this.requirePresenceSessionRow(row.id), now);
+    });
+  }
+  startSession(input) {
+    const id = `session_${randomUUID3()}`;
+    const actor = input.actor !== undefined ? validateActor(input.actor) : derivedActor(input.actor_prefix, id);
+    const role = optionalText(input.role, "role", 200);
+    const seatRef = input.seat_ref == null ? null : validateSeatRef(input.seat_ref);
+    const model = input.model === undefined ? null : validateModelLabel(input.model);
+    const identity = inspectRepository(input.root_path, input.repository_key, true, { portable: false });
+    const workspace = this.openWorkspace({
+      root_path: input.root_path,
+      actor,
+      repository_key: input.repository_key
+    });
+    const worktreeRow = this.db.query(`
+      SELECT * FROM worktrees WHERE workspace_id = ? AND root_path = ?
+    `).get(workspace.id, identity.root_path);
+    if (!worktreeRow) {
+      throw new CollabError("worktree_not_found", "The session worktree was not registered");
+    }
+    const parentSessionId = input.parent_session_id ? validateId(input.parent_session_id, "parent_session_id") : null;
+    const joined = this.db.transaction(() => {
+      const partitions = this.repositoryPartitions(identity);
+      if (partitions.length > 1) {
+        throw new CollabError("repository_partitioned", "Multiple preserved journals require explicit reconciliation before session start", {
+          workspace_ids: partitions.map((partition) => partition.id)
+        });
+      }
+      if (parentSessionId) {
+        const parent = this.requireCoordinationSessionRow(parentSessionId);
+        if (parent.workspace_id !== workspace.id) {
+          throw new CollabError("parent_session_mismatch", "A parent session must belong to the same workspace");
+        }
+      }
+      const now = this.timestamp();
+      const token = randomBytes(SESSION_TOKEN_BYTES).toString("base64url");
+      const generation = 1;
+      this.db.query(`
+        INSERT INTO coordination_sessions (
+          id, workspace_id, worktree_id, actor, role, parent_session_id, status,
+          generation, token_hash, joined_at, last_seen_at, ended_at,
+          cursor_epoch_id, cursor_sequence, cursor_hash, cursor_version, reset_generation
+        ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, NULL, ?, 0, ?, 0, 0)
+      `).run(id, workspace.id, worktreeRow.id, actor, role, parentSessionId, generation, hashSessionToken(token), now, now, workspace.epoch_id, GENESIS_HASH);
+      if (parentSessionId && input.parent_attested === true) {
+        this.db.query(`
+          INSERT INTO session_parent_attestations (session_id, parent_session_id, basis, attested_at)
+          VALUES (?, ?, 'same_mcp_process', ?)
+        `).run(id, parentSessionId, now);
+      }
+      this.appendEvent(workspace.id, "session.joined", id, actor, {
+        worktree_id: worktreeRow.id,
+        role,
+        parent_session_id: parentSessionId,
+        ...seatRef ? { seat_ref: seatRef } : {},
+        ...model ? { model } : {},
+        identity_boundary: "session_credentials_fence_cooperating_local_clients_but_do_not_authenticate_a_person_or_model"
+      }, id);
+      return this.sessionHandle(this.requireCoordinationSessionRow(id), token, this.requireWorkspace(workspace.id), worktreeRow);
+    }).immediate();
+    this.tightenFileModes();
+    return joined;
+  }
+  resumeSession(credential, options = {}) {
+    const sessionId = validateId(credential.session_id, "session_id");
+    let lastSeenBeforeResume = "";
+    const resumed = this.db.transaction(() => {
+      const row = this.authenticateResumeToken(sessionId, credential.session_token);
+      lastSeenBeforeResume = row.last_seen_at;
+      const now = this.timestamp();
+      this.recordSessionLeaseLapses(row, now);
+      const nextGeneration = row.generation + 1;
+      const persistedCursor = {
+        epoch_id: row.cursor_epoch_id,
+        sequence: row.cursor_sequence,
+        hash: row.cursor_hash
+      };
+      let recovery = row.cursor_recovery_required !== 0 ? {
+        required: true,
+        cause: "host_cursor_mismatch",
+        persisted_cursor: persistedCursor,
+        host_cursor: credential.last_cursor ?? null,
+        expected_cursor_version: row.cursor_version
+      } : undefined;
+      try {
+        this.validateEventAnchor(row.workspace_id, persistedCursor);
+      } catch (error51) {
+        if (error51 instanceof CollabError) {
+          recovery = {
+            required: true,
+            cause: "persisted_cursor_invalid",
+            persisted_cursor: persistedCursor,
+            host_cursor: credential.last_cursor ?? null,
+            expected_cursor_version: row.cursor_version
+          };
+        } else {
+          throw error51;
+        }
+      }
+      if (!recovery && credential.last_cursor) {
+        try {
+          const known = this.validateEventAnchor(row.workspace_id, credential.last_cursor);
+          if (known.epoch_id !== persistedCursor.epoch_id || known.sequence !== persistedCursor.sequence || known.hash !== persistedCursor.hash) {
+            recovery = {
+              required: true,
+              cause: "host_cursor_mismatch",
+              persisted_cursor: persistedCursor,
+              host_cursor: known,
+              expected_cursor_version: row.cursor_version
+            };
+          }
+        } catch (error51) {
+          if (error51 instanceof CollabError) {
+            recovery = {
+              required: true,
+              cause: "host_cursor_invalid",
+              persisted_cursor: persistedCursor,
+              host_cursor: credential.last_cursor,
+              expected_cursor_version: row.cursor_version
+            };
+          } else {
+            throw error51;
+          }
+        }
+      }
+      if (recovery && !options.allow_cursor_recovery) {
+        throw new CollabError("cursor_reset_required", "The host and persisted session cursors require an explicit audited reset", { ...recovery });
+      }
+      const changed = this.db.query(`
+        UPDATE coordination_sessions
+        SET generation = ?, last_seen_at = ?, cursor_recovery_required = ?
+        WHERE id = ? AND generation = ? AND status = 'active'
+      `).run(nextGeneration, now, recovery ? 1 : 0, sessionId, row.generation);
+      if (changed.changes !== 1) {
+        throw new CollabError("session_auth_failed", "Session credentials are invalid");
+      }
+      this.appendEvent(row.workspace_id, "session.resumed", row.id, row.actor, {
+        worktree_id: row.worktree_id,
+        generation: nextGeneration,
+        cursor_recovery_required: recovery?.required ?? false,
+        cursor_recovery_cause: recovery?.cause ?? null
+      }, row.id);
+      const next = this.requireCoordinationSessionRow(row.id);
+      const workspace = this.requireWorkspace(row.workspace_id);
+      const worktree = this.requireWorktreeRow(row.worktree_id);
+      const handle = this.sessionHandle(next, credential.session_token, workspace, worktree);
+      if (recovery) {
+        handle.cursor_recovery = recovery;
+        handle.credential.last_cursor = credential.last_cursor;
+      }
+      return handle;
+    }).immediate();
+    const carried = this.resumeAwaySince.get(sessionId);
+    if (carried === undefined || lastSeenBeforeResume < carried) {
+      this.resumeAwaySince.set(sessionId, lastSeenBeforeResume);
+    }
+    this.tightenFileModes();
+    return resumed;
+  }
+  endSession(input) {
+    return this.endSessionWithReleases(input).session;
+  }
+  endSessionWithReleases(input) {
+    const reason = optionalText(input.reason, "reason", 2000);
+    if (input.release_leases !== undefined && typeof input.release_leases !== "boolean") {
+      throw new CollabError("invalid_release_leases", "release_leases must be a boolean");
+    }
+    const releaseLeases = input.release_leases === true;
+    if (input.release_summary !== undefined && !releaseLeases) {
+      throw new CollabError("invalid_release_summary", "release_summary applies only together with release_leases: true");
+    }
+    const releaseSummary = optionalText(input.release_summary, "release_summary", 2000);
+    const ended = this.db.transaction(() => {
+      const row = this.authenticateSession(input, { allow_cursor_recovery: true });
+      const now = this.timestamp();
+      const releasedLeases = [];
+      if (releaseLeases) {
+        const held = this.db.query(`
+          SELECT * FROM tasks
+          WHERE workspace_id = ? AND assignee_session_id = ?
+            AND status = 'claimed' AND lease_id IS NOT NULL
+          ORDER BY id
+        `).all(row.workspace_id, row.id);
+        if (held.length > 0) {
+          const releaseNote = releaseSummary ?? reason;
+          const guardNonce = `guard_${randomUUID3()}`;
+          this.db.query(`INSERT INTO v2_write_guard (nonce, enabled) VALUES (?, 1)`).run(guardNonce);
+          try {
+            for (const task of held) {
+              const leaseId = task.lease_id;
+              const expired = this.isExpired(task, row, now);
+              if (expired) {
+                const lapsed = this.expireSessionLeaseForRecovery(task, row, now);
+                this.recordRecoveryWithoutTakeover(task, row, {
+                  prior: lapsed.prior,
+                  expiry_version: lapsed.expiryVersion,
+                  action: "release",
+                  recovery_note: releaseNote ?? SESSION_END_RECOVERY_NOTE,
+                  blocker: null,
+                  now
+                });
+                releasedLeases.push({ task_id: task.id, lease_id: leaseId, via: "recovery" });
+              } else {
+                this.clearSessionClaim(task, row, "task.released", {
+                  summary: releaseNote,
+                  released_by_session_end: true
+                });
+                releasedLeases.push({ task_id: task.id, lease_id: leaseId, via: "release" });
+              }
+            }
+          } finally {
+            this.db.query(`DELETE FROM v2_write_guard WHERE nonce = ?`).run(guardNonce);
+          }
+        }
+      }
+      const refusal = this.liveLeaseRefusal(row.workspace_id, row.id, now);
+      if (refusal)
+        throw refusal;
+      const incomingHandoffs = this.db.query(`
+        SELECT * FROM handoffs
+        WHERE workspace_id = ? AND to_session_id = ? AND status = 'pending'
+        ORDER BY offered_at, id
+      `).all(row.workspace_id, row.id);
+      for (const handoff of incomingHandoffs) {
+        this.db.query(`
+          UPDATE handoffs SET status = 'expired', resolved_at = ? WHERE id = ?
+        `).run(now, handoff.id);
+        this.appendEvent(row.workspace_id, "handoff.expired", handoff.id, row.actor, {
+          task_id: handoff.task_id,
+          reason: "target_session_ended"
+        }, row.id);
+      }
+      const changed = this.db.query(`
+        UPDATE coordination_sessions
+        SET status = 'ended', ended_at = ?, last_seen_at = ?, generation = generation + 1,
+          token_hash = ?
+        WHERE id = ? AND generation = ? AND status = 'active'
+      `).run(now, now, hashSessionToken(randomBytes(SESSION_TOKEN_BYTES).toString("base64url")), row.id, row.generation);
+      if (changed.changes !== 1) {
+        throw new CollabError("session_auth_failed", "Session credentials are invalid");
+      }
+      this.appendEvent(row.workspace_id, "session.ended", row.id, row.actor, { reason }, row.id);
+      return {
+        session: this.sessionProjection(this.requireCoordinationSessionRow(row.id)),
+        released_leases: releasedLeases
+      };
+    }).immediate();
+    this.resumeAwaySince.delete(input.session_id);
+    this.tightenFileModes();
+    return ended;
+  }
+  listCoordinationSessions(workspaceId, status) {
+    const workspace = this.requireWorkspace(workspaceId);
+    const rows = status ? this.db.query(`
+          SELECT * FROM coordination_sessions
+          WHERE workspace_id = ? AND status = ?
+          ORDER BY joined_at, id
+        `).all(workspace.id, status) : this.db.query(`
+          SELECT * FROM coordination_sessions
+          WHERE workspace_id = ?
+          ORDER BY joined_at, id
+        `).all(workspace.id);
+    const observedAt = this.timestamp();
+    return rows.map((row) => this.sessionProjection(row, observedAt));
+  }
+  getCoordinationSession(sessionId) {
+    const id = validateId(sessionId, "session_id");
+    const row = this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(id);
+    return row ? this.sessionProjection(row) : null;
+  }
+  sessionSeatRef(sessionId) {
+    const id = validateId(sessionId, "session_id");
+    const row = this.db.query(`
+      SELECT json_extract(payload_json, '$.seat_ref') AS seat_ref FROM events
+      WHERE type = 'session.joined' AND entity_id = ?
+    `).get(id);
+    return typeof row?.seat_ref === "string" ? row.seat_ref : null;
+  }
+  activeSessionIdsForSeatRefs(seatRefs) {
+    const refs = [...new Set(seatRefs.map(validateSeatRef))];
+    if (refs.length === 0)
+      return [];
+    const rows = this.db.query(`
+      SELECT s.id FROM coordination_sessions s
+      JOIN events e ON e.type = 'session.joined' AND e.entity_id = s.id
+      WHERE s.status = 'active'
+        AND json_extract(e.payload_json, '$.seat_ref') IN (${refs.map(() => "?").join(", ")})
+      ORDER BY s.joined_at, s.id
+    `).all(...refs);
+    return rows.map((row) => row.id);
+  }
+  addresseeHint(workspaceId, sessionId) {
+    const id = validateId(sessionId, "session_id");
+    const read = this.db.transaction(() => {
+      const row = this.requireCoordinationSessionRow(id);
+      if (row.workspace_id !== workspaceId) {
+        throw new CollabError("session_workspace_mismatch", "The addressed session belongs to another workspace", { session_id: id });
+      }
+      const session = this.sessionProjection(row);
+      return {
+        session_id: session.id,
+        liveness: session.liveness,
+        rest: session.rest,
+        delivery: knockDelivery(session.liveness, session.rest)
+      };
+    });
+    return read.deferred();
+  }
+  restSessionForSession(input) {
+    const mode = validateRestMode(input.mode);
+    if (mode === "ready") {
+      for (const field of ["until", "reason", "wake_on"]) {
+        if (input[field] !== undefined) {
+          throw new CollabError(`invalid_${field}`, `${field} applies only to mode "resting"`);
+        }
+      }
+    }
+    const until = input.until === undefined ? null : validateRestUntil(input.until);
+    const reason = optionalText(input.reason, "reason", MAX_REST_REASON_LENGTH);
+    const wakeOn = validateRestWakeOn(input.wake_on);
+    const request = mode === "resting" ? { mode, until, reason, wake_on: wakeOn } : { mode };
+    return this.mutateAsSession(input, input.idempotency_key, "session.rest.v2", request, (session) => {
+      if (mode === "resting") {
+        if (until !== null && Date.parse(until) <= Date.parse(this.timestamp())) {
+          throw new CollabError("invalid_until", "until must be a future instant");
+        }
+        this.appendEvent(session.workspace_id, "session.rested", session.id, session.actor, {
+          mode: "resting",
+          until,
+          reason,
+          wake_on: wakeOn
+        }, session.id);
+      } else {
+        const open = this.latestRestDeclaration(session.id);
+        this.appendEvent(session.workspace_id, "session.returned", session.id, session.actor, {
+          mode: "ready",
+          prior_rest_sequence: open?.type === "session.rested" ? open.sequence : null
+        }, session.id);
+      }
+      return this.sessionProjection(this.requireCoordinationSessionRow(session.id));
+    });
+  }
+  preflightSessionEnd(credential) {
+    const sessionId = validateId(credential.session_id, "session_id");
+    const row = this.authenticateResumeToken(sessionId, credential.session_token);
+    const refusal = this.liveLeaseRefusal(row.workspace_id, row.id, this.timestamp(), true);
+    if (refusal)
+      throw refusal;
+  }
+  acknowledgeSessionCursor(input) {
+    const acknowledged = this.db.transaction(() => {
+      const row = this.authenticateSession(input);
+      const anchor = this.validateEventAnchor(row.workspace_id, input.anchor);
+      this.recordSessionLeaseLapses(row, this.timestamp());
+      if (anchor.epoch_id !== row.cursor_epoch_id) {
+        throw new CollabError("cursor_epoch_mismatch", "The cursor belongs to another journal epoch");
+      }
+      if (anchor.sequence < row.cursor_sequence) {
+        throw new CollabError("cursor_regression", "A session cursor cannot move backwards", {
+          current_sequence: row.cursor_sequence
+        });
+      }
+      if (anchor.sequence === row.cursor_sequence) {
+        if (anchor.hash !== row.cursor_hash) {
+          throw new CollabError("cursor_fork_detected", "The cursor sequence now resolves to a different journal hash");
+        }
+        this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), row.id);
+        return this.sessionProjection(this.requireCoordinationSessionRow(row.id));
+      }
+      if (row.cursor_version !== input.expected_cursor_version) {
+        throw new CollabError("cursor_version_conflict", "The session cursor changed", {
+          expected_cursor_version: input.expected_cursor_version,
+          current_cursor_version: row.cursor_version
+        });
+      }
+      const now = this.timestamp();
+      const changed = this.db.query(`
+        UPDATE coordination_sessions
+        SET cursor_epoch_id = ?, cursor_sequence = ?, cursor_hash = ?,
+          cursor_version = cursor_version + 1, last_seen_at = ?
+        WHERE id = ? AND generation = ? AND cursor_version = ? AND status = 'active'
+      `).run(anchor.epoch_id, anchor.sequence, anchor.hash, now, row.id, row.generation, row.cursor_version);
+      if (changed.changes !== 1) {
+        throw new CollabError("cursor_version_conflict", "The session cursor changed");
+      }
+      return this.sessionProjection(this.requireCoordinationSessionRow(row.id));
+    }).immediate();
+    this.tightenFileModes();
+    return acknowledged;
+  }
+  resetSessionCursor(input) {
+    const reason = cleanText(input.reason, "reason", 2000);
+    this.mutateAsSession(input, input.idempotency_key, "cursor.reset.v2", {
+      expected_cursor_version: input.expected_cursor_version,
+      target: input.target,
+      reason
+    }, (row) => {
+      if (row.cursor_version !== input.expected_cursor_version) {
+        throw new CollabError("cursor_version_conflict", "The session cursor changed");
+      }
+      const target = this.validateEventAnchor(row.workspace_id, input.target);
+      const now = this.timestamp();
+      const resetGeneration = row.reset_generation + 1;
+      const id = `cursor_reset_${randomUUID3()}`;
+      this.db.query(`
+        INSERT INTO session_cursor_resets (
+          id, session_id, from_epoch_id, from_sequence, from_hash,
+          to_epoch_id, to_sequence, to_hash, reason, reset_generation, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, row.id, row.cursor_epoch_id, row.cursor_sequence, row.cursor_hash, target.epoch_id, target.sequence, target.hash, reason, resetGeneration, now);
+      const changed = this.db.query(`
+        UPDATE coordination_sessions
+        SET cursor_epoch_id = ?, cursor_sequence = ?, cursor_hash = ?,
+          cursor_version = cursor_version + 1, reset_generation = ?, last_seen_at = ?,
+          cursor_recovery_required = 0
+        WHERE id = ? AND generation = ? AND cursor_version = ? AND status = 'active'
+      `).run(target.epoch_id, target.sequence, target.hash, resetGeneration, now, row.id, row.generation, row.cursor_version);
+      if (changed.changes !== 1) {
+        throw new CollabError("cursor_version_conflict", "The session cursor changed");
+      }
+      this.appendEvent(row.workspace_id, "session.cursor_reset", id, row.actor, {
+        from: {
+          epoch_id: row.cursor_epoch_id,
+          sequence: row.cursor_sequence,
+          hash: row.cursor_hash
+        },
+        to: target,
+        reason,
+        reset_generation: resetGeneration
+      }, row.id);
+      return this.sessionProjection(this.requireCoordinationSessionRow(row.id));
+    }, { allow_cursor_recovery: true });
+    const current = this.authenticateSession(input, {
+      allow_cursor_recovery: true
+    });
+    if (current.cursor_recovery_required !== 0) {
+      throw new CollabError("cursor_reset_receipt_stale", "This reset receipt predates the current recovery fence; use a new idempotency key", {
+        persisted_cursor: {
+          epoch_id: current.cursor_epoch_id,
+          sequence: current.cursor_sequence,
+          hash: current.cursor_hash
+        },
+        expected_cursor_version: current.cursor_version
+      });
+    }
+    return this.sessionProjection(current);
+  }
+  workspaceStatus(workspaceId) {
+    const workspace = this.requireWorkspace(workspaceId);
+    const tasks = this.listTasks(workspaceId);
+    const counts = { open: 0, claimed: 0, blocked: 0, completed: 0 };
+    let expiredClaims = 0;
+    for (const task of tasks) {
+      if (task.effective_status === "lease_expired") {
+        counts.open += 1;
+        expiredClaims += 1;
+      } else if (task.effective_status === "recovery_required") {
+        counts.claimed += 1;
+        expiredClaims += 1;
+      } else {
+        counts[task.status] += 1;
+      }
+    }
+    const decisions = this.db.query(`
+      SELECT id, workspace_id, topic, decision, rationale, recorded_by, recorded_at
+      FROM decisions WHERE workspace_id = ? ORDER BY recorded_at DESC, id DESC LIMIT 10
+    `).all(workspaceId);
+    return {
+      workspace,
+      counts,
+      expired_claims: expiredClaims,
+      active_claims: tasks.filter((task) => task.effective_status === "claimed"),
+      blocked_tasks: tasks.filter((task) => task.status === "blocked"),
+      pending_reviews: tasks.filter((task) => task.review_status === "pending"),
+      active_sessions: this.listCoordinationSessions(workspaceId, "active"),
+      recent_decisions: decisions.map(decisionFromRow),
+      recent_reports: this.listReports(workspaceId, { limit: 20 })
+    };
+  }
+  createTask(input) {
+    const sessionOnly = input;
+    if (sessionOnly.work_mode !== undefined || sessionOnly.completion_policy !== undefined || sessionOnly.expected_base_sha !== undefined) {
+      throw new CollabError("session_required_for_v2_task_options", "work_mode, completion_policy, and expected_base_sha require createTaskForSession");
+    }
+    const normalized = {
+      ...normalizeMutation(input),
+      workspace_id: input.workspace_id,
+      id: input.id ? validateId(input.id, "task_id") : undefined,
+      title: cleanText(input.title, "title", 300),
+      description: optionalText(input.description, "description", MAX_TEXT),
+      dependencies: normalizeDependencies(input.dependencies ?? []),
+      path_scopes: normalizePathScopes(input.path_scopes ?? [])
+    };
+    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.create", normalized, () => {
+      this.requireWorkspace(input.workspace_id);
+      const id = normalized.id ?? `task_${randomUUID3()}`;
+      if (normalized.dependencies.includes(id)) {
+        throw new CollabError("invalid_dependency", "A task cannot depend on itself", { task_id: id });
+      }
+      for (const dependency of normalized.dependencies)
+        this.requireTaskRow(input.workspace_id, dependency);
+      if (this.readTaskRow(input.workspace_id, id)) {
+        throw new CollabError("task_exists", `Task '${id}' already exists`, { task_id: id });
+      }
+      const now = this.timestamp();
+      this.db.query(`
+        INSERT INTO tasks (
+          id, workspace_id, title, description, status, dependencies_json, path_scopes_json,
+          assignee, lease_id, lease_expires_at, blocker, latest_progress, version,
+          created_at, updated_at, completed_at
+        ) VALUES (?, ?, ?, ?, 'open', ?, ?, NULL, NULL, NULL, NULL, NULL, 1, ?, ?, NULL)
+      `).run(id, input.workspace_id, normalized.title, normalized.description, canonicalJson(normalized.dependencies), canonicalJson(normalized.path_scopes), now, now);
+      this.appendEvent(input.workspace_id, "task.created", id, normalized.actor, {
+        title: normalized.title,
+        description: normalized.description,
+        dependencies: normalized.dependencies,
+        path_scopes: normalized.path_scopes,
+        version: 1
+      });
+      return this.requireTask(input.workspace_id, id);
+    });
+  }
+  createTaskForSession(input) {
+    const normalized = {
+      idempotency_key: validateIdempotencyKey(input.idempotency_key),
+      id: input.id ? validateId(input.id, "task_id") : undefined,
+      title: cleanText(input.title, "title", 300),
+      description: optionalText(input.description, "description", MAX_TEXT),
+      dependencies: normalizeDependencies(input.dependencies ?? []),
+      path_scopes: normalizePathScopes(input.path_scopes ?? []),
+      work_mode: input.work_mode ?? "edit",
+      completion_policy: input.completion_policy,
+      expected_base_sha: input.expected_base_sha ? validateGitObjectId(input.expected_base_sha) : null
+    };
+    if (!["coordination", "read_only", "edit"].includes(normalized.work_mode)) {
+      throw new CollabError("invalid_work_mode", "Unsupported task work mode");
+    }
+    if (normalized.work_mode === "edit" && normalized.path_scopes.length === 0) {
+      throw new CollabError("edit_scope_required", "Edit tasks require at least one repository-relative path scope");
+    }
+    const completionPolicy = normalized.completion_policy ?? (normalized.work_mode === "edit" ? "accepted" : "reported");
+    if (!["reported", "accepted"].includes(completionPolicy)) {
+      throw new CollabError("invalid_completion_policy", "Unsupported completion policy");
+    }
+    const request = { ...normalized, completion_policy: completionPolicy };
+    return this.mutateAsSession(input, normalized.idempotency_key, "task.create.v2", request, (session) => {
+      const id = normalized.id ?? `task_${randomUUID3()}`;
+      if (normalized.dependencies.includes(id)) {
+        throw new CollabError("invalid_dependency", "A task cannot depend on itself", {
+          task_id: id
+        });
+      }
+      for (const dependency of normalized.dependencies) {
+        this.requireTaskRow(session.workspace_id, dependency);
+      }
+      if (this.readTaskRow(session.workspace_id, id)) {
+        throw new CollabError("task_exists", `Task '${id}' already exists`, { task_id: id });
+      }
+      const now = this.timestamp();
+      this.db.query(`
+        INSERT INTO tasks (
+          id, workspace_id, title, description, status, dependencies_json, path_scopes_json,
+          coordination_mode, work_mode, completion_policy, review_status, review_generation,
+          expected_base_sha, base_checkpoint_json, result_checkpoint_json, completion_report_id,
+          assignee, assignee_session_id, claim_worktree_id, lease_id, lease_expires_at,
+          blocker, latest_progress, reported_by, reported_by_session_id, reported_at,
+          accepted_by, accepted_by_session_id, accepted_at, version,
+          created_at, updated_at, completed_at
+        ) VALUES (
+          ?, ?, ?, ?, 'open', ?, ?,
+          'session_v2', ?, ?, 'not_required', 0,
+          ?, NULL, NULL, NULL,
+          NULL, NULL, NULL, NULL, NULL,
+          NULL, NULL, NULL, NULL, NULL,
+          NULL, NULL, NULL, 1,
+          ?, ?, NULL
+        )
+      `).run(id, session.workspace_id, normalized.title, normalized.description, canonicalJson(normalized.dependencies), canonicalJson(normalized.path_scopes), normalized.work_mode, completionPolicy, normalized.expected_base_sha, now, now);
+      this.appendEvent(session.workspace_id, "task.created", id, session.actor, {
+        title: normalized.title,
+        description: normalized.description,
+        dependencies: normalized.dependencies,
+        path_scopes: normalized.path_scopes,
+        work_mode: normalized.work_mode,
+        completion_policy: completionPolicy,
+        expected_base_sha: normalized.expected_base_sha,
+        version: 1
+      }, session.id);
+      return this.requireTask(session.workspace_id, id);
+    });
+  }
+  claimTaskForSession(input) {
+    const taskId = validateId(input.task_id, "task_id");
+    const expectedVersion = validateExpectedVersion(input.expected_version);
+    const ttl = validateTtl(input.ttl_seconds);
+    const request = { task_id: taskId, expected_version: expectedVersion, ttl_seconds: ttl };
+    const replay = this.readSessionMutationReceipt(input, input.idempotency_key, "task.claim.v2", request);
+    if (replay.found)
+      return replay.value;
+    const preparedCheckpoint = this.captureSessionWorktree(input);
+    return this.mutateAsSession(input, input.idempotency_key, "task.claim.v2", request, (session) => {
+      let row = this.requireTaskRow(session.workspace_id, taskId);
+      this.requireVersion(row, expectedVersion);
+      if (this.isExpired(row)) {
+        if (row.assignee_session_id) {
+          throw new CollabError("recovery_required", "An expired session lease requires an explicit recovery note", this.recoveryBundle(row));
+        }
+        row = this.expireClaim(row, "system:clock");
+      }
+      if (row.status === "completed") {
+        throw new CollabError("task_completed", "Completed tasks cannot be claimed", {
+          review_status: row.review_status
+        });
+      }
+      if (row.status === "blocked") {
+        throw new CollabError("task_blocked", "Blocked tasks must be unblocked before claiming", {
+          blocker: row.blocker
+        });
+      }
+      if (row.status === "claimed") {
+        throw new CollabError("task_claimed", "Task already has an active claim", {
+          assignee: row.assignee,
+          assignee_session_id: row.assignee_session_id,
+          lease_expires_at: row.lease_expires_at
+        });
+      }
+      if (row.work_mode === "edit" && parseStringArray(row.path_scopes_json).length === 0) {
+        throw new CollabError("edit_scope_required", "Edit tasks require path scopes");
+      }
+      this.requireDependenciesComplete(row);
+      this.requirePathsAvailable(row);
+      const worktree = this.requirePreparedWorktree(session, preparedCheckpoint);
+      const checkpoint = preparedCheckpoint.checkpoint;
+      this.requireExpectedBase(row, checkpoint);
+      const now = this.timestamp();
+      const leaseId = `lease_${randomUUID3()}`;
+      const expiresAt = addSeconds(now, ttl);
+      const version2 = row.version + 1;
+      this.db.query(`
+        UPDATE tasks
+        SET coordination_mode = 'session_v2',
+          status = 'claimed', assignee = ?, assignee_session_id = ?,
+          claim_worktree_id = ?, lease_id = ?, lease_expires_at = ?,
+          blocker = NULL, base_checkpoint_json = ?,
+          result_checkpoint_json = NULL, completion_report_id = NULL,
+          review_status = 'not_required',
+          reported_by = NULL, reported_by_session_id = NULL, reported_at = NULL,
+          accepted_by = NULL, accepted_by_session_id = NULL, accepted_at = NULL,
+          completed_at = NULL, version = ?, updated_at = ?
+        WHERE workspace_id = ? AND id = ?
+      `).run(session.actor, session.id, worktree.id, leaseId, expiresAt, canonicalJson(checkpoint), version2, now, row.workspace_id, row.id);
+      this.appendEvent(row.workspace_id, "task.claimed", row.id, session.actor, {
+        lease_id: leaseId,
+        lease_expires_at: expiresAt,
+        worktree_id: worktree.id,
+        base_checkpoint: checkpoint,
+        version: version2,
+        checkpoint_boundary: "server_observed_local_git_state_is_evidence_not_atomic_attribution_or_a_filesystem_lock"
+      }, session.id);
+      return this.requireTask(row.workspace_id, row.id);
+    });
+  }
+  recoverTaskForSession(input) {
+    const taskId = validateId(input.task_id, "task_id");
+    const expectedVersion = validateExpectedVersion(input.expected_version);
+    const recoveryNote = cleanText(input.recovery_note, "recovery_note", 4000);
+    const action = input.action ?? "takeover";
+    if (!["takeover", "release", "block"].includes(action)) {
+      throw new CollabError("invalid_recovery_action", "Recovery action is invalid");
+    }
+    const blocker = optionalText(input.blocker, "blocker", 2000);
+    if (action === "block" && !blocker) {
+      throw new CollabError("recovery_blocker_required", "Blocking recovery requires a blocker");
+    }
+    const ttl = validateTtl(input.ttl_seconds);
+    const request = {
+      task_id: taskId,
+      expected_version: expectedVersion,
+      recovery_note: recoveryNote,
+      action,
+      blocker,
+      ttl_seconds: ttl
+    };
+    const replay = this.readSessionMutationReceipt(input, input.idempotency_key, "task.recover.v2", request);
+    if (replay.found)
+      return replay.value;
+    const preparedCheckpoint = action === "takeover" ? this.captureSessionWorktree(input) : null;
+    return this.mutateAsSession(input, input.idempotency_key, "task.recover.v2", request, (session) => {
+      const row = this.requireTaskRow(session.workspace_id, taskId);
+      this.requireVersion(row, expectedVersion);
+      if (!this.isExpired(row, row.assignee_session_id === session.id ? session : undefined) || !row.lease_id || !row.assignee_session_id) {
+        throw new CollabError("recovery_not_required", "Only an expired session-owned lease can be explicitly recovered");
+      }
+      const now = this.timestamp();
+      const { prior, expiryVersion } = this.expireSessionLeaseForRecovery(row, session, now);
+      if (action !== "takeover") {
+        return this.recordRecoveryWithoutTakeover(row, session, {
+          prior,
+          expiry_version: expiryVersion,
+          action,
+          recovery_note: recoveryNote,
+          blocker,
+          now
+        });
+      }
+      const worktree = this.requirePreparedWorktree(session, preparedCheckpoint);
+      const checkpoint = preparedCheckpoint.checkpoint;
+      const opened = this.requireTaskRow(row.workspace_id, row.id);
+      this.requireDependenciesComplete(opened);
+      this.requirePathsAvailable(opened);
+      this.requireExpectedBase(opened, checkpoint);
+      const leaseId = `lease_${randomUUID3()}`;
+      const leaseExpiresAt = addSeconds(now, ttl);
+      const version2 = expiryVersion + 1;
+      this.db.query(`
+        UPDATE tasks
+        SET status = 'claimed', assignee = ?, assignee_session_id = ?,
+          claim_worktree_id = ?, lease_id = ?, lease_expires_at = ?,
+          blocker = NULL, base_checkpoint_json = ?, version = ?, updated_at = ?
+        WHERE workspace_id = ? AND id = ?
+      `).run(session.actor, session.id, worktree.id, leaseId, leaseExpiresAt, canonicalJson(checkpoint), version2, now, row.workspace_id, row.id);
+      const event = this.appendEvent(row.workspace_id, "task.recovered", row.id, session.actor, {
+        prior_lease: prior,
+        recovery_note: recoveryNote,
+        recovery_checkpoint: checkpoint,
+        lease_id: leaseId,
+        lease_expires_at: leaseExpiresAt,
+        version: version2,
+        note: "Recovery acknowledges an expired coordination lease; it does not accept or attribute prior work."
+      }, session.id);
+      this.db.query(`
+        INSERT INTO task_recoveries (
+          id, workspace_id, task_id, prior_lease_id, prior_session_id,
+          recovered_by_session_id, action, note, prior_checkpoint_json,
+          new_lease_id, recovered_at, event_sequence
+        ) VALUES (?, ?, ?, ?, ?, ?, 'takeover', ?, ?, ?, ?, ?)
+      `).run(`recovery_${randomUUID3()}`, row.workspace_id, row.id, prior.lease_id, prior.session_id, session.id, recoveryNote, prior.checkpoint ? canonicalJson(prior.checkpoint) : null, leaseId, now, event.sequence);
+      return this.requireTask(row.workspace_id, row.id);
+    });
+  }
+  renewLeaseForSession(input) {
+    const normalized = normalizeSessionRenewInput(input);
+    const ttl = validateTtl(input.ttl_seconds);
+    return this.mutateAsSession(input, normalized.idempotency_key, "task.renew.v2", { ...normalized.request, ttl_seconds: ttl }, (session) => {
+      const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
+      this.requireActiveSessionLease(row, session, normalized.lease_id);
+      const now = this.timestamp();
+      const candidate = addSeconds(now, ttl);
+      const expiresAt = row.lease_expires_at && row.lease_expires_at > candidate ? row.lease_expires_at : candidate;
+      const version2 = row.version;
+      this.db.query(`
+          UPDATE tasks SET lease_expires_at = ?, version = ?, updated_at = ?
+          WHERE workspace_id = ? AND id = ?
+        `).run(expiresAt, version2, now, row.workspace_id, row.id);
+      this.appendEvent(row.workspace_id, "task.lease_renewed", row.id, session.actor, {
+        lease_id: normalized.lease_id,
+        lease_expires_at: expiresAt,
+        version: version2
+      }, session.id);
+      return this.requireTask(row.workspace_id, row.id);
+    });
+  }
+  progressTaskForSession(input) {
+    const normalized = normalizeSessionLeaseInput(input);
+    const message = cleanText(input.message, "message", 2000);
+    return this.mutateAsSession(input, normalized.idempotency_key, "task.progress.v2", { ...normalized.request, message }, (session) => {
+      const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
+      this.requireVersion(row, normalized.expected_version);
+      this.requireActiveSessionLease(row, session, normalized.lease_id);
+      const now = this.timestamp();
+      const version2 = row.version + 1;
+      this.db.query(`
+          UPDATE tasks SET latest_progress = ?, version = ?, updated_at = ?
+          WHERE workspace_id = ? AND id = ?
+        `).run(message, version2, now, row.workspace_id, row.id);
+      this.appendEvent(row.workspace_id, "task.progressed", row.id, session.actor, {
+        message,
+        version: version2
+      }, session.id);
+      return this.requireTask(row.workspace_id, row.id);
+    });
+  }
+  releaseTaskForSession(input) {
+    const normalized = normalizeSessionLeaseInput(input);
+    const summary = optionalText(input.summary, "summary", 2000);
+    return this.mutateAsSession(input, normalized.idempotency_key, "task.release.v2", { ...normalized.request, summary }, (session) => {
+      const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
+      this.requireVersion(row, normalized.expected_version);
+      this.requireActiveSessionLease(row, session, normalized.lease_id);
+      return this.clearSessionClaim(row, session, "task.released", { summary });
+    });
+  }
+  blockTaskForSession(input) {
+    const normalized = normalizeSessionLeaseInput(input);
+    const blocker = cleanText(input.blocker, "blocker", 2000);
+    return this.mutateAsSession(input, normalized.idempotency_key, "task.block.v2", { ...normalized.request, blocker }, (session) => {
+      const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
+      this.requireVersion(row, normalized.expected_version);
+      this.requireActiveSessionLease(row, session, normalized.lease_id);
+      const now = this.timestamp();
+      const version2 = row.version + 1;
+      this.db.query(`
+          UPDATE tasks
+          SET status = 'blocked', assignee = NULL, assignee_session_id = NULL,
+            claim_worktree_id = NULL, lease_id = NULL, lease_expires_at = NULL,
+            blocker = ?, version = ?, updated_at = ?
+          WHERE workspace_id = ? AND id = ?
+        `).run(blocker, version2, now, row.workspace_id, row.id);
+      this.expirePendingHandoffs(row.workspace_id, row.id, now, session.actor, "task_blocked");
+      this.appendEvent(row.workspace_id, "task.blocked", row.id, session.actor, {
+        blocker,
+        version: version2
+      }, session.id);
+      return this.requireTask(row.workspace_id, row.id);
+    });
+  }
+  unblockTaskForSession(input) {
+    const taskId = validateId(input.task_id, "task_id");
+    const expectedVersion = validateExpectedVersion(input.expected_version);
+    const note = optionalText(input.note, "note", 2000);
+    return this.mutateAsSession(input, input.idempotency_key, "task.unblock.v2", { task_id: taskId, expected_version: expectedVersion, note }, (session) => {
+      const row = this.requireTaskRow(session.workspace_id, taskId);
+      this.requireVersion(row, expectedVersion);
+      if (row.status !== "blocked") {
+        throw new CollabError("task_not_blocked", "Only blocked tasks can be unblocked");
+      }
+      const now = this.timestamp();
+      const version2 = row.version + 1;
+      this.db.query(`
+          UPDATE tasks
+          SET status = 'open', blocker = NULL, review_status = 'not_required',
+            version = ?, updated_at = ?
+          WHERE workspace_id = ? AND id = ?
+        `).run(version2, now, row.workspace_id, row.id);
+      this.appendEvent(row.workspace_id, "task.unblocked", row.id, session.actor, {
+        note,
+        version: version2
+      }, session.id);
+      return this.requireTask(row.workspace_id, row.id);
+    });
+  }
+  attachArtifactForSession(input) {
+    const normalized = normalizeSessionLeaseInput(input);
+    const artifactInput = {
+      kind: validateArtifactKind(input.kind),
+      uri: cleanText(input.uri, "uri", 2000),
+      sha256: input.sha256 ? validateSha256(input.sha256) : null,
+      media_type: optionalText(input.media_type, "media_type", 200),
+      label: optionalText(input.label, "label", 300)
+    };
+    return this.mutateAsSession(input, normalized.idempotency_key, "artifact.attach.v2", { ...normalized.request, ...artifactInput }, (session) => {
+      const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
+      this.requireVersion(row, normalized.expected_version);
+      this.requireActiveSessionLease(row, session, normalized.lease_id);
+      const now = this.timestamp();
+      const id = `artifact_${randomUUID3()}`;
+      this.db.query(`
+          INSERT INTO artifacts (
+            id, workspace_id, task_id, kind, uri, sha256, media_type, label,
+            attached_by, attached_by_session_id, attached_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(id, row.workspace_id, row.id, artifactInput.kind, artifactInput.uri, artifactInput.sha256, artifactInput.media_type, artifactInput.label, session.actor, session.id, now);
+      const version2 = row.version + 1;
+      this.db.query(`
+          UPDATE tasks SET version = ?, updated_at = ?
+          WHERE workspace_id = ? AND id = ?
+        `).run(version2, now, row.workspace_id, row.id);
+      const artifact = this.requireArtifact(id);
+      this.appendEvent(row.workspace_id, "artifact.attached", row.id, session.actor, {
+        artifact,
+        version: version2
+      }, session.id);
+      return { task: this.requireTask(row.workspace_id, row.id), artifact };
+    });
+  }
+  completeTaskForSession(input) {
+    const normalized = normalizeSessionLeaseInput(input);
+    const summary = cleanText(input.summary, "summary", 4000);
+    const confidence = validateReportConfidence(input.confidence ?? "unknown");
+    const confidenceBasis = optionalText(input.confidence_basis, "confidence_basis", 2000);
+    const limits = optionalText(input.limits, "limits", 2000);
+    const evidenceRefs = normalizeEvidenceRefs(input.evidence_refs ?? []);
+    const reviewRequestedSessionId = input.review_requested_session_id === undefined ? null : validateId(input.review_requested_session_id, "review_requested_session_id");
+    const request = {
+      ...normalized.request,
+      summary,
+      confidence,
+      confidence_basis: confidenceBasis,
+      limits,
+      evidence_refs: evidenceRefs,
+      ...reviewRequestedSessionId ? { review_requested_session_id: reviewRequestedSessionId } : {}
+    };
+    const replay = this.readSessionMutationReceipt(input, normalized.idempotency_key, "task.complete.v2", request);
+    if (replay.found)
+      return replay.value;
+    const preparedCheckpoint = this.captureSessionWorktree(input);
+    return this.mutateAsSession(input, normalized.idempotency_key, "task.complete.v2", request, (session) => {
+      const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
+      this.requireVersion(row, normalized.expected_version);
+      this.requireActiveSessionLease(row, session, normalized.lease_id);
+      for (const reference of evidenceRefs) {
+        this.requireEvidenceRef(row.workspace_id, reference);
+      }
+      if (reviewRequestedSessionId) {
+        this.requireRequestedReviewer(row, session, reviewRequestedSessionId);
+      }
+      this.requirePreparedWorktree(session, preparedCheckpoint);
+      const checkpoint = preparedCheckpoint.checkpoint;
+      const report = this.appendReportInternal(session, {
+        task_id: row.id,
+        to_session_id: null,
+        kind: "observation",
+        body: summary,
+        evidence_refs: evidenceRefs,
+        confidence,
+        confidence_basis: confidenceBasis,
+        limits,
+        relation: "informs",
+        target_report_id: null,
+        authority_scope: null,
+        authority_basis: null
+      });
+      const now = this.timestamp();
+      const version2 = row.version + 1;
+      const reviewGeneration = row.review_generation + 1;
+      const reviewStatus = row.completion_policy === "accepted" ? "pending" : "not_required";
+      this.db.query(`
+          UPDATE tasks
+          SET status = 'completed', review_status = ?, review_generation = ?,
+            assignee = NULL, assignee_session_id = NULL, claim_worktree_id = NULL,
+            lease_id = NULL, lease_expires_at = NULL, blocker = NULL,
+            latest_progress = ?, result_checkpoint_json = ?, completion_report_id = ?,
+            reported_by = ?, reported_by_session_id = ?, reported_at = ?,
+            accepted_by = NULL, accepted_by_session_id = NULL, accepted_at = NULL,
+            version = ?, updated_at = ?, completed_at = ?
+          WHERE workspace_id = ? AND id = ?
+        `).run(reviewStatus, reviewGeneration, summary, canonicalJson(checkpoint), report.id, session.actor, session.id, now, version2, now, now, row.workspace_id, row.id);
+      this.expirePendingHandoffs(row.workspace_id, row.id, now, session.actor, "task_reported_complete");
+      this.appendEvent(row.workspace_id, reviewStatus === "pending" ? "task.reported_complete" : "task.completed", row.id, session.actor, {
+        completion_report_id: report.id,
+        completion_policy: row.completion_policy,
+        review_status: reviewStatus,
+        review_generation: reviewGeneration,
+        result_checkpoint: checkpoint,
+        summary,
+        version: version2,
+        note: reviewStatus === "pending" ? "Reported completion does not satisfy dependencies until a distinct session accepts it." : "Reported completion satisfies this task's explicit reported-only policy; it is not external acceptance.",
+        ...reviewRequestedSessionId ? { review_requested_session_id: reviewRequestedSessionId } : {}
+      }, session.id);
+      if (reviewRequestedSessionId) {
+        this.appendReportInternal(session, {
+          task_id: row.id,
+          to_session_id: reviewRequestedSessionId,
+          kind: "proposal",
+          body: `Review requested: please review the reported completion of task ${row.id} ` + `(${row.title}) with collab_task_review. This is a request, not a reservation; ` + "any distinct session may still review.",
+          evidence_refs: [`report:${report.id}`],
+          confidence: "unknown",
+          confidence_basis: null,
+          limits: null,
+          relation: "informs",
+          target_report_id: null,
+          authority_scope: null,
+          authority_basis: null
+        });
+      }
+      return this.requireTask(row.workspace_id, row.id);
+    });
+  }
+  getTask(workspaceId, taskId) {
+    const task = this.requireTask(workspaceId, taskId);
+    task.artifacts = this.listArtifacts(workspaceId, taskId);
+    return task;
+  }
+  listTasks(workspaceId, status) {
+    this.requireWorkspace(workspaceId);
+    const rows = status ? this.db.query(`
+          SELECT * FROM tasks WHERE workspace_id = ? AND status = ? ORDER BY created_at, id
+        `).all(workspaceId, status) : this.db.query(`
+          SELECT * FROM tasks WHERE workspace_id = ? ORDER BY created_at, id
+        `).all(workspaceId);
+    return rows.map((row) => this.taskFromRow(row));
+  }
+  claimTask(input) {
+    const normalized = {
+      ...normalizeVersionedMutation(input),
+      workspace_id: input.workspace_id,
+      task_id: validateId(input.task_id, "task_id"),
+      ttl_seconds: validateTtl(input.ttl_seconds)
+    };
+    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.claim", normalized, () => {
+      let row = this.requireTaskRow(input.workspace_id, normalized.task_id);
+      this.requireVersion(row, normalized.expected_version);
+      const priorAssignee = row.assignee;
+      const expired = this.isExpired(row);
+      if (expired) {
+        row = this.expireClaim(row, normalized.actor);
+      }
+      if (row.status === "completed")
+        throw new CollabError("task_completed", "Completed tasks cannot be claimed");
+      if (row.status === "blocked")
+        throw new CollabError("task_blocked", "Blocked tasks must be unblocked before claiming", { blocker: row.blocker });
+      if (row.status === "claimed") {
+        throw new CollabError("task_claimed", "Task already has an active claim", {
+          assignee: row.assignee,
+          lease_expires_at: row.lease_expires_at
+        });
+      }
+      this.requireDependenciesComplete(row);
+      this.requirePathsAvailable(row);
+      const now = this.timestamp();
+      const leaseId = `lease_${randomUUID3()}`;
+      const expiresAt = addSeconds(now, normalized.ttl_seconds);
+      const nextVersion = row.version + 1;
+      this.db.query(`
+        UPDATE tasks SET status = 'claimed', assignee = ?, lease_id = ?, lease_expires_at = ?,
+          blocker = NULL, version = ?, updated_at = ?
+        WHERE workspace_id = ? AND id = ?
+      `).run(normalized.actor, leaseId, expiresAt, nextVersion, now, input.workspace_id, normalized.task_id);
+      this.appendEvent(input.workspace_id, "task.claimed", normalized.task_id, normalized.actor, {
+        lease_id: leaseId,
+        lease_expires_at: expiresAt,
+        previous_assignee: expired ? priorAssignee : null,
+        version: nextVersion
+      });
+      return this.requireTask(input.workspace_id, normalized.task_id);
+    });
+  }
+  renewLease(input) {
+    if (input.expected_version !== undefined)
+      validateExpectedVersion(input.expected_version);
+    const normalized = {
+      ...normalizeMutation(input),
+      task_id: validateId(input.task_id, "task_id"),
+      lease_id: validateId(input.lease_id, "lease_id"),
+      ...input.expected_version === undefined ? {} : { expected_version: input.expected_version }
+    };
+    const ttl = validateTtl(input.ttl_seconds);
+    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.renew", { ...normalized, ttl_seconds: ttl }, () => {
+      const row = this.requireTaskRow(input.workspace_id, normalized.task_id);
+      this.requireActiveLease(row, normalized.actor, normalized.lease_id);
+      const now = this.timestamp();
+      const candidate = addSeconds(now, ttl);
+      const expiresAt = row.lease_expires_at && row.lease_expires_at > candidate ? row.lease_expires_at : candidate;
+      const version2 = row.version;
+      this.db.query(`
+        UPDATE tasks SET lease_expires_at = ?, version = ?, updated_at = ?
+        WHERE workspace_id = ? AND id = ?
+      `).run(expiresAt, version2, now, input.workspace_id, normalized.task_id);
+      this.appendEvent(input.workspace_id, "task.lease_renewed", normalized.task_id, normalized.actor, {
+        lease_id: normalized.lease_id,
+        lease_expires_at: expiresAt,
+        version: version2
+      });
+      return this.requireTask(input.workspace_id, normalized.task_id);
+    });
+  }
+  progressTask(input) {
+    const normalized = { ...normalizeLeaseInput(input), message: cleanText(input.message, "message", 2000) };
+    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.progress", normalized, () => {
+      const row = this.requireTaskRow(input.workspace_id, normalized.task_id);
+      this.requireVersion(row, normalized.expected_version);
+      this.requireActiveLease(row, normalized.actor, normalized.lease_id);
+      const now = this.timestamp();
+      const version2 = row.version + 1;
+      this.db.query(`
+        UPDATE tasks SET latest_progress = ?, version = ?, updated_at = ?
+        WHERE workspace_id = ? AND id = ?
+      `).run(normalized.message, version2, now, input.workspace_id, normalized.task_id);
+      this.appendEvent(input.workspace_id, "task.progressed", normalized.task_id, normalized.actor, {
+        message: normalized.message,
+        version: version2
+      });
+      return this.requireTask(input.workspace_id, normalized.task_id);
+    });
+  }
+  releaseTask(input) {
+    const normalized = { ...normalizeLeaseInput(input), summary: optionalText(input.summary, "summary", 2000) };
+    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.release", normalized, () => {
+      const row = this.requireTaskRow(input.workspace_id, normalized.task_id);
+      this.requireVersion(row, normalized.expected_version);
+      this.requireActiveLease(row, normalized.actor, normalized.lease_id);
+      return this.clearClaim(row, normalized.actor, "task.released", { summary: normalized.summary });
+    });
+  }
+  blockTask(input) {
+    const normalized = { ...normalizeLeaseInput(input), blocker: cleanText(input.blocker, "blocker", 2000) };
+    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.block", normalized, () => {
+      const row = this.requireTaskRow(input.workspace_id, normalized.task_id);
+      this.requireVersion(row, normalized.expected_version);
+      this.requireActiveLease(row, normalized.actor, normalized.lease_id);
+      const now = this.timestamp();
+      const version2 = row.version + 1;
+      this.db.query(`
+        UPDATE tasks SET status = 'blocked', assignee = NULL, lease_id = NULL,
+          lease_expires_at = NULL, blocker = ?, version = ?, updated_at = ?
+        WHERE workspace_id = ? AND id = ?
+      `).run(normalized.blocker, version2, now, input.workspace_id, normalized.task_id);
+      this.expirePendingHandoffs(input.workspace_id, normalized.task_id, now, normalized.actor, "task_blocked");
+      this.appendEvent(input.workspace_id, "task.blocked", normalized.task_id, normalized.actor, {
+        blocker: normalized.blocker,
+        version: version2
+      });
+      return this.requireTask(input.workspace_id, normalized.task_id);
+    });
+  }
+  unblockTask(input) {
+    const normalized = {
+      ...normalizeVersionedMutation(input),
+      workspace_id: input.workspace_id,
+      task_id: validateId(input.task_id, "task_id"),
+      note: optionalText(input.note, "note", 2000)
+    };
+    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.unblock", normalized, () => {
+      const row = this.requireTaskRow(input.workspace_id, normalized.task_id);
+      this.requireVersion(row, normalized.expected_version);
+      if (row.status !== "blocked")
+        throw new CollabError("task_not_blocked", "Only blocked tasks can be unblocked");
+      const now = this.timestamp();
+      const version2 = row.version + 1;
+      this.db.query(`
+        UPDATE tasks SET status = 'open', blocker = NULL, version = ?, updated_at = ?
+        WHERE workspace_id = ? AND id = ?
+      `).run(version2, now, input.workspace_id, normalized.task_id);
+      this.appendEvent(input.workspace_id, "task.unblocked", normalized.task_id, normalized.actor, {
+        note: normalized.note,
+        version: version2
+      });
+      return this.requireTask(input.workspace_id, normalized.task_id);
+    });
+  }
+  completeTask(input) {
+    const normalized = { ...normalizeLeaseInput(input), summary: cleanText(input.summary, "summary", 4000) };
+    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.complete", normalized, () => {
+      const row = this.requireTaskRow(input.workspace_id, normalized.task_id);
+      this.requireVersion(row, normalized.expected_version);
+      this.requireActiveLease(row, normalized.actor, normalized.lease_id);
+      const now = this.timestamp();
+      const version2 = row.version + 1;
+      this.db.query(`
+        UPDATE tasks SET status = 'completed', assignee = NULL, lease_id = NULL,
+          lease_expires_at = NULL, blocker = NULL, latest_progress = ?, version = ?,
+          updated_at = ?, completed_at = ?
+        WHERE workspace_id = ? AND id = ?
+      `).run(normalized.summary, version2, now, now, input.workspace_id, normalized.task_id);
+      this.expirePendingHandoffs(input.workspace_id, normalized.task_id, now, normalized.actor, "task_completed");
+      this.appendEvent(input.workspace_id, "task.completed", normalized.task_id, normalized.actor, {
+        completion_basis: "actor_reported",
+        note: "Completion records the reporting actor's outcome; it is not coordinator review or acceptance.",
+        summary: normalized.summary,
+        version: version2
+      });
+      return this.requireTask(input.workspace_id, normalized.task_id);
+    });
+  }
+  attachArtifact(input) {
+    const normalized = {
+      ...normalizeLeaseInput(input),
+      kind: input.kind,
+      uri: cleanText(input.uri, "uri", 2000),
+      sha256: input.sha256 ? validateSha256(input.sha256) : null,
+      media_type: optionalText(input.media_type, "media_type", 200),
+      label: optionalText(input.label, "label", 300)
+    };
+    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "artifact.attach", normalized, () => {
+      const row = this.requireTaskRow(input.workspace_id, normalized.task_id);
+      this.requireVersion(row, normalized.expected_version);
+      this.requireActiveLease(row, normalized.actor, normalized.lease_id);
+      const now = this.timestamp();
+      const id = `artifact_${randomUUID3()}`;
+      this.db.query(`
+        INSERT INTO artifacts
+          (id, workspace_id, task_id, kind, uri, sha256, media_type, label, attached_by, attached_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, input.workspace_id, normalized.task_id, normalized.kind, normalized.uri, normalized.sha256, normalized.media_type, normalized.label, normalized.actor, now);
+      const version2 = row.version + 1;
+      this.db.query(`UPDATE tasks SET version = ?, updated_at = ? WHERE workspace_id = ? AND id = ?`).run(version2, now, input.workspace_id, normalized.task_id);
+      const artifact = this.requireArtifact(id);
+      this.appendEvent(input.workspace_id, "artifact.attached", normalized.task_id, normalized.actor, {
+        artifact,
+        version: version2
+      });
+      return { task: this.requireTask(input.workspace_id, normalized.task_id), artifact };
+    });
+  }
+  recordDecision(input) {
+    const normalized = {
+      ...normalizeMutation(input),
+      workspace_id: input.workspace_id,
+      topic: cleanText(input.topic, "topic", 500),
+      decision: cleanText(input.decision, "decision", 4000),
+      rationale: optionalText(input.rationale, "rationale", 4000)
+    };
+    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "decision.record", normalized, () => {
+      this.requireWorkspace(input.workspace_id);
+      const id = `decision_${randomUUID3()}`;
+      const now = this.timestamp();
+      this.db.query(`
+        INSERT INTO decisions (id, workspace_id, topic, decision, rationale, recorded_by, recorded_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(id, input.workspace_id, normalized.topic, normalized.decision, normalized.rationale, normalized.actor, now);
+      const decision = this.requireDecision(id);
+      this.appendEvent(input.workspace_id, "decision.recorded", id, normalized.actor, { decision });
+      return decision;
+    });
+  }
+  appendReportForSession(input) {
+    const expectedHead = input.expected_head_sequence === undefined ? undefined : validateExpectedHeadSequence(input.expected_head_sequence);
+    const toSessionId = input.to_session_id ? validateId(input.to_session_id, "to_session_id") : null;
+    const alsoToSessionIds = normalizeAlsoToSessionIds(input.also_to_session_ids, toSessionId);
+    const normalized = {
+      task_id: input.task_id ? validateId(input.task_id, "task_id") : null,
+      to_session_id: toSessionId,
+      kind: validateReportKind(input.kind),
+      body: cleanText(input.body, "body", MAX_REPORT_BODY),
+      evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
+      confidence: validateReportConfidence(input.confidence ?? "unknown"),
+      confidence_basis: optionalText(input.confidence_basis, "confidence_basis", 2000),
+      limits: optionalText(input.limits, "limits", 2000),
+      relation: validateReportRelation(input.relation ?? "informs"),
+      target_report_id: input.target_report_id ? validateId(input.target_report_id, "target_report_id") : null,
+      authority_scope: optionalText(input.authority_scope, "authority_scope", 1000),
+      authority_basis: optionalText(input.authority_basis, "authority_basis", 2000),
+      ...input.to_person === true ? { to_person: true } : {},
+      ...alsoToSessionIds.length > 0 ? { also_to_session_ids: alsoToSessionIds } : {}
+    };
+    return this.mutateAsSession(input, input.idempotency_key, "report.append.v2", expectedHead === undefined ? normalized : { ...normalized, expected_head_sequence: expectedHead }, (session) => {
+      this.validateReportInput(session, normalized);
+      this.refuseProposalRewrite(normalized);
+      if (expectedHead !== undefined)
+        this.requireJournalHead(session.workspace_id, expectedHead, session.id);
+      return this.appendReportInternal(session, normalized);
+    });
+  }
+  openProposalForSession(input) {
+    const normalized = {
+      ...normalizeProposalTerms(input),
+      task_id: input.task_id ? validateId(input.task_id, "task_id") : null,
+      confidence: validateReportConfidence(input.confidence ?? "unknown"),
+      confidence_basis: optionalText(input.confidence_basis, "confidence_basis", 2000),
+      limits: optionalText(input.limits, "limits", 2000),
+      origin: validateProposalOrigin(input.origin ?? "ai"),
+      supersedes_report_id: input.supersedes_report_id ? validateId(input.supersedes_report_id, "supersedes_report_id") : null,
+      ...ruleRequestField(input.rule)
+    };
+    return this.mutateAsSession(input, input.idempotency_key, "proposal.open.v1", normalized, (session) => {
+      const reportInput = {
+        task_id: normalized.task_id,
+        to_session_id: null,
+        kind: "proposal",
+        body: normalized.question,
+        evidence_refs: normalized.evidence_refs,
+        confidence: normalized.confidence,
+        confidence_basis: normalized.confidence_basis,
+        limits: normalized.limits,
+        relation: normalized.supersedes_report_id ? "supersedes" : "informs",
+        target_report_id: normalized.supersedes_report_id,
+        authority_scope: null,
+        authority_basis: null
+      };
+      this.validateReportInput(session, reportInput);
+      if (normalized.supersedes_report_id) {
+        this.requireOpenToRevision(session.workspace_id, normalized.supersedes_report_id);
+      }
+      return this.openProposalInternal(session, this.consentVoice(session.id), reportInput, {
+        ...normalized,
+        rule: normalized.rule ?? CONSENT_RULE
+      });
+    });
+  }
+  openPersonProposal(input) {
+    const normalized = { ...normalizeProposalTerms(input), ...ruleRequestField(input.rule) };
+    const idempotencyKey = validateIdempotencyKey(input.idempotency_key);
+    return this.mutate(input.workspace_id, PERSON_DESK_ACTOR, idempotencyKey, "person.proposal.open.v1", normalized, () => {
+      for (const reference of normalized.evidence_refs)
+        this.requireEvidenceRef(input.workspace_id, reference);
+      const reportInput = {
+        task_id: null,
+        to_session_id: null,
+        kind: "proposal",
+        body: normalized.question,
+        evidence_refs: normalized.evidence_refs,
+        confidence: "unknown",
+        confidence_basis: null,
+        limits: PERSON_DESK_LIMITS,
+        relation: "informs",
+        target_report_id: null,
+        authority_scope: null,
+        authority_basis: null
+      };
+      return this.openProposalInternal({ workspace_id: input.workspace_id, actor: PERSON_DESK_ACTOR, id: null }, PERSON_VOICE_ID, reportInput, { ...normalized, origin: "person_relayed", supersedes_report_id: null, rule: normalized.rule ?? CONSENT_RULE });
+    });
+  }
+  withdrawPersonProposal(input) {
+    const normalized = {
+      proposal_report_id: validateId(input.proposal_report_id, "proposal_report_id"),
+      reason: cleanText(input.reason, "reason", 2000)
+    };
+    const idempotencyKey = validateIdempotencyKey(input.idempotency_key);
+    return this.mutate(input.workspace_id, PERSON_DESK_ACTOR, idempotencyKey, "person.proposal.withdraw.v1", normalized, () => {
+      const proposal = this.requireReport(normalized.proposal_report_id);
+      this.requireProposalTerms(input.workspace_id, proposal.id);
+      if (proposal.from_session_id !== null || proposal.from_actor !== PERSON_DESK_ACTOR) {
+        throw new CollabError("report_author_mismatch", "The desk withdraws only proposals it opened; an agent withdraws its own");
+      }
+      if (this.proposalRetirement(input.workspace_id, proposal.id)) {
+        throw new CollabError("proposal_not_on_table", "This proposal was already withdrawn or superseded");
+      }
+      this.appendReportInternal({ workspace_id: input.workspace_id, actor: PERSON_DESK_ACTOR, id: null }, {
+        task_id: proposal.task_id,
+        to_session_id: null,
+        kind: "observation",
+        body: normalized.reason,
+        evidence_refs: [],
+        confidence: "unknown",
+        confidence_basis: null,
+        limits: PERSON_DESK_LIMITS,
+        relation: "withdraws",
+        target_report_id: proposal.id,
+        authority_scope: null,
+        authority_basis: null,
+        about_proposal_id: proposal.id
+      });
+      return this.proposalStatusInternal(input.workspace_id, proposal.id);
+    });
+  }
+  openProposalInternal(author, authorVoiceId, reportInput, terms) {
+    const now = this.timestamp();
+    const voices = this.liveVoiceSnapshot(author.workspace_id, now);
+    const report = this.appendReportInternal(author, reportInput);
+    const closesAt = new Date(Date.parse(now) + terms.consult_seconds * 1000).toISOString();
+    const proposalSha256 = sha2563(proposalBytes({
+      workspace_id: author.workspace_id,
+      report_id: report.id,
+      task_id: report.task_id,
+      question: report.body,
+      criteria: terms.criteria,
+      extent: terms.extent,
+      relies_on: report.evidence_refs,
+      known_conflicts: terms.known_conflicts,
+      limits: report.limits,
+      origin: terms.origin,
+      topic: terms.topic,
+      closes_at: closesAt,
+      supersedes_report_id: terms.supersedes_report_id
+    }, terms.rule));
+    const event = this.appendEvent(author.workspace_id, "proposal.opened", report.id, author.actor, {
+      rule: terms.rule,
+      proposal_sha256: proposalSha256,
+      criteria: terms.criteria,
+      extent: terms.extent,
+      known_conflicts: terms.known_conflicts,
+      origin: terms.origin,
+      topic: terms.topic,
+      closes_at: closesAt,
+      voices,
+      author_voice_id: authorVoiceId
+    }, author.id);
+    this.db.query(`
+      INSERT INTO proposal_terms (
+        report_id, workspace_id, rule, criteria, extent, known_conflicts, origin,
+        topic, closes_at, voices_json, author_voice_id, proposal_sha256,
+        opened_event_id, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(report.id, author.workspace_id, terms.rule, terms.criteria, terms.extent, terms.known_conflicts, terms.origin, terms.topic, closesAt, canonicalJson(voices), authorVoiceId, proposalSha256, event.id, now);
+    return this.proposalStatusInternal(author.workspace_id, report.id);
+  }
+  relayProposalRejectionForSession(input) {
+    const expectedHead = input.expected_head_sequence === undefined ? undefined : validateExpectedHeadSequence(input.expected_head_sequence);
+    const normalized = {
+      proposal_report_id: validateId(input.proposal_report_id, "proposal_report_id"),
+      proposal_sha256: validateSha256(input.proposal_sha256),
+      reason: cleanText(input.reason, "reason", 2000)
+    };
+    const request = expectedHead === undefined ? normalized : { ...normalized, expected_head_sequence: expectedHead };
+    return this.mutateAsSession(input, input.idempotency_key, "proposal.reject.relay.v1", request, (session) => {
+      const terms = this.requireProposalTerms(session.workspace_id, normalized.proposal_report_id);
+      if (expectedHead !== undefined)
+        this.requireJournalHead(session.workspace_id, expectedHead, session.id);
+      return this.recordPersonAct({
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: normalized.proposal_sha256,
+        act: "reject",
+        reason: normalized.reason,
+        basis: "relayed_by_session",
+        actor: session.actor,
+        session_id: session.id,
+        proof: null,
+        expected_ai_snapshot: null
+      });
+    });
+  }
+  personActChallenge(input) {
+    const act = validatePersonAct(input.act);
+    const reason = normalizeActReason(act, input.reason);
+    const transaction = this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      const status = this.proposalStatusInternal(terms.workspace_id, terms.report_id);
+      this.refuseUnrecordableAct(status, act, "user_verified_passkey");
+      const prior = this.personActCount(terms.report_id);
+      const aiSnapshot = aiSnapshotOf(status);
+      return {
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: terms.proposal_sha256,
+        act,
+        reason,
+        prior_person_acts: prior,
+        ai_snapshot: aiSnapshot,
+        ...personActChallenge({
+          act,
+          workspace_id: terms.workspace_id,
+          proposal_report_id: terms.report_id,
+          proposal_sha256: terms.proposal_sha256,
+          prior_person_acts: prior,
+          reason,
+          ai_snapshot: aiSnapshot
+        }),
+        passkeys: this.listPersonPasskeys().filter((key) => key.revoked_at === null).map((key) => ({
+          credential_id: key.credential_id,
+          rp_id: key.rp_id,
+          origin: key.origin,
+          label: key.label,
+          fingerprint: key.fingerprint
+        }))
+      };
+    });
+    return transaction.deferred();
+  }
+  recordPersonActAtTerminal(input) {
+    const act = validatePersonAct(input.act);
+    const reason = normalizeActReason(act, input.reason);
+    const transaction = this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      return this.recordPersonAct({
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: validateSha256(input.proposal_sha256),
+        act,
+        reason,
+        basis: "controlling_terminal",
+        actor: PERSON_TERMINAL_ACTOR,
+        session_id: null,
+        proof: null,
+        expected_ai_snapshot: input.expected_ai_snapshot
+      });
+    });
+    const status = transaction.immediate();
+    this.tightenFileModes();
+    return status;
+  }
+  recordPersonActWithPasskey(input) {
+    const act = validatePersonAct(input.act);
+    const reason = normalizeActReason(act, input.reason);
+    const assertion = normalizePasskeyAssertion(input.assertion);
+    const transaction = this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      const passkey = this.listPersonPasskeys().find((key) => key.credential_id === assertion.credential_id && key.revoked_at === null);
+      if (!passkey) {
+        throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
+      }
+      const status2 = this.proposalStatusInternal(terms.workspace_id, terms.report_id);
+      const aiSnapshot = aiSnapshotOf(status2);
+      const derived = personActChallenge({
+        act,
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: terms.proposal_sha256,
+        prior_person_acts: this.personActCount(terms.report_id),
+        reason,
+        ai_snapshot: aiSnapshot
+      });
+      const { sign_count } = verifyPasskeyAssertion({
+        passkey,
+        assertion,
+        expected_challenge: derived.challenge
+      });
+      this.db.query(`UPDATE person_passkeys SET sign_count = ? WHERE credential_id = ?`).run(sign_count, passkey.credential_id);
+      return this.recordPersonAct({
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: terms.proposal_sha256,
+        act,
+        reason,
+        basis: "user_verified_passkey",
+        actor: PERSON_PASSKEY_ACTOR,
+        session_id: null,
+        proof: {
+          ...assertion,
+          public_key_spki: passkey.public_key_spki,
+          rp_id: passkey.rp_id,
+          origin: passkey.origin,
+          challenge_bytes: derived.challenge_bytes,
+          challenge: derived.challenge,
+          sign_count
+        },
+        expected_ai_snapshot: aiSnapshot
+      });
+    });
+    const status = transaction.immediate();
+    this.tightenFileModes();
+    return status;
+  }
+  personSetAsideChallenge(input) {
+    const reason = normalizeSetAsideReason(input.reason);
+    const challengeId = validateId(input.challenge_report_id, "challenge_report_id");
+    return this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      const facts = this.setAsideFacts(terms, challengeId, reason);
+      return {
+        ...facts.bytes,
+        act: "set_aside",
+        objection: { ...facts.challenge, author_basis: "self_declared" },
+        challenger: facts.challenger,
+        ...setAsideChallenge(facts.bytes),
+        passkeys: this.listPersonPasskeys().filter((key) => key.revoked_at === null).map((key) => ({
+          credential_id: key.credential_id,
+          rp_id: key.rp_id,
+          origin: key.origin,
+          label: key.label,
+          fingerprint: key.fingerprint
+        }))
+      };
+    }).deferred();
+  }
+  recordSetAsideAtTerminal(input) {
+    const reason = normalizeSetAsideReason(input.reason);
+    const challengeId = validateId(input.challenge_report_id, "challenge_report_id");
+    const transaction = this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      return this.recordSetAside(terms, challengeId, reason, {
+        basis: "controlling_terminal",
+        actor: PERSON_TERMINAL_ACTOR,
+        proof: null,
+        proposal_sha256: validateSha256(input.proposal_sha256),
+        challenge_sha256: validateSha256(input.challenge_sha256),
+        challenger_last_seen_at: input.challenger_last_seen_at,
+        expected_ai_snapshot: input.expected_ai_snapshot
+      });
+    });
+    const status = transaction.immediate();
+    this.tightenFileModes();
+    return status;
+  }
+  recordSetAsideWithPasskey(input) {
+    const reason = normalizeSetAsideReason(input.reason);
+    const challengeId = validateId(input.challenge_report_id, "challenge_report_id");
+    const assertion = normalizePasskeyAssertion(input.assertion);
+    const transaction = this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      const passkey = this.listPersonPasskeys().find((key) => key.credential_id === assertion.credential_id && key.revoked_at === null);
+      if (!passkey) {
+        throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
+      }
+      const facts = this.setAsideFacts(terms, challengeId, reason);
+      const derived = setAsideChallenge(facts.bytes);
+      const { sign_count } = verifyPasskeyAssertion({ passkey, assertion, expected_challenge: derived.challenge });
+      this.db.query(`UPDATE person_passkeys SET sign_count = ? WHERE credential_id = ?`).run(sign_count, passkey.credential_id);
+      return this.recordSetAside(terms, challengeId, reason, {
+        basis: "user_verified_passkey",
+        actor: PERSON_PASSKEY_ACTOR,
+        proof: {
+          ...assertion,
+          public_key_spki: passkey.public_key_spki,
+          rp_id: passkey.rp_id,
+          origin: passkey.origin,
+          challenge_bytes: derived.challenge_bytes,
+          challenge: derived.challenge,
+          sign_count
+        },
+        proposal_sha256: facts.bytes.proposal_sha256,
+        challenge_sha256: facts.bytes.challenge_sha256,
+        challenger_last_seen_at: facts.bytes.challenger_last_seen_at,
+        expected_ai_snapshot: facts.bytes.ai_snapshot
+      });
+    });
+    const status = transaction.immediate();
+    this.tightenFileModes();
+    return status;
+  }
+  personSetAsideOptions(workspaceId, proposalIds) {
+    this.requireWorkspace(workspaceId);
+    return this.db.transaction(() => {
+      const options = {};
+      for (const proposalId of proposalIds) {
+        const terms = this.requireProposalTerms(workspaceId, validateId(proposalId, "proposal_report_id"));
+        if (terms.rule !== CONSENT_RULE_V2)
+          continue;
+        const status = this.proposalStatusInternal(workspaceId, terms.report_id);
+        options[terms.report_id] = status.ai.unresolved_challenge_report_ids.map((challengeId) => {
+          const challenge = this.requireReport(challengeId);
+          const presence = this.challengerPresence(workspaceId, challenge.from_session_id);
+          let refusal = null;
+          try {
+            this.refuseUnrecordableSetAside(status, challenge, presence);
+          } catch (error51) {
+            if (!(error51 instanceof CollabError))
+              throw error51;
+            refusal = { error: error51.code, message: error51.message };
+          }
+          return {
+            challenge_report_id: challengeId,
+            by: { session: challenge.from_session_id, name: challenge.from_actor, basis: "self_declared" },
+            can_set_aside: refusal === null,
+            refusal,
+            challenger: presence
+          };
+        });
+      }
+      return options;
+    }).deferred();
+  }
+  enrollPersonPasskey(input) {
+    const enrollment = normalizePasskeyEnrollment(input);
+    const transaction = this.db.transaction(() => {
+      if (this.db.query(`SELECT 1 FROM person_passkeys WHERE credential_id = ?`).get(enrollment.credential_id)) {
+        throw new CollabError("passkey_already_enrolled", "This credential id is already enrolled");
+      }
+      this.db.query(`
+        INSERT INTO person_passkeys (
+          credential_id, public_key_spki, algorithm, rp_id, origin, label,
+          fingerprint, sign_count, enrolled_at, revoked_at
+        ) VALUES (?, ?, -7, ?, ?, ?, ?, 0, ?, NULL)
+      `).run(enrollment.credential_id, enrollment.public_key_spki, enrollment.rp_id, enrollment.origin, enrollment.label, passkeyFingerprint(enrollment.public_key_spki), this.timestamp());
+    });
+    transaction.immediate();
+    this.tightenFileModes();
+    return this.listPersonPasskeys().find((key) => key.credential_id === enrollment.credential_id);
+  }
+  listPersonPasskeys() {
+    return this.db.query(`SELECT * FROM person_passkeys ORDER BY enrolled_at, credential_id`).all().map((row) => ({ ...row, algorithm: -7 }));
+  }
+  revokePersonPasskey(credentialId) {
+    const transaction = this.db.transaction(() => {
+      const changed = this.db.query(`
+        UPDATE person_passkeys SET revoked_at = ? WHERE credential_id = ? AND revoked_at IS NULL
+      `).run(this.timestamp(), credentialId);
+      if (changed.changes === 0) {
+        throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
+      }
+    });
+    transaction.immediate();
+    this.tightenFileModes();
+    return this.listPersonPasskeys().find((key) => key.credential_id === credentialId);
+  }
+  appendPersonNote(input) {
+    const explicitTo = input.to_session_id ? validateId(input.to_session_id, "to_session_id") : undefined;
+    const normalized = {
+      body: cleanText(input.body, "body", MAX_REPORT_BODY),
+      proposal_report_id: input.proposal_report_id ? validateId(input.proposal_report_id, "proposal_report_id") : null,
+      ...explicitTo !== undefined ? { to_session_id: explicitTo } : {}
+    };
+    const idempotencyKey = validateIdempotencyKey(input.idempotency_key);
+    return this.mutate(input.workspace_id, PERSON_DESK_ACTOR, idempotencyKey, "person.note.v1", normalized, () => {
+      let toSessionId = null;
+      if (normalized.proposal_report_id) {
+        const terms = this.requireProposalTerms(input.workspace_id, normalized.proposal_report_id);
+        toSessionId = this.requireReport(terms.report_id).from_session_id;
+      }
+      if (explicitTo !== undefined) {
+        const target = this.requireCoordinationSessionRow(explicitTo);
+        if (target.workspace_id !== input.workspace_id) {
+          throw new CollabError("report_target_mismatch", "Report target is in another workspace");
+        }
+        toSessionId = explicitTo;
+      }
+      return this.appendReportInternal({ workspace_id: input.workspace_id, actor: PERSON_DESK_ACTOR, id: null }, {
+        task_id: null,
+        to_session_id: toSessionId,
+        kind: "observation",
+        body: normalized.body,
+        evidence_refs: normalized.proposal_report_id ? [`report:${normalized.proposal_report_id}`] : [],
+        confidence: "unknown",
+        confidence_basis: null,
+        limits: PERSON_DESK_LIMITS,
+        relation: "informs",
+        target_report_id: null,
+        authority_scope: null,
+        authority_basis: null,
+        ...normalized.proposal_report_id ? { about_proposal_id: normalized.proposal_report_id } : {}
+      });
+    });
+  }
+  personInbox(workspaceId) {
+    this.requireWorkspace(workspaceId);
+    const transaction = this.db.transaction(() => {
+      const context = this.proposalReadContext(workspaceId);
+      const settled = new Set(["consented", "split", "lapsed"]);
+      const candidates = this.db.query(`
+        SELECT t.report_id FROM proposal_terms t JOIN reports r ON r.id = t.report_id
+        WHERE t.workspace_id = ?
+          AND NOT EXISTS (SELECT 1 FROM proposal_person_acts a WHERE a.proposal_report_id = t.report_id)
+        ORDER BY r.event_sequence DESC
+        LIMIT ?
+      `).all(workspaceId, MAX_INBOX_SCAN);
+      const awaiting = [];
+      const unreadable = [];
+      for (const row of candidates) {
+        if (awaiting.length >= MAX_INBOX_PROPOSALS)
+          break;
+        const status = this.readProposalStatus(context, row.report_id, unreadable);
+        if (status && settled.has(status.ai.position))
+          awaiting.push(status);
+      }
+      const addressed = this.db.query(`
+        SELECT r.* FROM person_addressed_reports p JOIN reports r ON r.id = p.report_id
+        WHERE p.workspace_id = ? ORDER BY r.event_sequence DESC LIMIT 50
+      `).all(workspaceId).map(reportFromRow);
+      return { workspace_id: workspaceId, awaiting_person: awaiting, addressed_reports: addressed, unreadable };
+    });
+    return transaction.deferred();
+  }
+  personInboxSummary() {
+    return this.listWorkspaces().map((workspace) => {
+      const inbox = this.personInbox(workspace.id);
+      return {
+        workspace_id: workspace.id,
+        awaiting_person: inbox.awaiting_person.length,
+        addressed_reports: inbox.addressed_reports.length,
+        latest_report_id: inbox.addressed_reports[0]?.id ?? null
+      };
+    });
+  }
+  listWorkspaces() {
+    return this.db.query(`SELECT id, name, root_path, created_at FROM workspaces ORDER BY created_at, id`).all();
+  }
+  proposalStatus(workspaceId, proposalReportId) {
+    this.requireWorkspace(workspaceId);
+    const id = validateId(proposalReportId, "proposal_report_id");
+    this.requireProposalTerms(workspaceId, id);
+    return this.db.transaction(() => this.proposalStatusInternal(workspaceId, id)).deferred();
+  }
+  proposalStatusById(proposalReportId) {
+    const terms = this.requireProposalTermsById(validateId(proposalReportId, "proposal_report_id"));
+    return this.db.transaction(() => this.proposalStatusInternal(terms.workspace_id, terms.report_id)).deferred();
+  }
+  listProposalStatuses(workspaceId, options = {}) {
+    this.requireWorkspace(workspaceId);
+    const limit = options.limit ?? 20;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+      throw new CollabError("invalid_limit", "Proposal limit must be between 1 and 50");
+    }
+    return this.db.transaction(() => {
+      const context = this.proposalReadContext(workspaceId);
+      const rows = this.db.query(`
+        SELECT t.report_id FROM proposal_terms t
+        JOIN reports r ON r.id = t.report_id
+        WHERE t.workspace_id = ?
+        ORDER BY r.event_sequence DESC
+        LIMIT ?
+      `).all(workspaceId, limit);
+      const unreadable = [];
+      const proposals = rows.map((row) => this.readProposalStatus(context, row.report_id, unreadable)).filter((status) => status !== null);
+      return { proposals, unreadable };
+    }).deferred();
+  }
+  readProposalStatus(context, reportId, unreadable) {
+    try {
+      return this.proposalStatusInternal(context.workspaceId, reportId, context);
+    } catch (error51) {
+      if (!(error51 instanceof CollabError))
+        throw error51;
+      unreadable.push({ proposal_report_id: reportId, error: error51.code });
+      return null;
+    }
+  }
+  refuseUnrecordableAct(status, act, basis) {
+    if (status.ai.position === "withdrawn" || status.ai.position === "superseded") {
+      throw new CollabError("proposal_not_on_table", "A withdrawn or superseded proposal is no longer on the table", { position: status.ai.position, obsoleted_by_report_id: status.ai.obsoleted_by_report_id });
+    }
+    const latest = status.person.acts.at(-1) ?? null;
+    if (act === "agree") {
+      if (basis === "relayed_by_session") {
+        throw new CollabError("consent_not_relayable", "A person's agreement is never recorded through a session");
+      }
+      if (status.ai.position !== "consented") {
+        throw new CollabError("ai_not_consented", "The agents have not consented; a person agrees only after they settle", { position: status.ai.position });
+      }
+      if (latest?.act === "agree") {
+        throw new CollabError("already_agreed", "The latest person act already agrees to these bytes");
+      }
+      return;
+    }
+    if (latest?.act === "reject" && (basis === "relayed_by_session" || latest.basis !== "relayed_by_session")) {
+      throw new CollabError("already_rejected", "The latest person act already rejects these bytes");
+    }
+  }
+  recordPersonAct(input) {
+    const current = this.proposalStatusInternal(input.workspace_id, input.proposal_report_id);
+    if (current.proposal_sha256 !== input.proposal_sha256) {
+      throw new CollabError("proposal_hash_mismatch", "The act names different proposal bytes; read the proposal status again", { proposal_sha256: current.proposal_sha256 });
+    }
+    this.refuseUnrecordableAct(current, input.act, input.basis);
+    const aiSnapshot = aiSnapshotOf(current);
+    if (input.expected_ai_snapshot && canonicalJson(input.expected_ai_snapshot) !== canonicalJson(aiSnapshot)) {
+      throw new CollabError("ai_position_changed", "The agents' position changed since it was shown; read the proposal status again", { ai_snapshot: aiSnapshot });
+    }
+    const id = `person_act_${randomUUID3()}`;
+    const now = this.timestamp();
+    const personAct = {
+      id,
+      proposal_report_id: input.proposal_report_id,
+      proposal_sha256: input.proposal_sha256,
+      act: input.act,
+      party: "person",
+      basis: input.basis,
+      reason: input.reason,
+      relayed_by_session_id: input.basis === "relayed_by_session" ? input.session_id : null,
+      ai_snapshot: aiSnapshot,
+      proof: input.proof
+    };
+    const event = this.appendEvent(input.workspace_id, input.act === "agree" ? "proposal.agreed" : "proposal.rejected", input.proposal_report_id, input.actor, { person_act: personAct }, input.session_id);
+    this.db.query(`
+      INSERT INTO proposal_person_acts (
+        id, workspace_id, proposal_report_id, proposal_sha256, act, party, basis,
+        reason, relayed_by_session_id, ai_snapshot_json, proof_json, created_at, event_sequence
+      ) VALUES (?, ?, ?, ?, ?, 'person', ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, input.workspace_id, input.proposal_report_id, input.proposal_sha256, input.act, input.basis, input.reason, personAct.relayed_by_session_id, canonicalJson(aiSnapshot), input.proof ? canonicalJson(input.proof) : null, now, event.sequence);
+    return this.proposalStatusInternal(input.workspace_id, input.proposal_report_id);
+  }
+  setAsideFacts(terms, challengeId, reason) {
+    const status = this.proposalStatusInternal(terms.workspace_id, terms.report_id);
+    const row = this.db.query(`SELECT * FROM reports WHERE id = ?`).get(challengeId);
+    const challenge = row ? reportFromRow(row) : null;
+    const presence = this.challengerPresence(terms.workspace_id, challenge?.from_session_id ?? null);
+    this.refuseUnrecordableSetAside(status, challenge, presence);
+    return {
+      status,
+      challenge,
+      challenger: { voice_id: presence.voice_id, session_ids: presence.session_ids, last_seen_at: presence.last_seen_at },
+      bytes: {
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: terms.proposal_sha256,
+        challenge_report_id: challengeId,
+        challenge_sha256: challengeContentSha256(challenge),
+        challenger_last_seen_at: presence.last_seen_at,
+        reason,
+        prior_person_acts: this.personActCount(terms.report_id),
+        prior_set_asides: this.setAsideCount(terms.workspace_id, terms.report_id),
+        ai_snapshot: aiSnapshotOf(status)
+      }
+    };
+  }
+  refuseUnrecordableSetAside(status, challenge, presence) {
+    const proposalId = status.proposal.id;
+    if (status.rule !== CONSENT_RULE_V2) {
+      throw setAsideRefusal("rule_has_no_set_aside", { proposal_report_id: proposalId, rule: status.rule });
+    }
+    if (status.ai.position === "withdrawn" || status.ai.position === "superseded") {
+      throw setAsideRefusal("proposal_not_on_table", {
+        position: status.ai.position,
+        obsoleted_by_report_id: status.ai.obsoleted_by_report_id
+      });
+    }
+    if (!challenge || challenge.workspace_id !== status.proposal.workspace_id || challenge.relation !== "challenges" || challenge.target_report_id !== proposalId) {
+      throw setAsideRefusal("challenge_not_standing", {
+        challenge_report_id: challenge?.id ?? null,
+        challenge_state: "not_a_challenge_to_this_proposal"
+      }, "That report is not a challenge to this proposal");
+    }
+    const earlier = (status.set_asides ?? []).find((entry) => entry.challenge_report_id === challenge.id);
+    if (earlier) {
+      throw setAsideRefusal("already_set_aside", {
+        challenge_report_id: challenge.id,
+        set_aside_id: earlier.id,
+        set_aside_at: earlier.created_at
+      });
+    }
+    if (!status.ai.unresolved_challenge_report_ids.includes(challenge.id)) {
+      throw setAsideRefusal("challenge_not_standing", {
+        challenge_report_id: challenge.id,
+        challenge_state: "withdrawn_or_lifted_by_its_voice"
+      }, "That challenge no longer stands: it was withdrawn or lifted by its own voice");
+    }
+    if (presence.live_sessions.length > 0) {
+      throw setAsideRefusal("challenger_present", {
+        challenge_report_id: challenge.id,
+        live_sessions: presence.live_sessions
+      });
+    }
+  }
+  recordSetAside(terms, challengeId, reason, act) {
+    if (act.proposal_sha256 !== terms.proposal_sha256) {
+      throw setAsideRefusal("proposal_hash_mismatch", { proposal_sha256: terms.proposal_sha256 });
+    }
+    const facts = this.setAsideFacts(terms, challengeId, reason);
+    if (act.challenge_sha256 !== facts.bytes.challenge_sha256) {
+      throw setAsideRefusal("challenge_hash_mismatch", { challenge_sha256: facts.bytes.challenge_sha256 });
+    }
+    if (act.challenger_last_seen_at !== facts.bytes.challenger_last_seen_at) {
+      throw setAsideRefusal("challenger_changed", {
+        challenge_report_id: challengeId,
+        shown_last_seen_at: act.challenger_last_seen_at,
+        last_seen_at: facts.bytes.challenger_last_seen_at
+      });
+    }
+    if (canonicalJson(act.expected_ai_snapshot) !== canonicalJson(facts.bytes.ai_snapshot)) {
+      throw setAsideRefusal("ai_position_changed", { ai_snapshot: facts.bytes.ai_snapshot });
+    }
+    const record2 = {
+      id: `set_aside_${randomUUID3()}`,
+      proposal_report_id: terms.report_id,
+      proposal_sha256: terms.proposal_sha256,
+      challenge_report_id: challengeId,
+      challenge_sha256: facts.bytes.challenge_sha256,
+      party: "person",
+      basis: act.basis,
+      reason,
+      prior_person_acts: facts.bytes.prior_person_acts,
+      prior_set_asides: facts.bytes.prior_set_asides,
+      ai_snapshot: facts.bytes.ai_snapshot,
+      challenger: facts.challenger,
+      proof: act.proof
+    };
+    const event = this.appendEvent(terms.workspace_id, "proposal.challenge_set_aside", terms.report_id, act.actor, { set_aside: record2 });
+    this.db.query(`
+      INSERT INTO proposal_set_asides (
+        id, workspace_id, proposal_report_id, challenge_report_id, set_aside_json, created_at, event_sequence
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(record2.id, terms.workspace_id, terms.report_id, challengeId, canonicalJson(record2), event.occurred_at, event.sequence);
+    return this.proposalStatusInternal(terms.workspace_id, terms.report_id);
+  }
+  challengerPresence(workspaceId, challengerSessionId) {
+    if (challengerSessionId === null)
+      return { voice_id: null, session_ids: [], last_seen_at: null, live_sessions: [] };
+    const observedAt = this.timestamp();
+    const voice = this.consentVoice(challengerSessionId);
+    const members = this.db.query(`
+      SELECT id, actor, status, last_seen_at FROM coordination_sessions WHERE workspace_id = ? ORDER BY id
+    `).all(workspaceId).filter((row) => this.consentVoice(row.id) === voice);
+    return {
+      voice_id: voice,
+      session_ids: members.map((row) => row.id),
+      last_seen_at: members.map((row) => row.last_seen_at).sort().at(-1) ?? null,
+      live_sessions: members.filter((row) => sessionLiveness(row, observedAt) === "live").map((row) => ({ id: row.id, actor: row.actor, last_seen_at: row.last_seen_at }))
+    };
+  }
+  setAsideCount(workspaceId, proposalReportId) {
+    return this.db.query(`SELECT COUNT(*) AS count FROM proposal_set_asides WHERE workspace_id = ? AND proposal_report_id = ?`).get(workspaceId, proposalReportId).count;
+  }
+  proposalSetAsides(workspaceId, proposalReportId) {
+    return this.db.query(`
+      SELECT s.* FROM proposal_set_asides s
+      JOIN reports r ON r.id = s.challenge_report_id
+        AND r.workspace_id = s.workspace_id AND r.target_report_id = s.proposal_report_id AND r.relation = 'challenges'
+      WHERE s.workspace_id = ? AND s.proposal_report_id = ? ORDER BY s.event_sequence
+    `).all(workspaceId, proposalReportId).map(proposalSetAsideFromRow);
+  }
+  personActCount(proposalReportId) {
+    return this.db.query(`SELECT COUNT(*) AS count FROM proposal_person_acts WHERE proposal_report_id = ?`).get(proposalReportId).count;
+  }
+  requireProposalTermsById(reportId) {
+    const row = this.db.query(`SELECT workspace_id FROM proposal_terms WHERE report_id = ?`).get(reportId);
+    if (!row) {
+      throw new CollabError("proposal_not_found", "No proposal with consent terms has this report id", { proposal_report_id: reportId });
+    }
+    return this.requireProposalTerms(row.workspace_id, reportId);
+  }
+  proposalReadContext(workspaceId) {
+    return { workspaceId, obsoleted: this.activeObsoletionTargets(workspaceId), voices: new Map };
+  }
+  proposalRetirement(workspaceId, reportId) {
+    return this.db.query(`
+      SELECT id, relation, event_sequence FROM reports
+      WHERE workspace_id = ? AND target_report_id = ?
+        AND relation IN ('withdraws', 'corrects', 'supersedes')
+      ORDER BY event_sequence
+      LIMIT 1
+    `).get(workspaceId, reportId);
+  }
+  standingProposalChallenges(context, reportId, setAside = new Set) {
+    const challenges = this.db.query(`
+      SELECT id, from_session_id FROM reports
+      WHERE workspace_id = ? AND target_report_id = ? AND relation = 'challenges'
+      ORDER BY event_sequence
+    `).all(context.workspaceId, reportId);
+    const standing = [];
+    for (const challenge of challenges) {
+      if (context.obsoleted.has(challenge.id))
+        continue;
+      const answers = this.db.query(`
+        SELECT id, relation, from_session_id FROM reports
+        WHERE workspace_id = ? AND target_report_id = ? AND relation = 'resolves'
+      `).all(context.workspaceId, challenge.id);
+      const challengerVoice = challenge.from_session_id ? this.consentVoice(challenge.from_session_id, context) : null;
+      const resolved = challengerVoice !== null && answers.some((answer) => !context.obsoleted.has(answer.id) && answer.from_session_id !== null && this.consentVoice(answer.from_session_id, context) === challengerVoice);
+      if (!resolved && !setAside.has(challenge.id))
+        standing.push(challenge.id);
+    }
+    return standing;
+  }
+  proposalStatusInternal(workspaceId, reportId, context = this.proposalReadContext(workspaceId)) {
+    const proposal = this.requireReport(reportId);
+    const terms = this.requireProposalTerms(workspaceId, reportId);
+    const bytes = proposalBytes({
+      workspace_id: workspaceId,
+      report_id: proposal.id,
+      task_id: proposal.task_id,
+      question: proposal.body,
+      criteria: terms.criteria,
+      extent: terms.extent,
+      relies_on: proposal.evidence_refs,
+      known_conflicts: terms.known_conflicts,
+      limits: proposal.limits,
+      origin: terms.origin,
+      topic: terms.topic,
+      closes_at: terms.closes_at,
+      supersedes_report_id: proposal.relation === "supersedes" ? proposal.target_report_id : null
+    }, terms.rule);
+    if (sha2563(bytes) !== terms.proposal_sha256) {
+      throw new CollabError("proposal_terms_invalid", "Stored proposal bytes no longer match their recorded hash", { proposal_report_id: reportId });
+    }
+    const retirement = this.proposalRetirement(workspaceId, reportId);
+    const supports = this.db.query(`
+      SELECT id, from_session_id FROM reports
+      WHERE workspace_id = ? AND target_report_id = ? AND relation = 'supports'
+      ORDER BY event_sequence
+    `).all(workspaceId, reportId).filter((support) => support.from_session_id !== null && !context.obsoleted.has(support.id));
+    const setAsides = terms.rule === CONSENT_RULE_V2 ? this.proposalSetAsides(workspaceId, reportId) : null;
+    const challengeIds = this.standingProposalChallenges(context, reportId, new Set(setAsides?.map((entry) => entry.challenge_report_id) ?? []));
+    const computed = aiPosition({
+      now: this.timestamp(),
+      closes_at: terms.closes_at,
+      obsoleted: retirement ? retirement.relation === "withdraws" ? "withdrawn" : "superseded" : null,
+      unresolved_challenge: challengeIds.length > 0,
+      author_voice_id: terms.author_voice_id,
+      snapshot_voice_ids: terms.voices.map((voice) => voice.voice_id),
+      support_voice_ids: supports.map((support) => this.consentVoice(support.from_session_id, context))
+    });
+    const acts = this.db.query(`
+      SELECT * FROM proposal_person_acts
+      WHERE workspace_id = ? AND proposal_report_id = ?
+      ORDER BY event_sequence
+    `).all(workspaceId, reportId).map(proposalPersonActFromRow);
+    const latest = acts.at(-1) ?? null;
+    const state = latest === null ? "awaiting" : latest.act === "agree" ? "agreed" : "rejected";
+    const agreement = latest?.act === "agree" ? latest : null;
+    return {
+      rule: terms.rule,
+      proposal,
+      terms,
+      proposal_bytes: bytes,
+      proposal_sha256: terms.proposal_sha256,
+      ai: {
+        position: computed.position,
+        closed: computed.closed,
+        unresolved_challenge_report_ids: challengeIds,
+        qualifying_support_report_ids: computed.qualifying_support_indexes.map((index) => supports[index].id),
+        awaiting_voice_ids: computed.awaiting_voice_ids,
+        obsoleted_by_report_id: retirement?.id ?? null,
+        basis: "computed_from_journal"
+      },
+      person: { state, acts },
+      ...setAsides ? { set_asides: setAsides } : {},
+      agreement,
+      may_proceed: agreement !== null && retirement === null,
+      authority_boundary: "an_agreement_authorises_only_the_proposal_extent"
+    };
+  }
+  requireProposalTerms(workspaceId, reportId) {
+    const row = this.db.query(`
+      SELECT * FROM proposal_terms WHERE workspace_id = ? AND report_id = ?
+    `).get(workspaceId, reportId);
+    if (!row) {
+      throw new CollabError("proposal_not_found", "No proposal with consent terms has this report id in this workspace", { proposal_report_id: reportId });
+    }
+    return proposalTermsFromRow(row);
+  }
+  requireOpenToRevision(workspaceId, reportId) {
+    const terms = this.db.query(`
+      SELECT 1 FROM proposal_terms WHERE workspace_id = ? AND report_id = ?
+    `).get(workspaceId, reportId);
+    if (!terms)
+      return;
+    if (this.proposalRetirement(workspaceId, reportId)) {
+      throw new CollabError("proposal_not_on_table", "This proposal was already withdrawn or superseded", { proposal_report_id: reportId });
+    }
+  }
+  refuseProposalRewrite(input) {
+    if (input.relation !== "corrects" && input.relation !== "supersedes" && input.relation !== "withdraws")
+      return;
+    if (!input.target_report_id)
+      return;
+    const isTermed = (id) => this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(id) !== null;
+    if (input.relation !== "withdraws" && isTermed(input.target_report_id)) {
+      throw new CollabError("proposal_terms_fixed", "A proposal with consent terms is fixed by its hash. Withdraw it, or open a revision with " + "collab_proposal_open and supersedes_report_id");
+    }
+    const target = this.db.query(`SELECT relation, target_report_id FROM reports WHERE id = ?`).get(input.target_report_id);
+    if (target?.target_report_id && ["withdraws", "corrects", "supersedes"].includes(target.relation) && !isTermed(input.target_report_id) && isTermed(target.target_report_id)) {
+      throw new CollabError("proposal_retired", "This report retired a proposal, and a retirement is final; open a new proposal instead");
+    }
+  }
+  tableVoices(workspaceId) {
+    this.requireWorkspace(workspaceId);
+    const now = this.timestamp();
+    const rows = this.db.query(`
+      SELECT id, actor, role, status, last_seen_at FROM coordination_sessions
+      WHERE workspace_id = ? AND status = 'active'
+      ORDER BY last_seen_at DESC, id
+    `).all(workspaceId);
+    const voices = new Map;
+    for (const row of rows) {
+      const voiceId = this.consentVoice(row.id);
+      voices.set(voiceId, [...voices.get(voiceId) ?? [], {
+        id: row.id,
+        actor: row.actor,
+        role: row.role,
+        liveness: sessionLiveness(row, now),
+        last_seen_at: row.last_seen_at
+      }]);
+    }
+    return [...voices.entries()].map(([voice_id, sessions]) => ({ voice_id, sessions }));
+  }
+  liveVoiceSnapshot(workspaceId, observedAt) {
+    const rows = this.db.query(`
+      SELECT id, status, last_seen_at FROM coordination_sessions
+      WHERE workspace_id = ? AND status = 'active'
+      ORDER BY id
+    `).all(workspaceId);
+    const voices = new Map;
+    for (const row of rows) {
+      if (sessionLiveness(row, observedAt) !== "live")
+        continue;
+      const voiceId = this.consentVoice(row.id);
+      voices.set(voiceId, [...voices.get(voiceId) ?? [], row.id]);
+    }
+    return [...voices.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([voice_id, live_session_ids]) => ({ voice_id, live_session_ids: live_session_ids.sort() }));
+  }
+  consentVoice(sessionId, context) {
+    const cached2 = context?.voices.get(sessionId);
+    if (cached2)
+      return cached2;
+    let current = sessionId;
+    for (let depth = 0;depth < 256; depth += 1) {
+      const row = this.db.query(`SELECT parent_session_id FROM session_parent_attestations WHERE session_id = ?`).get(current);
+      if (!row)
+        break;
+      current = row.parent_session_id;
+    }
+    context?.voices.set(sessionId, current);
+    return current;
+  }
+  listReports(workspaceId, options = {}) {
+    this.requireWorkspace(workspaceId);
+    const after = options.after_event_sequence ?? 0;
+    const limit = options.limit ?? 100;
+    if (!Number.isInteger(after) || after < 0) {
+      throw new CollabError("invalid_cursor", "Report cursor must be a non-negative integer");
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+      throw new CollabError("invalid_limit", "Report limit must be between 1 and 500");
+    }
+    const taskId = options.task_id ? validateId(options.task_id, "task_id") : null;
+    const toSessionId = options.to_session_id ? validateId(options.to_session_id, "to_session_id") : null;
+    const rows = this.db.query(`
+      SELECT * FROM reports
+      WHERE workspace_id = ?
+        AND event_sequence > ?
+        AND (? IS NULL OR task_id = ?)
+        AND (? IS NULL OR to_session_id = ?)
+      ORDER BY event_sequence
+      LIMIT ?
+    `).all(workspaceId, after, taskId, taskId, toSessionId, toSessionId, limit);
+    return rows.map(reportFromRow);
+  }
+  reviewTaskForSession(input) {
+    const taskId = validateId(input.task_id, "task_id");
+    const expectedVersion = validateExpectedVersion(input.expected_version);
+    const expectedHead = input.expected_head_sequence === undefined ? undefined : validateExpectedHeadSequence(input.expected_head_sequence);
+    if (input.outcome !== "accept" && input.outcome !== "request_changes") {
+      throw new CollabError("invalid_review_outcome", "Review outcome is invalid");
+    }
+    const summary = cleanText(input.summary, "summary", 4000);
+    const evidenceRefs = normalizeEvidenceRefs(input.evidence_refs ?? []);
+    const confidence = validateReportConfidence(input.confidence ?? "unknown");
+    const confidenceBasis = optionalText(input.confidence_basis, "confidence_basis", 2000);
+    const limits = optionalText(input.limits, "limits", 2000);
+    const request = {
+      task_id: taskId,
+      expected_version: expectedVersion,
+      outcome: input.outcome,
+      summary,
+      evidence_refs: evidenceRefs,
+      ...confidence === "unknown" ? {} : { confidence },
+      ...confidenceBasis === null ? {} : { confidence_basis: confidenceBasis },
+      ...limits === null ? {} : { limits },
+      ...expectedHead === undefined ? {} : { expected_head_sequence: expectedHead }
+    };
+    const replay = this.readSessionMutationReceipt(input, input.idempotency_key, "task.review.v2", request);
+    if (replay.found)
+      return replay.value;
+    const preparedCheckpoint = input.outcome === "accept" ? this.captureReviewCheckpoint(input, taskId) : null;
+    return this.mutateAsSession(input, input.idempotency_key, "task.review.v2", request, (session) => {
+      const row = this.requireTaskRow(session.workspace_id, taskId);
+      if (row.completion_policy !== "accepted" || row.review_status !== "pending") {
+        throw this.taskNotPendingReviewError(row, session.id);
+      }
+      this.requireVersion(row, expectedVersion);
+      if (!row.reported_by_session_id || !row.completion_report_id) {
+        throw new CollabError("review_state_invalid", "Task completion review metadata is incomplete");
+      }
+      if (row.reported_by_session_id === session.id) {
+        throw new CollabError("self_review_forbidden", "A distinct session must review reported completion");
+      }
+      for (const reference of evidenceRefs)
+        this.requireEvidenceRef(row.workspace_id, reference);
+      if (input.outcome === "accept" && this.hasObsoletedCompletionReport(row.workspace_id, row.completion_report_id)) {
+        throw new CollabError("completion_report_obsolete", "The reported completion was withdrawn, corrected, or superseded; request changes before a new completion report", { completion_report_id: row.completion_report_id });
+      }
+      if (input.outcome === "accept" && this.hasUnresolvedChallenges(row.workspace_id, row.completion_report_id)) {
+        throw new CollabError("completion_challenged", "Reported completion has an unresolved challenge", { completion_report_id: row.completion_report_id });
+      }
+      let hostCommit = null;
+      if (input.outcome === "accept") {
+        const resultCheckpoint = parseCheckpoint(row.result_checkpoint_json);
+        if (resultCheckpoint?.source === "server_observed") {
+          if (!preparedCheckpoint || checkpointDigest(preparedCheckpoint.result_checkpoint) !== checkpointDigest(resultCheckpoint)) {
+            throw new CollabError("worktree_observation_stale", "The completion checkpoint changed after review preparation");
+          }
+          this.requirePreparedRegisteredWorktree(row.workspace_id, resultCheckpoint.worktree_id, preparedCheckpoint.observed_worktree);
+          const observed = preparedCheckpoint.observed_worktree.checkpoint;
+          requireCompleteGitCheckpoint(resultCheckpoint);
+          requireCompleteGitCheckpoint(observed);
+          if (!checkpointStateMatches(resultCheckpoint, observed)) {
+            const basis = this.hostCommitSuccessorBasis(row, preparedCheckpoint);
+            if ("refusal" in basis) {
+              throw gitCheckpointStaleError(row.id, resultCheckpoint, observed, basis.refusal);
+            }
+            hostCommit = basis;
+          }
+        }
+      }
+      if (expectedHead !== undefined)
+        this.requireJournalHead(session.workspace_id, expectedHead, session.id);
+      const report = this.appendReportInternal(session, {
+        task_id: row.id,
+        to_session_id: row.reported_by_session_id,
+        kind: input.outcome === "accept" ? "observation" : "inference",
+        body: summary,
+        evidence_refs: [
+          `report:${row.completion_report_id}`,
+          ...evidenceRefs.filter((reference) => reference !== `report:${row.completion_report_id}`)
+        ],
+        confidence,
+        confidence_basis: confidenceBasis,
+        limits,
+        relation: input.outcome === "accept" ? "supports" : "challenges",
+        target_report_id: row.completion_report_id,
+        authority_scope: "local_task_coordination_review",
+        authority_basis: "distinct active collaboration session"
+      });
+      const now = this.timestamp();
+      const reviewId = `review_${randomUUID3()}`;
+      const version2 = row.version + 1;
+      const outcome = input.outcome === "accept" ? "accepted" : "changes_requested";
+      if (input.outcome === "accept") {
+        this.db.query(`
+          UPDATE tasks
+          SET review_status = 'accepted', accepted_by = ?, accepted_by_session_id = ?,
+            accepted_at = ?, version = ?, updated_at = ?
+          WHERE workspace_id = ? AND id = ?
+        `).run(session.actor, session.id, now, version2, now, row.workspace_id, row.id);
+      } else {
+        this.db.query(`
+          UPDATE tasks
+          SET status = 'open', review_status = 'changes_requested',
+            accepted_by = NULL, accepted_by_session_id = NULL, accepted_at = NULL,
+            version = ?, updated_at = ?, completed_at = NULL
+          WHERE workspace_id = ? AND id = ?
+        `).run(version2, now, row.workspace_id, row.id);
+      }
+      const event = this.appendEvent(row.workspace_id, input.outcome === "accept" ? "task.accepted" : "task.changes_requested", row.id, session.actor, {
+        review_id: reviewId,
+        review_report_id: report.id,
+        completion_report_id: row.completion_report_id,
+        review_generation: row.review_generation,
+        outcome,
+        summary,
+        version: version2,
+        authority_boundary: "acceptance_is_local_coordination_review_not_merge_deploy_truth_or_external_authority",
+        ...hostCommit ? {
+          checkpoint_basis: "host_commit_successor",
+          host_commit_sha: hostCommit.commit_sha,
+          host_commit_artifact_ids: hostCommit.artifact_ids,
+          checkpoint_boundary: "server_observed_successor_commit_is_local_evidence_not_a_commit_signature_attribution_or_an_atomic_git_sqlite_lock"
+        } : {}
+      }, session.id);
+      this.db.query(`
+        INSERT INTO task_reviews (
+          id, workspace_id, task_id, review_generation, outcome, summary,
+          reviewer_actor, reviewer_session_id, created_at, event_sequence
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(reviewId, row.workspace_id, row.id, row.review_generation, outcome, summary, session.actor, session.id, now, event.sequence);
+      return {
+        task: this.requireTask(row.workspace_id, row.id),
+        review: this.requireReview(reviewId),
+        report
+      };
+    });
+  }
+  offerHandoff(input) {
+    const normalized = {
+      ...normalizeLeaseInput(input),
+      to_actor: validateActor(input.to_actor),
+      summary: cleanText(input.summary, "summary", 4000),
+      ttl_seconds: validateTtl(input.ttl_seconds)
+    };
+    if (normalized.to_actor === normalized.actor) {
+      throw new CollabError("invalid_handoff", "A handoff target must be a different actor");
+    }
+    this.expireElapsedHandoffs(input.workspace_id, normalized.actor, normalized.task_id);
+    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "handoff.offer", normalized, () => {
+      const row = this.requireTaskRow(input.workspace_id, normalized.task_id);
+      this.requireVersion(row, normalized.expected_version);
+      this.requireActiveLease(row, normalized.actor, normalized.lease_id);
+      const pending = this.db.query(`
+        SELECT id FROM handoffs WHERE workspace_id = ? AND task_id = ? AND status = 'pending' AND expires_at > ?
+      `).get(input.workspace_id, normalized.task_id, this.timestamp());
+      if (pending)
+        throw new CollabError("handoff_pending", "Task already has a pending handoff", { handoff_id: pending.id });
+      const now = this.timestamp();
+      const id = `handoff_${randomUUID3()}`;
+      const expiresAt = [addSeconds(now, normalized.ttl_seconds), row.lease_expires_at].sort()[0];
+      this.db.query(`
+        INSERT INTO handoffs
+          (id, workspace_id, task_id, from_actor, to_actor, summary, status, offered_at, expires_at, resolved_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, NULL)
+      `).run(id, input.workspace_id, normalized.task_id, normalized.actor, normalized.to_actor, normalized.summary, now, expiresAt);
+      const version2 = row.version + 1;
+      this.db.query(`UPDATE tasks SET version = ?, updated_at = ? WHERE workspace_id = ? AND id = ?`).run(version2, now, input.workspace_id, normalized.task_id);
+      const offer = this.requireHandoff(id);
+      this.appendEvent(input.workspace_id, "handoff.offered", id, normalized.actor, {
+        offer,
+        task_version: version2,
+        note: "An offer is an invitation; the coordination lease remains with the current holder until acceptance."
+      });
+      return { handoff: offer, task: this.requireTask(input.workspace_id, normalized.task_id) };
+    });
+  }
+  respondHandoff(input) {
+    if (input.response !== "accept" && input.response !== "decline") {
+      throw new CollabError("invalid_handoff_response", "Handoff response must be 'accept' or 'decline'");
+    }
+    const normalized = {
+      ...normalizeVersionedMutation(input),
+      workspace_id: input.workspace_id,
+      handoff_id: validateId(input.handoff_id, "handoff_id"),
+      response: input.response,
+      ttl_seconds: validateTtl(input.ttl_seconds)
+    };
+    this.expireElapsedHandoffs(input.workspace_id, "system:clock");
+    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "handoff.respond", normalized, () => {
+      const offer = this.requireHandoff(normalized.handoff_id);
+      if (offer.workspace_id !== input.workspace_id)
+        throw new CollabError("handoff_not_found", "Handoff was not found in this workspace");
+      if (offer.to_actor !== normalized.actor)
+        throw new CollabError("handoff_not_recipient", "Only the named recipient may respond");
+      if (offer.status === "expired")
+        throw new CollabError("handoff_expired", "The handoff has expired");
+      if (offer.status !== "pending")
+        throw new CollabError("handoff_resolved", "Handoff has already been resolved", { status: offer.status });
+      const row = this.requireTaskRow(input.workspace_id, offer.task_id);
+      this.requireVersion(row, normalized.expected_version);
+      if (this.timestamp() >= offer.expires_at || this.isExpired(row)) {
+        throw new CollabError("handoff_expired", "The handoff or source lease has expired");
+      }
+      this.requireActiveLease(row, offer.from_actor, row.lease_id ?? "");
+      const now = this.timestamp();
+      const version2 = row.version + 1;
+      if (normalized.response === "decline") {
+        this.db.query(`UPDATE handoffs SET status = 'declined', resolved_at = ? WHERE id = ?`).run(now, offer.id);
+        this.db.query(`UPDATE tasks SET version = ?, updated_at = ? WHERE workspace_id = ? AND id = ?`).run(version2, now, input.workspace_id, row.id);
+        this.appendEvent(input.workspace_id, "handoff.declined", offer.id, normalized.actor, {
+          task_id: row.id,
+          task_version: version2
+        });
+      } else {
+        const leaseId = `lease_${randomUUID3()}`;
+        const leaseExpiresAt = addSeconds(now, normalized.ttl_seconds);
+        this.db.query(`UPDATE handoffs SET status = 'accepted', resolved_at = ? WHERE id = ?`).run(now, offer.id);
+        this.db.query(`
+          UPDATE tasks SET assignee = ?, lease_id = ?, lease_expires_at = ?, version = ?, updated_at = ?
+          WHERE workspace_id = ? AND id = ?
+        `).run(normalized.actor, leaseId, leaseExpiresAt, version2, now, input.workspace_id, row.id);
+        this.appendEvent(input.workspace_id, "handoff.accepted", offer.id, normalized.actor, {
+          task_id: row.id,
+          from_actor: offer.from_actor,
+          to_actor: normalized.actor,
+          lease_id: leaseId,
+          lease_expires_at: leaseExpiresAt,
+          task_version: version2
+        });
+      }
+      return { handoff: this.requireHandoff(offer.id), task: this.requireTask(input.workspace_id, row.id) };
+    });
+  }
+  offerHandoffForSession(input) {
+    const normalized = normalizeSessionLeaseInput(input);
+    const toSessionId = validateId(input.to_session_id, "to_session_id");
+    const summary = cleanText(input.summary, "summary", 4000);
+    const ttl = validateTtl(input.ttl_seconds);
+    if (toSessionId === input.session_id) {
+      throw new CollabError("invalid_handoff", "A handoff target must be a different session");
+    }
+    return this.mutateAsSession(input, normalized.idempotency_key, "handoff.offer.v2", { ...normalized.request, to_session_id: toSessionId, summary, ttl_seconds: ttl }, (session) => {
+      const target = this.requireCoordinationSessionRow(toSessionId);
+      if (target.workspace_id !== session.workspace_id || target.status !== "active") {
+        throw new CollabError("handoff_target_unavailable", "The target must be an active session in the same workspace");
+      }
+      const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
+      this.requireVersion(row, normalized.expected_version);
+      this.requireActiveSessionLease(row, session, normalized.lease_id);
+      const now = this.timestamp();
+      const pending = this.db.query(`
+          SELECT id FROM handoffs
+          WHERE workspace_id = ? AND task_id = ? AND status = 'pending' AND expires_at > ?
+        `).get(row.workspace_id, row.id, now);
+      if (pending) {
+        throw new CollabError("handoff_pending", "Task already has a pending handoff", {
+          handoff_id: pending.id
+        });
+      }
+      const id = `handoff_${randomUUID3()}`;
+      const expiresAt = addSeconds(now, ttl);
+      this.db.query(`
+          INSERT INTO handoffs (
+            id, workspace_id, task_id, from_actor, from_session_id,
+            to_actor, to_session_id, summary, status, offered_at, expires_at, resolved_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, NULL)
+        `).run(id, row.workspace_id, row.id, session.actor, session.id, target.actor, target.id, summary, now, expiresAt);
+      const version2 = row.version + 1;
+      this.db.query(`
+          UPDATE tasks SET version = ?, updated_at = ?
+          WHERE workspace_id = ? AND id = ?
+        `).run(version2, now, row.workspace_id, row.id);
+      const handoff = this.requireHandoff(id);
+      this.appendEvent(row.workspace_id, "handoff.offered", id, session.actor, {
+        handoff,
+        task_version: version2,
+        note: "The current session keeps its coordination lease until the target explicitly accepts."
+      }, session.id);
+      return { handoff, task: this.requireTask(row.workspace_id, row.id) };
+    });
+  }
+  respondHandoffForSession(input) {
+    const handoffId = validateId(input.handoff_id, "handoff_id");
+    const expectedVersion = validateExpectedVersion(input.expected_version);
+    if (input.response !== "accept" && input.response !== "decline") {
+      throw new CollabError("invalid_handoff_response", "Handoff response is invalid");
+    }
+    const ttl = validateTtl(input.ttl_seconds);
+    const request = {
+      handoff_id: handoffId,
+      expected_version: expectedVersion,
+      response: input.response,
+      ttl_seconds: ttl
+    };
+    const replay = this.readSessionMutationReceipt(input, input.idempotency_key, "handoff.respond.v2", request);
+    if (replay.found)
+      return replay.value;
+    const preparedCheckpoint = input.response === "accept" ? this.captureSessionWorktree(input) : null;
+    return this.mutateAsSession(input, input.idempotency_key, "handoff.respond.v2", request, (session) => {
+      const offer = this.requireHandoff(handoffId);
+      if (offer.workspace_id !== session.workspace_id || offer.to_session_id !== session.id) {
+        throw new CollabError("handoff_not_recipient", "Only the named target session may respond");
+      }
+      if (offer.status !== "pending") {
+        throw new CollabError(offer.status === "expired" ? "handoff_expired" : "handoff_resolved", "Handoff is no longer pending", { status: offer.status });
+      }
+      const row = this.requireTaskRow(session.workspace_id, offer.task_id);
+      this.requireVersion(row, expectedVersion);
+      if (this.timestamp() >= offer.expires_at || this.isExpired(row)) {
+        throw new CollabError("handoff_expired", "The offer or source lease expired");
+      }
+      if (row.assignee_session_id !== offer.from_session_id || row.lease_id === null) {
+        throw new CollabError("handoff_source_changed", "The source lease changed");
+      }
+      const now = this.timestamp();
+      const version2 = row.version + 1;
+      if (input.response === "decline") {
+        this.db.query(`
+            UPDATE handoffs SET status = 'declined', resolved_at = ? WHERE id = ?
+          `).run(now, offer.id);
+        this.db.query(`
+            UPDATE tasks SET version = ?, updated_at = ?
+            WHERE workspace_id = ? AND id = ?
+          `).run(version2, now, row.workspace_id, row.id);
+        this.appendEvent(row.workspace_id, "handoff.declined", offer.id, session.actor, {
+          task_id: row.id,
+          task_version: version2
+        }, session.id);
+      } else {
+        const worktree = this.requirePreparedWorktree(session, preparedCheckpoint);
+        const checkpoint = preparedCheckpoint.checkpoint;
+        this.requireExpectedBase(row, checkpoint);
+        const leaseId = `lease_${randomUUID3()}`;
+        const leaseExpiresAt = addSeconds(now, ttl);
+        this.db.query(`
+            UPDATE handoffs SET status = 'accepted', resolved_at = ? WHERE id = ?
+          `).run(now, offer.id);
+        this.db.query(`
+            UPDATE tasks
+            SET assignee = ?, assignee_session_id = ?, claim_worktree_id = ?,
+              lease_id = ?, lease_expires_at = ?, base_checkpoint_json = ?,
+              version = ?, updated_at = ?
+            WHERE workspace_id = ? AND id = ?
+          `).run(session.actor, session.id, worktree.id, leaseId, leaseExpiresAt, canonicalJson(checkpoint), version2, now, row.workspace_id, row.id);
+        this.appendEvent(row.workspace_id, "handoff.accepted", offer.id, session.actor, {
+          task_id: row.id,
+          from_session_id: offer.from_session_id,
+          to_session_id: session.id,
+          lease_id: leaseId,
+          lease_expires_at: leaseExpiresAt,
+          base_checkpoint: checkpoint,
+          task_version: version2
+        }, session.id);
+      }
+      return {
+        handoff: this.requireHandoff(offer.id),
+        task: this.requireTask(row.workspace_id, row.id)
+      };
+    });
+  }
+  nextForActor(workspaceId, actorInput, afterSequence = 0, eventLimit = DEFAULT_NEXT_EVENT_LIMIT) {
+    const actor = validateActor(actorInput);
+    const boundedEventLimit = validateNextEventLimit(eventLimit);
+    this.expireElapsedHandoffs(workspaceId, "system:clock");
+    const read = this.db.transaction(() => {
+      const events = this.readEventPage(workspaceId, afterSequence, boundedEventLimit);
+      const tasks = this.listTasks(workspaceId);
+      const offers = this.db.query(`
+        SELECT * FROM handoffs
+        WHERE workspace_id = ? AND to_actor = ? AND status = 'pending' AND expires_at > ?
+        ORDER BY offered_at, id
+      `).all(workspaceId, actor, this.timestamp());
+      const { claimable, conflicted } = this.projectAvailableTasks(workspaceId, tasks, (task) => task.effective_status === "lease_expired" && task.assignee_session_id === null);
+      const reportRows = this.db.query(`
+        SELECT * FROM reports
+        WHERE workspace_id = ? AND event_sequence > ? AND event_sequence <= ?
+        ORDER BY event_sequence
+      `).all(workspaceId, afterSequence, events.next_anchor.sequence);
+      return {
+        actor,
+        session: null,
+        own_claims: tasks.filter((task) => task.effective_status === "claimed" && task.assignee === actor),
+        ready_tasks: claimable,
+        claimable_tasks: claimable,
+        conflicted_tasks: conflicted,
+        handoff_offers: offers.map((row) => ({
+          handoff: handoffFromRow(row),
+          task: this.requireTask(workspaceId, row.task_id)
+        })),
+        recovery_required: recoveryRequiredFirst(tasks, () => false),
+        reports: reportRows.map(reportFromRow),
+        events,
+        projection_scope: "snapshot_head",
+        reports_scope: "event_page"
+      };
+    });
+    return read.deferred();
+  }
+  nextForSession(input) {
+    const authenticatedPoll = this.db.transaction(() => {
+      const authenticated = this.authenticateSession(input);
+      const stored = {
+        epoch_id: authenticated.cursor_epoch_id,
+        sequence: authenticated.cursor_sequence,
+        hash: authenticated.cursor_hash
+      };
+      try {
+        this.validateEventAnchor(authenticated.workspace_id, stored);
+      } catch (error51) {
+        if (error51 instanceof CollabError) {
+          throw new CollabError("cursor_reset_required", "The persisted session cursor no longer matches this journal", { cursor: stored, cause: error51.code });
+        }
+        throw error51;
+      }
+      if (input.known_cursor) {
+        const known = input.known_cursor;
+        try {
+          this.validateEventAnchor(authenticated.workspace_id, known);
+        } catch (error51) {
+          if (error51 instanceof CollabError) {
+            throw new CollabError("cursor_reset_required", "The caller's last-known cursor no longer matches this journal", { cursor: known, cause: error51.code });
+          }
+          throw error51;
+        }
+      }
+      if (input.after_sequence !== undefined) {
+        requireBoundAfterSequence(input.after_sequence, authenticated);
+      }
+      const eventLimit2 = validateNextEventLimit(input.event_limit);
+      this.recordSessionLeaseLapses(authenticated, this.timestamp());
+      const touchedAt = this.timestamp();
+      const away2 = this.awayBeforeTouch(authenticated.id, authenticated.last_seen_at, touchedAt);
+      this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(touchedAt, authenticated.id);
+      return {
+        row: this.requireCoordinationSessionRow(authenticated.id),
+        event_limit: eventLimit2,
+        away: away2
+      };
+    }).immediate();
+    const { row, event_limit: eventLimit } = authenticatedPoll;
+    const away = this.settleAway(row.id, authenticatedPoll.away);
+    this.expireElapsedHandoffs(row.workspace_id, "system:clock");
+    const read = this.db.transaction(() => {
+      const current = this.authenticateSession(input);
+      const events = this.readEventPage(current.workspace_id, current.cursor_sequence, eventLimit);
+      const tasks = this.listTasks(current.workspace_id);
+      const { claimable, conflicted } = this.projectAvailableTasks(current.workspace_id, tasks, () => false);
+      const handoffs = this.db.query(`
+        SELECT * FROM handoffs
+        WHERE workspace_id = ? AND to_session_id = ? AND status = 'pending' AND expires_at > ?
+        ORDER BY offered_at, id
+      `).all(current.workspace_id, current.id, this.timestamp());
+      const alsoToBySequence = new Map;
+      for (const event of events.events) {
+        if (event.type !== "report.posted")
+          continue;
+        const rawAlso = event.payload.also_to_session_ids;
+        if (Array.isArray(rawAlso)) {
+          const ids = rawAlso.filter((item) => typeof item === "string");
+          if (ids.length > 0)
+            alsoToBySequence.set(event.sequence, ids);
+        }
+      }
+      const reportRows = this.db.query(`
+        SELECT * FROM reports
+        WHERE workspace_id = ? AND event_sequence > ? AND event_sequence <= ?
+        ORDER BY event_sequence
+      `).all(current.workspace_id, current.cursor_sequence, events.next_anchor.sequence).filter((row2) => row2.to_session_id === null || row2.to_session_id === current.id || (alsoToBySequence.get(row2.event_sequence)?.includes(current.id) ?? false));
+      return {
+        actor: current.actor,
+        session: {
+          ...this.sessionProjection(current),
+          addressed_waiting: this.addressedWaiting(current)
+        },
+        own_claims: tasks.filter((task) => task.effective_status === "claimed" && task.assignee_session_id === current.id),
+        ready_tasks: claimable,
+        claimable_tasks: claimable,
+        conflicted_tasks: conflicted,
+        handoff_offers: handoffs.map((handoff) => ({
+          handoff: handoffFromRow(handoff),
+          task: this.requireTask(current.workspace_id, handoff.task_id)
+        })),
+        recovery_required: recoveryRequiredFirst(tasks, (task) => task.assignee_session_id === current.id),
+        reports: reportRows.map(reportFromRow),
+        events,
+        projection_scope: "snapshot_head",
+        reports_scope: "event_page",
+        away_ms: away.away_ms,
+        away_since: away.away_since
+      };
+    });
+    return read.deferred();
+  }
+  eventsSince(workspaceId, afterSequence = 0, limit = 100) {
+    if (!Number.isInteger(afterSequence) || afterSequence < 0) {
+      throw new CollabError("invalid_cursor", "Event cursor must be a non-negative integer");
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+      throw new CollabError("invalid_limit", "Event limit must be between 1 and 500");
+    }
+    const readPage = this.db.transaction(() => this.readEventPage(workspaceId, afterSequence, limit));
+    return readPage.deferred();
+  }
+  eventsAfterAnchorForSession(input) {
+    const limit = validateNextEventLimit(input.event_limit ?? DEFAULT_WAIT_EVENT_LIMIT);
+    try {
+      const db = this.nonblockingEventReader();
+      const authenticateRead = () => {
+        const session = this.authenticateSession(input, {}, db);
+        if (session.workspace_id !== input.workspace_id) {
+          throw new CollabError("session_workspace_mismatch", "The bound session belongs to another workspace");
+        }
+        const stored = {
+          epoch_id: session.cursor_epoch_id,
+          sequence: session.cursor_sequence,
+          hash: session.cursor_hash
+        };
+        try {
+          this.validateEventAnchor(session.workspace_id, stored, db, MAX_WAIT_ANCHOR_BYTES);
+          if (input.last_cursor) {
+            const known = this.validateEventAnchor(session.workspace_id, input.last_cursor, db, MAX_WAIT_ANCHOR_BYTES);
+            if (known.sequence > stored.sequence) {
+              throw new CollabError("cursor_regression", "The persisted cursor is behind the host cursor");
+            }
+          }
+        } catch (error51) {
+          if (!(error51 instanceof CollabError))
+            throw error51;
+          if (error51.code === "event_anchor_too_large")
+            throw error51;
+          throw new CollabError("cursor_reset_required", "The session cursor requires explicit reconciliation", { cause: error51.code });
+        }
+        return session;
+      };
+      const page = db.transaction(() => {
+        const session = authenticateRead();
+        const anchor = this.validateEventAnchor(session.workspace_id, input.after_anchor, db, MAX_WAIT_ANCHOR_BYTES);
+        const page2 = this.readEventPage(session.workspace_id, anchor.sequence, limit, db, MAX_WAIT_PAGE_BYTES);
+        if (!page2.chain_valid || page2.events.some((event) => event.epoch_id !== anchor.epoch_id || event.workspace_id !== session.workspace_id || event.sequence > page2.head_sequence)) {
+          throw new CollabError("database_journal_invalid", "The returned event page failed hash-chain verification");
+        }
+        return page2;
+      }).deferred();
+      db.transaction(() => {
+        const current = authenticateRead();
+        this.validateEventAnchor(current.workspace_id, page.next_anchor, db, MAX_WAIT_ANCHOR_BYTES);
+        const workspace = this.requireWorkspace(current.workspace_id, db);
+        if (workspace.event_head_sequence < page.head_sequence) {
+          throw new CollabError("cursor_ahead", "The journal rolled back during observation");
+        }
+        const observedHead = page.head_sequence === 0 ? { hash: GENESIS_HASH } : db.query("SELECT hash FROM events WHERE workspace_id = ? AND sequence = ?").get(current.workspace_id, page.head_sequence);
+        if (observedHead?.hash !== page.head_hash || workspace.event_head_sequence === page.head_sequence && workspace.event_head_hash !== page.head_hash) {
+          throw new CollabError("cursor_fork_detected", "The observed journal head changed during observation");
+        }
+      }).deferred();
+      return page;
+    } catch (error51) {
+      const code = error51?.code;
+      if (code?.startsWith("SQLITE_BUSY") || code?.startsWith("SQLITE_LOCKED")) {
+        throw new CollabError("event_read_busy", "The journal is busy; no page was returned");
+      }
+      if (error51 instanceof SyntaxError || code === "SQLITE_CORRUPT" || code === "SQLITE_NOTADB") {
+        throw new CollabError("database_journal_invalid", "The journal contains malformed event data");
+      }
+      throw error51;
+    }
+  }
+  requireEventByteBound(db, workspaceId, sequence, maxBytes, purpose = "page") {
+    const row = db.query(`
+      SELECT length(CAST(payload_json AS BLOB)) + length(CAST(actor AS BLOB))
+        + length(CAST(entity_id AS BLOB)) + length(CAST(id AS BLOB))
+        + length(CAST(epoch_id AS BLOB)) + length(CAST(workspace_id AS BLOB))
+        + length(CAST(type AS BLOB)) + length(CAST(protocol AS BLOB))
+        + length(CAST(occurred_at AS BLOB)) + length(CAST(prev_hash AS BLOB))
+        + length(CAST(hash AS BLOB)) + coalesce(length(CAST(session_id AS BLOB)), 0) AS bytes
+      FROM events WHERE workspace_id = ? AND sequence = ?
+    `).get(workspaceId, sequence);
+    if (row && row.bytes > maxBytes) {
+      if (purpose === "anchor") {
+        throw new CollabError("event_anchor_too_large", "An anchor exceeds the bounded validation ceiling; operator reconciliation is required", {
+          sequence,
+          max_anchor_bytes: maxBytes
+        });
+      }
+      throw new CollabError("event_too_large", "An event exceeds the bounded observation page; use an explicit larger-read workflow", {
+        sequence,
+        max_page_bytes: maxBytes
+      });
+    }
+  }
+  readEventPage(workspaceId, afterSequence, limit, db = this.db, maxBytes) {
+    if (!Number.isInteger(afterSequence) || afterSequence < 0) {
+      throw new CollabError("invalid_cursor", "Event cursor must be a non-negative integer");
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+      throw new CollabError("invalid_limit", "Event limit must be between 1 and 500");
+    }
+    const workspace = this.requireWorkspace(workspaceId, db);
+    if (afterSequence > workspace.event_head_sequence) {
+      throw new CollabError("invalid_cursor", "Event cursor is ahead of the workspace journal", {
+        after_sequence: afterSequence,
+        head_sequence: workspace.event_head_sequence
+      });
+    }
+    const predecessor = afterSequence === 0 ? { hash: GENESIS_HASH } : db.query(`SELECT hash FROM events WHERE workspace_id = ? AND sequence = ?`).get(workspaceId, afterSequence);
+    if (!predecessor) {
+      throw new CollabError("cursor_mismatch", "The cursor does not resolve to an event in this journal", { after_sequence: afterSequence });
+    }
+    const select = `SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
+      session_id, occurred_at, payload_json, prev_hash, hash FROM events`;
+    let events;
+    if (maxBytes === undefined) {
+      const rows = db.query(`${select} WHERE workspace_id = ? AND sequence > ? ORDER BY sequence LIMIT ?`).all(workspaceId, afterSequence, limit);
+      events = rows.map(eventFromRow);
+    } else {
+      events = [];
+      let bytes = 2048;
+      const sequences = db.query(`SELECT sequence FROM events WHERE workspace_id = ? AND sequence > ? ORDER BY sequence LIMIT ?`).all(workspaceId, afterSequence, limit);
+      for (const { sequence } of sequences) {
+        try {
+          this.requireEventByteBound(db, workspaceId, sequence, maxBytes);
+        } catch (error51) {
+          if (events.length && error51 instanceof CollabError && error51.code === "event_too_large")
+            break;
+          throw error51;
+        }
+        const event = eventFromRow(db.query(`${select} WHERE workspace_id = ? AND sequence = ?`).get(workspaceId, sequence));
+        const size = Buffer.byteLength(JSON.stringify(event)) + 1;
+        if (bytes + size > maxBytes) {
+          if (events.length)
+            break;
+          throw new CollabError("event_too_large", "An event exceeds the bounded observation page", {
+            sequence,
+            max_page_bytes: maxBytes
+          });
+        }
+        events.push(event);
+        bytes += size;
+      }
+    }
+    const chainValid = verifyEventPage(events, afterSequence, predecessor.hash, workspace.event_head_sequence, workspace.event_head_hash);
+    const cursor = {
+      epoch_id: workspace.epoch_id,
+      sequence: afterSequence,
+      hash: predecessor.hash
+    };
+    const last = events.at(-1);
+    const nextAnchor = last ? { epoch_id: last.epoch_id, sequence: last.sequence, hash: last.hash } : cursor;
+    const page = {
+      events,
+      next_cursor: nextAnchor.sequence,
+      cursor,
+      next_anchor: nextAnchor,
+      head_sequence: workspace.event_head_sequence,
+      head_hash: workspace.event_head_hash,
+      has_more: nextAnchor.sequence < workspace.event_head_sequence,
+      chain_valid: chainValid,
+      verification_scope: "returned_page"
+    };
+    if (maxBytes !== undefined && Buffer.byteLength(JSON.stringify(page)) > maxBytes) {
+      throw new CollabError("event_page_too_large", "The observation page exceeds its byte limit");
+    }
+    return page;
+  }
+  eventsAfterAnchor(workspaceId, anchor, limit = 100) {
+    const validated = this.validateEventAnchor(workspaceId, anchor);
+    return this.eventsSince(workspaceId, validated.sequence, limit);
+  }
+  proposalAddressesSession(proposalReportId, sessionId) {
+    const row = this.db.query(`
+      SELECT r.from_session_id, t.voices_json, t.author_voice_id FROM reports r
+      JOIN proposal_terms t ON t.report_id = r.id WHERE r.id = ?
+    `).get(proposalReportId);
+    if (!row)
+      return false;
+    if (row.from_session_id !== null)
+      return row.from_session_id === sessionId;
+    return JSON.parse(row.voices_json).some((voice) => voice.voice_id !== row.author_voice_id && voice.live_session_ids.includes(sessionId));
+  }
+  setAsideAddressesChallenger(challenger, sessionId) {
+    if (challenger === null || typeof challenger !== "object")
+      return false;
+    const { voice_id: voice, session_ids: sessions } = challenger;
+    if (Array.isArray(sessions) && sessions.includes(sessionId))
+      return true;
+    return typeof voice === "string" && this.consentVoice(sessionId) === voice;
+  }
+  eventAddressesSession(event, sessionId) {
+    if (event.session_id === sessionId)
+      return false;
+    const payload = event.payload ?? {};
+    const field = (value, key) => value !== null && typeof value === "object" ? value[key] : undefined;
+    switch (event.type) {
+      case "report.posted": {
+        if (payload.to_session_id === sessionId)
+          return true;
+        if (Array.isArray(payload.also_to_session_ids) && payload.also_to_session_ids.includes(sessionId)) {
+          return true;
+        }
+        if (typeof payload.about_proposal_id === "string") {
+          return this.proposalAddressesSession(payload.about_proposal_id, sessionId);
+        }
+        if (typeof payload.target_report_id !== "string")
+          return false;
+        const target = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`).get(payload.target_report_id);
+        const hasAlsoTo = Array.isArray(payload.also_to_session_ids) && payload.also_to_session_ids.length > 0;
+        return target?.from_session_id === sessionId && typeof payload.to_session_id !== "string" && !hasAlsoTo;
+      }
+      case "handoff.offered":
+        return field(payload.handoff, "to_session_id") === sessionId;
+      case "handoff.accepted":
+      case "handoff.declined":
+      case "handoff.expired": {
+        if (event.type === "handoff.expired" && !handoffExpiryIsNewsToOfferer(payload.reason))
+          return false;
+        const offer = this.db.query(`SELECT from_session_id FROM handoffs WHERE id = ?`).get(event.entity_id);
+        return offer?.from_session_id === sessionId;
+      }
+      case "task.reported_complete":
+        return payload.review_requested_session_id === sessionId;
+      case "task.accepted":
+      case "task.changes_requested": {
+        if (typeof payload.completion_report_id === "string") {
+          const completion = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`).get(payload.completion_report_id);
+          return completion?.from_session_id === sessionId;
+        }
+        const task = this.db.query(`SELECT reported_by_session_id FROM tasks WHERE workspace_id = ? AND id = ?`).get(event.workspace_id, event.entity_id);
+        return task?.reported_by_session_id === sessionId;
+      }
+      case "task.recovered":
+        return field(payload.prior_lease, "session_id") === sessionId;
+      case "proposal.opened": {
+        const voices = Array.isArray(payload.voices) ? payload.voices : [];
+        return voices.some((voice) => field(voice, "voice_id") !== payload.author_voice_id && Array.isArray(field(voice, "live_session_ids")) && field(voice, "live_session_ids").includes(sessionId));
+      }
+      case "proposal.agreed":
+      case "proposal.rejected":
+        return this.proposalAddressesSession(event.entity_id, sessionId);
+      case "proposal.challenge_set_aside":
+        return this.proposalAddressesSession(event.entity_id, sessionId) || this.setAsideAddressesChallenger(field(payload.set_aside, "challenger"), sessionId);
+      case "ballot.opened": {
+        const electorate = Array.isArray(payload.electorate) ? payload.electorate : [];
+        const listed = (key, value) => electorate.some((unit) => Array.isArray(field(unit, key)) && field(unit, key).includes(value));
+        return listed("session_ids", sessionId) || listed("voice_ids", this.consentVoice(sessionId));
+      }
+      case "ballot.closed": {
+        const opener = this.db.query(`
+          SELECT json_extract(payload_json, '$.opener_session_id') AS opener FROM events
+          WHERE workspace_id = ? AND type = 'ballot.opened' AND entity_id = ?
+        `).get(event.workspace_id, event.entity_id);
+        if (opener?.opener === sessionId)
+          return true;
+        return this.db.query(`
+          SELECT 1 FROM events WHERE workspace_id = ? AND type = 'ballot.cast' AND entity_id = ? AND session_id = ? LIMIT 1
+        `).get(event.workspace_id, event.entity_id, sessionId) !== null;
+      }
+      default:
+        return false;
+    }
+  }
+  verifyJournal(workspaceId) {
+    const audit = this.db.transaction(() => {
+      this.requireWorkspace(workspaceId);
+      return this.verifyJournalRows(workspaceId);
+    });
+    return audit.deferred();
+  }
+  verifyJournalDetails(workspaceId, expected = {}) {
+    if (expected.expected_root !== undefined && !/^[0-9a-f]{64}$/.test(expected.expected_root)) {
+      throw new CollabError("invalid_expected_root", "expected_root must be 64 lowercase hexadecimal characters");
+    }
+    if (expected.expected_tree_size !== undefined && (!Number.isSafeInteger(expected.expected_tree_size) || expected.expected_tree_size < 0)) {
+      throw new CollabError("invalid_expected_tree_size", "expected_tree_size must be a non-negative safe integer");
+    }
+    const audit = this.db.transaction(() => {
+      const workspace = this.requireWorkspace(workspaceId);
+      const rows = this.db.query(`
+        SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
+          session_id, occurred_at, payload_json, prev_hash, hash
+        FROM events WHERE workspace_id = ? ORDER BY sequence
+      `).all(workspaceId);
+      let expectedSequence = 1;
+      let previous = GENESIS_HASH;
+      let chainValid = true;
+      const eventHashes = [];
+      try {
+        for (const row of rows) {
+          const event = eventFromRow(row);
+          if (event.epoch_id !== workspace.epoch_id || event.sequence !== expectedSequence || event.prev_hash !== previous || event.hash !== eventHash(event)) {
+            chainValid = false;
+            break;
+          }
+          eventHashes.push(event.hash);
+          previous = event.hash;
+          expectedSequence += 1;
+        }
+      } catch {
+        chainValid = false;
+      }
+      if (chainValid && (workspace.event_head_sequence !== rows.length || workspace.event_head_hash !== previous)) {
+        chainValid = false;
+      }
+      const merkleRoot = chainValid ? journalMerkleRoot(workspace.epoch_id, eventHashes) : null;
+      const result = {
+        workspace_id: workspace.id,
+        chain_valid: chainValid,
+        verification_scope: "full_journal",
+        epoch_id: workspace.epoch_id,
+        tree_size: rows.length,
+        merkle_root: merkleRoot
+      };
+      if (expected.expected_root !== undefined) {
+        result.expected_root = expected.expected_root;
+        result.root_matches = chainValid && merkleRoot === expected.expected_root;
+      }
+      if (expected.expected_tree_size !== undefined) {
+        result.expected_tree_size = expected.expected_tree_size;
+        result.tree_size_matches = chainValid && rows.length === expected.expected_tree_size;
+      }
+      return result;
+    });
+    return audit.deferred();
+  }
+  journalProof(input) {
+    const read = this.db.transaction(() => {
+      const workspace = this.requireWorkspace(input.workspace_id);
+      const headSeq = workspace.event_head_sequence;
+      let targetSize;
+      let sequence = null;
+      let fromSize = null;
+      if (input.kind === "root") {
+        if (input.sequence !== undefined || input.from_size !== undefined || input.to_size !== undefined) {
+          throw new CollabError("invalid_proof_request", "kind 'root' accepts only workspace_id and optional tree_size");
+        }
+        targetSize = input.tree_size ?? headSeq;
+        if (!Number.isSafeInteger(targetSize) || targetSize < 0 || targetSize > headSeq) {
+          throw new CollabError("tree_size_out_of_range", `tree_size must be an integer between 0 and head_sequence (${headSeq})`, { head_sequence: headSeq });
+        }
+      } else if (input.kind === "inclusion") {
+        if (input.from_size !== undefined || input.to_size !== undefined) {
+          throw new CollabError("invalid_proof_request", "kind 'inclusion' accepts workspace_id, sequence, and optional tree_size");
+        }
+        targetSize = input.tree_size ?? headSeq;
+        if (!Number.isSafeInteger(targetSize) || targetSize < 1 || targetSize > headSeq) {
+          throw new CollabError("tree_size_out_of_range", `tree_size for inclusion must be an integer between 1 and head_sequence (${headSeq})`, { head_sequence: headSeq });
+        }
+        if (input.sequence === undefined || !Number.isSafeInteger(input.sequence) || input.sequence < 1 || input.sequence > targetSize) {
+          throw new CollabError("sequence_out_of_range", `sequence must be an integer between 1 and tree_size (${targetSize})`, { tree_size: targetSize, head_sequence: headSeq });
+        }
+        sequence = input.sequence;
+      } else if (input.kind === "consistency") {
+        if (input.sequence !== undefined || input.tree_size !== undefined) {
+          throw new CollabError("invalid_proof_request", "kind 'consistency' accepts workspace_id, from_size, and optional to_size");
+        }
+        targetSize = input.to_size ?? headSeq;
+        if (!Number.isSafeInteger(targetSize) || targetSize < 0 || targetSize > headSeq) {
+          throw new CollabError("tree_size_out_of_range", `to_size must be an integer between 0 and head_sequence (${headSeq})`, { head_sequence: headSeq });
+        }
+        if (input.from_size === undefined || !Number.isSafeInteger(input.from_size) || input.from_size < 0 || input.from_size > targetSize) {
+          throw new CollabError("invalid_proof_request", `from_size must be an integer between 0 and to_size (${targetSize})`, { to_size: targetSize, head_sequence: headSeq });
+        }
+        fromSize = input.from_size;
+      } else {
+        throw new CollabError("invalid_proof_request", `Unsupported proof kind: ${String(input.kind)}`);
+      }
+      const rows = targetSize === 0 ? [] : this.db.query(`
+            SELECT epoch_id, sequence, hash
+            FROM events
+            WHERE workspace_id = ? AND sequence <= ?
+            ORDER BY sequence
+          `).all(workspace.id, targetSize);
+      if (rows.length !== targetSize) {
+        throw new CollabError("database_journal_invalid", "Workspace event sequence is not contiguous up to requested tree_size", { workspace_id: workspace.id, expected: targetSize, found: rows.length });
+      }
+      const eventHashes = new Array(targetSize);
+      for (let i = 0;i < targetSize; i += 1) {
+        const row = rows[i];
+        if (row.sequence !== i + 1 || row.epoch_id !== workspace.epoch_id || !/^[0-9a-f]{64}$/.test(row.hash)) {
+          throw new CollabError("database_journal_invalid", "Workspace event row failed epoch, sequence, or hash invariant", { workspace_id: workspace.id, sequence: i + 1 });
+        }
+        eventHashes[i] = row.hash;
+      }
+      const headHash = targetSize === 0 ? GENESIS_HASH : eventHashes[targetSize - 1];
+      if (targetSize === headSeq && headHash !== workspace.event_head_hash) {
+        throw new CollabError("database_journal_invalid", "Workspace head hash does not match the last stored event hash", { workspace_id: workspace.id });
+      }
+      if (input.kind === "root") {
+        return {
+          workspace_id: workspace.id,
+          kind: "root",
+          epoch_id: workspace.epoch_id,
+          tree_size: targetSize,
+          root: journalMerkleRoot(workspace.epoch_id, eventHashes),
+          head_hash: headHash,
+          head_sequence: headSeq
+        };
+      }
+      if (input.kind === "inclusion") {
+        const proof2 = proveJournalInclusion(workspace.epoch_id, eventHashes, sequence, targetSize);
+        return {
+          workspace_id: workspace.id,
+          kind: "inclusion",
+          ...proof2,
+          head_hash: headHash,
+          head_sequence: headSeq
+        };
+      }
+      const proof = proveJournalConsistency(workspace.epoch_id, eventHashes, fromSize, targetSize);
+      return {
+        workspace_id: workspace.id,
+        kind: "consistency",
+        ...proof,
+        tree_size: targetSize,
+        root: proof.to_root,
+        head_hash: headHash,
+        head_sequence: headSeq
+      };
+    });
+    return read.deferred();
+  }
+  verifyJournalRows(workspaceId) {
+    const workspace = this.getWorkspace(workspaceId);
+    if (!workspace)
+      return false;
+    const rows = this.db.query(`
+      SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
+        session_id, occurred_at, payload_json, prev_hash, hash
+      FROM events WHERE workspace_id = ? ORDER BY sequence
+    `).all(workspaceId);
+    let expectedSequence = 1;
+    let previous = GENESIS_HASH;
+    try {
+      for (const row of rows) {
+        const event = eventFromRow(row);
+        if (event.sequence !== expectedSequence || event.prev_hash !== previous)
+          return false;
+        if (event.hash !== eventHash(event))
+          return false;
+        previous = event.hash;
+        expectedSequence += 1;
+      }
+    } catch {
+      return false;
+    }
+    return workspace.event_head_sequence === rows.length && workspace.event_head_hash === previous;
+  }
+  mutate(workspaceId, actor, idempotencyKey, operation, request, apply) {
+    this.requireWorkspace(workspaceId);
+    const requestHash = sha2563(canonicalJson({ operation, request }));
+    const transaction = this.db.transaction(() => {
+      const existing = this.db.query(`
+        SELECT operation, request_hash, response_json FROM mutations
+        WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
+      `).get(workspaceId, actor, idempotencyKey);
+      if (existing) {
+        if (existing.operation !== operation || existing.request_hash !== requestHash) {
+          throw new CollabError("idempotency_conflict", "Idempotency key was already used for a different mutation", {
+            operation: existing.operation
+          });
+        }
+        return hydrateLegacyMutationResponse(JSON.parse(existing.response_json), this.timestamp());
+      }
+      const response2 = apply();
+      this.db.query(`
+        INSERT INTO mutations
+          (workspace_id, actor, idempotency_key, operation, request_hash, response_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(workspaceId, actor, idempotencyKey, operation, requestHash, JSON.stringify(response2), this.timestamp());
+      return response2;
+    });
+    const response = transaction.immediate();
+    this.tightenFileModes();
+    return response;
+  }
+  readSessionMutationReceipt(credential, idempotencyKeyInput, operation, request) {
+    const session = this.authenticateSession(credential);
+    const idempotencyKey = validateIdempotencyKey(idempotencyKeyInput);
+    const requestHash = sha2563(canonicalJson({ operation, request }));
+    const existing = this.db.query(`
+      SELECT operation, request_hash, response_json FROM mutations
+      WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
+    `).get(session.workspace_id, `session:${session.id}`, idempotencyKey);
+    if (!existing)
+      return { found: false };
+    if (existing.operation !== operation || existing.request_hash !== requestHash) {
+      throw new CollabError("idempotency_conflict", "Idempotency key was already used for a different session mutation", { operation: existing.operation });
+    }
+    return {
+      found: true,
+      value: JSON.parse(existing.response_json)
+    };
+  }
+  mutateAsSession(credential, idempotencyKeyInput, operation, request, apply, options = {}) {
+    const idempotencyKey = validateIdempotencyKey(idempotencyKeyInput);
+    const transaction = this.db.transaction(() => {
+      const session = this.authenticateSession(credential, options);
+      this.recordSessionLeaseLapses(session, this.timestamp());
+      const mutationActor = `session:${session.id}`;
+      const requestHash = sha2563(canonicalJson({ operation, request }));
+      const existing = this.db.query(`
+        SELECT operation, request_hash, response_json FROM mutations
+        WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
+      `).get(session.workspace_id, mutationActor, idempotencyKey);
+      if (existing) {
+        if (existing.operation !== operation || existing.request_hash !== requestHash) {
+          throw new CollabError("idempotency_conflict", "Idempotency key was already used for a different session mutation", { operation: existing.operation });
+        }
+        this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
+        return JSON.parse(existing.response_json);
+      }
+      const receiptPlan = options.receipt_plan ?? this.ambientPlanFor(idempotencyKey);
+      if (receiptPlan)
+        this.requireReceiptPlan(session, receiptPlan);
+      this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
+      const guardNonce = `guard_${randomUUID3()}`;
+      this.db.query(`INSERT INTO v2_write_guard (nonce, enabled) VALUES (?, 1)`).run(guardNonce);
+      try {
+        const response2 = apply(session);
+        this.db.query(`
+          INSERT INTO mutations (
+            workspace_id, actor, idempotency_key, operation,
+            request_hash, response_json, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(session.workspace_id, mutationActor, idempotencyKey, operation, requestHash, JSON.stringify(response2), this.timestamp());
+        return response2;
+      } finally {
+        this.db.query(`DELETE FROM v2_write_guard WHERE nonce = ?`).run(guardNonce);
+      }
+    });
+    const response = transaction.immediate();
+    this.tightenFileModes();
+    return response;
+  }
+  authenticateSession(input, options = {}, db = this.db) {
+    let id;
+    try {
+      id = validateId(input.session_id, "session_id");
+    } catch {
+      throw new CollabError("session_auth_failed", "Session credentials are invalid");
+    }
+    const row = db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(id);
+    const suppliedHash = hashSessionToken(typeof input.session_token === "string" ? input.session_token : "");
+    const expectedHash = row?.token_hash ?? "0".repeat(64);
+    const tokenMatches = safeDigestEqual(suppliedHash, expectedHash);
+    const generationMatches = Number.isInteger(input.generation) && row !== null && input.generation === row.generation;
+    if (!row || !tokenMatches || !generationMatches || row.status !== "active") {
+      throw new CollabError("session_auth_failed", "Session credentials are invalid");
+    }
+    if (row.cursor_recovery_required !== 0 && !options.allow_cursor_recovery) {
+      throw new CollabError("cursor_recovery_required", "Reset this session to an exact journal anchor before further mutations", {
+        persisted_cursor: {
+          epoch_id: row.cursor_epoch_id,
+          sequence: row.cursor_sequence,
+          hash: row.cursor_hash
+        },
+        expected_cursor_version: row.cursor_version
+      });
+    }
+    return row;
+  }
+  authenticateResumeToken(sessionId, token) {
+    const row = this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(sessionId);
+    const suppliedHash = hashSessionToken(typeof token === "string" ? token : "");
+    const expectedHash = row?.token_hash ?? "0".repeat(64);
+    if (!row || !safeDigestEqual(suppliedHash, expectedHash) || row.status !== "active") {
+      throw new CollabError("session_auth_failed", "Session credentials are invalid");
+    }
+    return row;
+  }
+  captureSessionWorktree(input) {
+    const session = this.authenticateSession(input);
+    const worktree = this.requireWorktreeRow(session.worktree_id);
+    return this.captureRegisteredWorktree(session, worktree);
+  }
+  captureReviewCheckpoint(input, taskId) {
+    const session = this.authenticateSession(input);
+    const task = this.requireTaskRow(session.workspace_id, taskId);
+    if (task.completion_policy !== "accepted" || task.review_status !== "pending")
+      return null;
+    const resultCheckpoint = parseCheckpoint(task.result_checkpoint_json);
+    if (resultCheckpoint?.source !== "server_observed")
+      return null;
+    const worktree = this.requireWorktreeRow(resultCheckpoint.worktree_id);
+    if (worktree.workspace_id !== session.workspace_id) {
+      throw new CollabError("checkpoint_workspace_mismatch", "The completion checkpoint belongs to another workspace");
+    }
+    const observedWorktree = this.captureRegisteredWorktree(session, worktree);
+    const resultHead = resultCheckpoint.head_sha;
+    const observedHead = observedWorktree.checkpoint.head_sha;
+    return {
+      workspace_id: session.workspace_id,
+      task_id: taskId,
+      result_checkpoint: resultCheckpoint,
+      observed_worktree: observedWorktree,
+      host_commit: resultHead && observedHead && observedHead !== resultHead ? inspectSuccessorCommit(worktree.root_path, observedHead, resultHead) : null
+    };
+  }
+  hostCommitSuccessorBasis(row, prepared) {
+    const result = prepared.result_checkpoint;
+    const observed = prepared.observed_worktree.checkpoint;
+    const inspected = prepared.host_commit;
+    if (observed.head_sha === result.head_sha) {
+      return {
+        refusal: "HEAD has not moved since the result checkpoint, so only an exact checkpoint match is accepted"
+      };
+    }
+    if (observed.worktree_id !== result.worktree_id) {
+      return { refusal: "The observed worktree is not the result checkpoint's worktree" };
+    }
+    if (!result.branch) {
+      return {
+        refusal: "The result checkpoint was captured on a detached HEAD, so no branch can carry a host commit"
+      };
+    }
+    if (observed.branch !== result.branch) {
+      const where = observed.branch ? `branch "${observed.branch}"` : "a detached HEAD";
+      return {
+        refusal: `HEAD is on ${where}, not the result checkpoint's branch "${result.branch}"`
+      };
+    }
+    if (observed.dirty !== false) {
+      return { refusal: "The observed worktree is not clean" };
+    }
+    if (!inspected || inspected.commit_sha !== observed.head_sha) {
+      return { refusal: "The server did not inspect the observed HEAD commit" };
+    }
+    if (!inspected.ok)
+      return { refusal: inspected.reason };
+    const commit = inspected.commit_sha;
+    if (inspected.parent_sha !== result.head_sha) {
+      return { refusal: `Commit ${commit} does not follow the result checkpoint HEAD` };
+    }
+    if (inspected.changes.length === 0) {
+      return { refusal: `Commit ${commit} changes no path` };
+    }
+    const scopes = parseStringArray(row.path_scopes_json);
+    const rejectedThrough = this.db.query(`
+      SELECT COALESCE(MAX(sequence), 0) AS sequence FROM events
+      WHERE workspace_id = ? AND entity_id = ? AND type = 'task.changes_requested'
+    `).get(row.workspace_id, row.id).sequence;
+    const artifacts = this.db.query(`
+      SELECT a.id, a.uri, a.sha256 FROM artifacts a
+      JOIN events e
+        ON e.workspace_id = a.workspace_id AND e.entity_id = a.task_id
+        AND e.type = 'artifact.attached' AND json_extract(e.payload_json, '$.artifact.id') = a.id
+      WHERE a.workspace_id = ? AND a.task_id = ? AND a.kind = 'file' AND e.sequence > ?
+      ORDER BY e.sequence
+    `).all(row.workspace_id, row.id, rejectedThrough);
+    const newest = new Map;
+    for (const artifact of artifacts) {
+      const path = artifactRepositoryPath(artifact.uri, prepared.observed_worktree.root_path);
+      if (path !== null)
+        newest.set(path, artifact);
+    }
+    const artifactIds = [];
+    for (const change of inspected.changes) {
+      if (!pathWithinScopes(change.path, scopes)) {
+        return { refusal: `Commit ${commit} changes ${change.path}, outside the task's path_scopes` };
+      }
+      if (change.blob_sha256 === null) {
+        return {
+          refusal: `Commit ${commit} deletes ${change.path} or commits it as something other than a regular file`
+        };
+      }
+      const artifact = newest.get(change.path);
+      if (!artifact) {
+        const since = rejectedThrough > 0 ? " since its latest request_changes" : "";
+        return { refusal: `No file artifact attached to this task${since} names ${change.path}` };
+      }
+      if (!artifact.sha256) {
+        return {
+          refusal: `The newest file artifact for ${change.path} (${artifact.id}) has no sha256`
+        };
+      }
+      if (artifact.sha256 !== change.blob_sha256) {
+        return {
+          refusal: `The committed bytes of ${change.path} differ from its newest file artifact ${artifact.id}`
+        };
+      }
+      artifactIds.push(artifact.id);
+    }
+    return { commit_sha: commit, artifact_ids: artifactIds };
+  }
+  captureRegisteredWorktree(session, worktree) {
+    let identity;
+    try {
+      identity = inspectRepository(worktree.root_path);
+    } catch (error51) {
+      throw new CollabError("worktree_unavailable", "The registered worktree could not be inspected", {
+        worktree_id: worktree.id,
+        cause: error51 instanceof CollabError ? error51.code : "repository_inspection_failed"
+      });
+    }
+    if (identity.root_path !== worktree.root_path || identity.checkpoint.worktree_id !== worktree.id || identity.worktree_fingerprint !== worktree.fingerprint || identity.git_common_dir_hash !== worktree.git_common_dir_hash) {
+      throw new CollabError("worktree_identity_changed", "The registered path now resolves to a different worktree identity", { worktree_id: worktree.id });
+    }
+    return {
+      session_id: session.id,
+      workspace_id: session.workspace_id,
+      worktree_id: worktree.id,
+      root_path: worktree.root_path,
+      fingerprint: worktree.fingerprint,
+      git_common_dir_hash: worktree.git_common_dir_hash,
+      checkpoint: identity.checkpoint
+    };
+  }
+  requirePreparedWorktree(session, prepared) {
+    if (prepared.session_id !== session.id || prepared.worktree_id !== session.worktree_id) {
+      throw new CollabError("worktree_observation_stale", "The prepared worktree observation belongs to another session");
+    }
+    return this.requirePreparedRegisteredWorktree(session.workspace_id, session.worktree_id, prepared);
+  }
+  requirePreparedRegisteredWorktree(workspaceId, worktreeId2, prepared) {
+    const row = this.requireWorktreeRow(worktreeId2);
+    if (prepared.workspace_id !== workspaceId || prepared.worktree_id !== row.id || prepared.root_path !== row.root_path || prepared.fingerprint !== row.fingerprint || prepared.git_common_dir_hash !== row.git_common_dir_hash || row.workspace_id !== workspaceId) {
+      throw new CollabError("worktree_observation_stale", "The registered worktree changed after it was inspected", { worktree_id: worktreeId2 });
+    }
+    this.touchWorktree(row, prepared.checkpoint, this.timestamp());
+    return row;
+  }
+  requireExpectedBase(row, checkpoint) {
+    if (row.expected_base_sha && checkpoint.head_sha !== row.expected_base_sha) {
+      throw new CollabError("expected_base_mismatch", "The worktree HEAD does not match the task's required base", {
+        expected_base_sha: row.expected_base_sha,
+        observed_head_sha: checkpoint.head_sha,
+        worktree_id: checkpoint.worktree_id
+      });
+    }
+  }
+  sessionHandle(row, token, workspace, worktreeRow) {
+    return {
+      workspace,
+      worktree: worktreeFromRow(worktreeRow),
+      session: this.sessionProjection(row),
+      credential: {
+        session_id: row.id,
+        session_token: token,
+        generation: row.generation,
+        last_cursor: {
+          epoch_id: row.cursor_epoch_id,
+          sequence: row.cursor_sequence,
+          hash: row.cursor_hash
+        }
+      },
+      identity_boundary: "session_credentials_fence_cooperating_local_clients_but_do_not_authenticate_a_person_or_model"
+    };
+  }
+  registerWorktree(workspaceId, identity, now, actor, emitEvent) {
+    this.db.query(`INSERT OR IGNORE INTO repositories (key, created_at) VALUES (?, ?)`).run(identity.repository_key, now);
+    this.db.query(`
+      INSERT INTO worktrees (
+        id, workspace_id, repository_key, root_path, git_common_dir_hash, fingerprint,
+        branch, head_sha, dirty, registered_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(identity.checkpoint.worktree_id, workspaceId, identity.repository_key, identity.root_path, identity.git_common_dir_hash, identity.worktree_fingerprint, identity.checkpoint.branch, identity.checkpoint.head_sha, booleanToSql(identity.checkpoint.dirty), now, now);
+    const row = this.requireWorktreeRow(identity.checkpoint.worktree_id);
+    if (emitEvent) {
+      this.appendEvent(workspaceId, "worktree.registered", row.id, actor, {
+        root_path: row.root_path,
+        repository_key: row.repository_key,
+        checkpoint: checkpointFromWorktreeRow(row, now)
+      });
+    }
+    return row;
+  }
+  touchWorktree(row, checkpoint, now) {
+    this.db.query(`
+      UPDATE worktrees
+      SET branch = ?, head_sha = ?, dirty = ?, last_seen_at = ?
+      WHERE id = ?
+    `).run(checkpoint.branch, checkpoint.head_sha, booleanToSql(checkpoint.dirty), now, row.id);
+  }
+  requireWorktreeRow(id) {
+    const row = this.db.query(`SELECT * FROM worktrees WHERE id = ?`).get(id);
+    if (!row)
+      throw new CollabError("worktree_not_found", `Worktree '${id}' was not found`);
+    return row;
+  }
+  validateEventAnchor(workspaceId, input, db = this.db, maxBytes) {
+    const workspace = this.requireWorkspace(workspaceId, db);
+    if (!input || input.epoch_id !== workspace.epoch_id || !Number.isInteger(input.sequence) || input.sequence < 0 || typeof input.hash !== "string") {
+      throw new CollabError("cursor_mismatch", "The cursor does not belong to this journal");
+    }
+    if (input.sequence === 0) {
+      if (input.hash !== GENESIS_HASH) {
+        throw new CollabError("cursor_fork_detected", "The genesis cursor hash is invalid");
+      }
+      return { ...input };
+    }
+    if (input.sequence > workspace.event_head_sequence) {
+      throw new CollabError("cursor_ahead", "The cursor is ahead of the journal", {
+        head_sequence: workspace.event_head_sequence
+      });
+    }
+    if (maxBytes !== undefined)
+      this.requireEventByteBound(db, workspaceId, input.sequence, maxBytes, "anchor");
+    const row = db.query(`
+      SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
+        session_id, occurred_at, payload_json, prev_hash, hash
+      FROM events
+      WHERE workspace_id = ? AND sequence = ?
+    `).get(workspaceId, input.sequence);
+    const event = row ? eventFromRow(row) : null;
+    if (!event || event.epoch_id !== input.epoch_id || event.hash !== input.hash || event.hash !== eventHash(event)) {
+      throw new CollabError("cursor_fork_detected", "The cursor sequence resolves to a different journal hash");
+    }
+    return {
+      epoch_id: event.epoch_id,
+      sequence: event.sequence,
+      hash: event.hash
+    };
+  }
+  projectAvailableTasks(workspaceId, tasks, allowExpired) {
+    const claimable = [];
+    const conflicted = [];
+    for (const task of tasks) {
+      const available = task.effective_status === "open" || task.effective_status === "lease_expired" && allowExpired(task);
+      if (!available || !this.dependenciesSatisfied(workspaceId, task.dependencies))
+        continue;
+      const conflicts = this.taskPathConflicts(task);
+      if (conflicts.length > 0) {
+        conflicted.push({ task, conflicts });
+      } else {
+        claimable.push(task);
+      }
+    }
+    return { claimable, conflicted };
+  }
+  dependenciesSatisfied(workspaceId, dependencies) {
+    return dependencies.every((id) => {
+      const dependency = this.requireTask(workspaceId, id);
+      if (dependency.status !== "completed")
+        return false;
+      return dependency.completion_policy !== "accepted" || dependency.review_status === "accepted";
+    });
+  }
+  taskPathConflicts(task) {
+    if (task.path_scopes.length === 0 || task.work_mode === "read_only")
+      return [];
+    const workspace = this.requireWorkspace(task.workspace_id);
+    const rows = this.db.query(`
+      SELECT t.*
+      FROM tasks t
+      JOIN workspaces w ON w.id = t.workspace_id
+      WHERE (w.repository_key = ? OR w.id IN (
+        SELECT other.workspace_id FROM worktrees own
+        JOIN repository_aliases a ON a.worktree_id = own.id
+        JOIN repository_aliases b ON b.portable_key = a.portable_key
+        JOIN worktrees other ON other.id = b.worktree_id
+        WHERE own.workspace_id = ?
+      ))
+        AND NOT (t.workspace_id = ? AND t.id = ?)
+        AND (
+          (t.status = 'claimed' AND (t.lease_expires_at > ? OR t.assignee_session_id IS NOT NULL))
+          OR (t.status = 'completed' AND t.completion_policy = 'accepted'
+              AND t.review_status = 'pending')
+        )
+    `).all(workspace.repository_key, task.workspace_id, task.workspace_id, task.id, this.timestamp());
+    const result = [];
+    for (const row of rows) {
+      if (row.work_mode === "read_only")
+        continue;
+      const pairs = pathConflicts(task.path_scopes, parseStringArray(row.path_scopes_json));
+      if (pairs.length > 0) {
+        result.push({
+          active_task_id: row.id,
+          active_workspace_id: row.workspace_id,
+          assignee: row.assignee,
+          assignee_session_id: row.assignee_session_id,
+          lease_expires_at: row.lease_expires_at,
+          path_pairs: pairs
+        });
+      }
+    }
+    return result;
+  }
+  requireActiveSessionLease(row, session, leaseId) {
+    if (row.status !== "claimed" || !row.lease_id || !row.lease_expires_at) {
+      throw new CollabError("lease_not_active", "Task does not have an active lease");
+    }
+    if (this.isExpired(row, row.assignee_session_id === session.id ? session : undefined)) {
+      throw new CollabError("lease_expired", "Task lease has expired", {
+        lease_expires_at: row.lease_expires_at
+      });
+    }
+    if (row.assignee_session_id !== session.id || row.lease_id !== leaseId) {
+      throw new CollabError("lease_not_holder", "Mutation requires the current session lease", {
+        assignee: row.assignee,
+        assignee_session_id: row.assignee_session_id
+      });
+    }
+  }
+  clearSessionClaim(row, session, type, payload) {
+    const now = this.timestamp();
+    const version2 = row.version + 1;
+    this.db.query(`
+      UPDATE tasks
+      SET status = 'open', assignee = NULL, assignee_session_id = NULL,
+        claim_worktree_id = NULL, lease_id = NULL, lease_expires_at = NULL,
+        version = ?, updated_at = ?
+      WHERE workspace_id = ? AND id = ?
+    `).run(version2, now, row.workspace_id, row.id);
+    this.expirePendingHandoffs(row.workspace_id, row.id, now, session.actor, "task_released");
+    this.appendEvent(row.workspace_id, type, row.id, session.actor, {
+      ...payload,
+      version: version2
+    }, session.id);
+    return this.requireTask(row.workspace_id, row.id);
+  }
+  liveLeaseRefusal(workspaceId, sessionId, now, holderWillResume = false) {
+    const live = this.db.query(`
+      SELECT * FROM tasks
+      WHERE workspace_id = ? AND assignee_session_id = ?
+        AND status = 'claimed'
+      ORDER BY id
+    `).all(workspaceId, sessionId);
+    const active = live.filter((task) => holderWillResume || !this.isExpired(task, undefined, now));
+    if (active.length === 0)
+      return null;
+    return new CollabError("session_has_active_leases", "Release, complete, or hand off active task leases before ending the session, or end with release_leases: true. " + "A handoff counts once it is accepted; release_leases also expires this session's pending outgoing offers", {
+      task_ids: active.map((task) => task.id),
+      leases: active.map((task) => ({
+        task_id: task.id,
+        lease_id: task.lease_id,
+        expires_at: task.lease_expires_at
+      })),
+      required_action: "resolve_active_task_leases",
+      remedy: "Call collab_session_end again with release_leases: true (optionally release_summary) to release every lease this session holds and end in one step, or release, complete, or hand off each lease first. A handoff counts once it is accepted: ending with release_leases expires any offer still pending."
+    });
+  }
+  expireSessionLeaseForRecovery(row, session, now) {
+    const holder = row.assignee_session_id === session.id ? session : this.requireCoordinationSessionRow(row.assignee_session_id);
+    const staleAt = holder.status === "ended" ? Date.parse(holder.ended_at ?? now) : Date.parse(holder.last_seen_at) + SESSION_STALE_AFTER_MS + 1;
+    const lapse = this.db.query(`SELECT effective_at FROM session_lease_lapses WHERE lease_id = ?`).get(row.lease_id);
+    const effectiveAt = lapse?.effective_at ?? (Number.isFinite(staleAt) ? new Date(Math.max(Date.parse(row.lease_expires_at), staleAt)).toISOString() : now);
+    const prior = {
+      assignee: row.assignee,
+      session_id: row.assignee_session_id,
+      lease_id: row.lease_id,
+      lease_expires_at: row.lease_expires_at,
+      checkpoint: parseCheckpoint(row.base_checkpoint_json)
+    };
+    const expiryVersion = row.version + 1;
+    this.db.query(`
+      UPDATE tasks
+      SET status = 'open', assignee = NULL, assignee_session_id = NULL,
+        claim_worktree_id = NULL, lease_id = NULL, lease_expires_at = NULL,
+        version = ?, updated_at = ?
+      WHERE workspace_id = ? AND id = ?
+    `).run(expiryVersion, now, row.workspace_id, row.id);
+    this.expirePendingHandoffs(row.workspace_id, row.id, now, "system:clock", "source_lease_expired");
+    this.appendEvent(row.workspace_id, "task.claim_expired", row.id, "system:clock", {
+      ...prior,
+      effective_at: effectiveAt,
+      lease_lifetime_basis: "session_liveness",
+      observed_by_session_id: session.id,
+      version: expiryVersion
+    });
+    return { prior, expiryVersion };
+  }
+  recordRecoveryWithoutTakeover(row, session, input) {
+    const version2 = input.expiry_version + 1;
+    this.db.query(`
+      UPDATE tasks
+      SET status = ?, blocker = ?, version = ?, updated_at = ?
+      WHERE workspace_id = ? AND id = ?
+    `).run(input.action === "block" ? "blocked" : "open", input.action === "block" ? input.blocker : null, version2, input.now, row.workspace_id, row.id);
+    const event = this.appendEvent(row.workspace_id, "task.recovered", row.id, session.actor, {
+      prior_lease: input.prior,
+      action: input.action,
+      recovery_note: input.recovery_note,
+      recovery_checkpoint: null,
+      version: version2,
+      note: "Recovery acknowledges an expired coordination lease; it does not accept or attribute prior work."
+    }, session.id);
+    this.db.query(`
+      INSERT INTO task_recoveries (
+        id, workspace_id, task_id, prior_lease_id, prior_session_id,
+        recovered_by_session_id, action, note, prior_checkpoint_json,
+        new_lease_id, recovered_at, event_sequence
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+    `).run(`recovery_${randomUUID3()}`, row.workspace_id, row.id, input.prior.lease_id, input.prior.session_id, session.id, input.action, input.recovery_note, input.prior.checkpoint ? canonicalJson(input.prior.checkpoint) : null, input.now, event.sequence);
+    return this.requireTask(row.workspace_id, row.id);
+  }
+  recoveryBundle(row) {
+    return {
+      task_id: row.id,
+      prior_assignee: row.assignee,
+      prior_session_id: row.assignee_session_id,
+      prior_lease_id: row.lease_id,
+      lease_expires_at: row.lease_expires_at,
+      base_checkpoint: parseCheckpoint(row.base_checkpoint_json),
+      latest_progress: row.latest_progress,
+      required_action: "collab_task_recover"
+    };
+  }
+  validateReportInput(session, input) {
+    if (input.task_id)
+      this.requireTaskRow(session.workspace_id, input.task_id);
+    if (input.to_session_id) {
+      const targetSession = this.requireCoordinationSessionRow(input.to_session_id);
+      if (targetSession.workspace_id !== session.workspace_id) {
+        throw new CollabError("report_target_mismatch", "Report target is in another workspace");
+      }
+    }
+    for (const extraSessionId of input.also_to_session_ids ?? []) {
+      const targetSession = this.requireCoordinationSessionRow(extraSessionId);
+      if (targetSession.workspace_id !== session.workspace_id) {
+        throw new CollabError("report_target_mismatch", "Report target is in another workspace");
+      }
+    }
+    if (input.relation === "informs" && input.target_report_id) {
+      throw new CollabError("invalid_report_relation", "An informing report does not target another report. To agree with or answer a report, use " + 'relation "supports" (or "challenges" to disagree) with target_report_id; ' + "to address a session, use to_session_id");
+    }
+    if (input.relation !== "informs" && !input.target_report_id) {
+      throw new CollabError("report_target_required", "This report relation requires an earlier target report");
+    }
+    if (input.target_report_id) {
+      const target = this.requireReport(input.target_report_id);
+      if (target.workspace_id !== session.workspace_id) {
+        throw new CollabError("report_target_mismatch", "Target report is in another workspace");
+      }
+      if (target.task_id !== input.task_id) {
+        throw new CollabError("report_task_mismatch", "Related reports must use the same task scope as their target", { target_task_id: target.task_id, report_task_id: input.task_id });
+      }
+      if (["corrects", "withdraws", "supersedes"].includes(input.relation) && target.from_session_id !== session.id) {
+        throw new CollabError("report_author_mismatch", "Only the original author session may correct, withdraw, or supersede its report; other sessions should challenge it");
+      }
+      if (input.relation === "resolves" && target.relation !== "challenges") {
+        throw new CollabError("invalid_report_relation", "A resolving report must target a challenge. To agree with or confirm a proposal, use " + 'relation "supports" with target_report_id');
+      }
+    }
+    if (input.kind === "decision" && (!input.authority_scope || !input.authority_basis)) {
+      throw new CollabError("decision_authority_required", "Decision reports require an explicit authority scope and basis");
+    }
+    for (const reference of input.evidence_refs) {
+      this.requireEvidenceRef(session.workspace_id, reference);
+    }
+  }
+  appendReportInternal(session, input) {
+    const id = `report_${randomUUID3()}`;
+    const now = this.timestamp();
+    const alsoTo = input.also_to_session_ids && input.also_to_session_ids.length > 0 ? input.also_to_session_ids : undefined;
+    const event = this.appendEvent(session.workspace_id, "report.posted", id, session.actor, {
+      ...input.to_person ? { to_person: true } : {},
+      ...input.about_proposal_id ? { about_proposal_id: input.about_proposal_id } : {},
+      ...alsoTo ? { also_to_session_ids: alsoTo } : {},
+      ...input.note ? { note: input.note } : {},
+      task_id: input.task_id,
+      to_session_id: input.to_session_id,
+      kind: input.kind,
+      body: input.body,
+      evidence_refs: input.evidence_refs,
+      confidence: input.confidence,
+      confidence_basis: input.confidence_basis,
+      limits: input.limits,
+      relation: input.relation,
+      target_report_id: input.target_report_id,
+      authority_scope: input.authority_scope,
+      authority_basis: input.authority_basis
+    }, session.id);
+    this.db.query(`
+      INSERT INTO reports (
+        id, workspace_id, task_id, from_session_id, from_actor, to_session_id,
+        kind, body, evidence_refs_json, confidence, confidence_basis, limits,
+        relation, target_report_id, authority_scope, authority_basis,
+        created_at, event_sequence
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, session.workspace_id, input.task_id, session.id, session.actor, input.to_session_id, input.kind, input.body, canonicalJson(input.evidence_refs), input.confidence, input.confidence_basis, input.limits, input.relation, input.target_report_id, input.authority_scope, input.authority_basis, now, event.sequence);
+    if (input.to_person) {
+      this.db.query(`INSERT INTO person_addressed_reports (report_id, workspace_id) VALUES (?, ?)`).run(id, session.workspace_id);
+    }
+    const stored = this.requireReport(id);
+    return alsoTo ? { ...stored, also_to_session_ids: alsoTo } : stored;
+  }
+  requireReport(id) {
+    const row = this.db.query(`SELECT * FROM reports WHERE id = ?`).get(id);
+    if (!row)
+      throw new CollabError("report_not_found", `Report '${id}' was not found`);
+    return reportFromRow(row);
+  }
+  requireReview(id) {
+    const row = this.db.query(`SELECT * FROM task_reviews WHERE id = ?`).get(id);
+    if (!row)
+      throw new CollabError("review_not_found", `Review '${id}' was not found`);
+    return reviewFromRow(row);
+  }
+  taskNotPendingReviewError(row, callerSessionId) {
+    const plain = new CollabError("task_not_pending_review", "Task does not have a pending acceptance review", { review_status: row.review_status });
+    if (row.completion_policy !== "accepted" || row.review_status !== "accepted" || !row.accepted_by_session_id || row.reported_by_session_id === callerSessionId || row.accepted_by_session_id === callerSessionId) {
+      return plain;
+    }
+    const acceptance = this.db.query(`
+      SELECT e.type AS type, e.payload_json AS payload_json
+      FROM task_reviews r
+      JOIN events e ON e.workspace_id = r.workspace_id AND e.sequence = r.event_sequence
+      WHERE r.workspace_id = ? AND r.task_id = ? AND r.review_generation = ?
+        AND r.outcome = 'accepted'
+    `).get(row.workspace_id, row.id, row.review_generation);
+    if (!acceptance || acceptance.type !== "task.accepted")
+      return plain;
+    const payload = JSON.parse(acceptance.payload_json);
+    if (typeof payload.review_report_id !== "string")
+      return plain;
+    const reviewReportId = payload.review_report_id;
+    const remedy = `Record a late concurring or dissenting review with collab_report_append: task_id "${row.id}", ` + `relation "supports" or "challenges", target_report_id "${reviewReportId}". ` + "A challenge records disagreement; it does not reopen the accepted task.";
+    return new CollabError("task_not_pending_review", `Task was already accepted by session '${row.accepted_by_session_id}'. ${remedy}`, {
+      review_status: row.review_status,
+      review_report_id: reviewReportId,
+      accepted_by_session_id: row.accepted_by_session_id,
+      remedy
+    });
+  }
+  requireRequestedReviewer(row, session, requestedSessionId) {
+    if (row.completion_policy !== "accepted") {
+      throw new CollabError("review_request_not_applicable", 'Only tasks with completion_policy "accepted" wait for review; omit review_requested_session_id', { completion_policy: row.completion_policy });
+    }
+    if (requestedSessionId === session.id) {
+      throw new CollabError("review_request_self", "A requested reviewer must be a session distinct from the reporter");
+    }
+    const requested = this.db.query(`
+      SELECT workspace_id, status FROM coordination_sessions WHERE id = ?
+    `).get(requestedSessionId);
+    if (!requested || requested.workspace_id !== session.workspace_id || requested.status !== "active") {
+      throw new CollabError("review_requested_session_unavailable", "The requested reviewer must be an active session in this workspace; collab_workspace_status lists active_sessions", { review_requested_session_id: requestedSessionId });
+    }
+  }
+  reviewRequestedSessionId(row) {
+    if (row.status !== "completed" || row.completion_policy !== "accepted" || !row.completion_report_id) {
+      return null;
+    }
+    const completion = this.db.query(`SELECT event_sequence FROM reports WHERE id = ?`).get(row.completion_report_id);
+    if (!completion)
+      return null;
+    const event = this.db.query(`
+      SELECT payload_json FROM events
+      WHERE workspace_id = ? AND sequence > ? AND entity_id = ? AND type = 'task.reported_complete'
+      ORDER BY sequence
+      LIMIT 1
+    `).get(row.workspace_id, completion.event_sequence, row.id);
+    if (!event)
+      return null;
+    const payload = JSON.parse(event.payload_json);
+    return payload.completion_report_id === row.completion_report_id && typeof payload.review_requested_session_id === "string" ? payload.review_requested_session_id : null;
+  }
+  hasUnresolvedChallenges(workspaceId, reportId) {
+    return this.unresolvedChallengeIds(workspaceId, reportId).length > 0;
+  }
+  unresolvedChallengeIds(workspaceId, reportId) {
+    const challenges = this.db.query(`
+      SELECT id FROM reports
+      WHERE workspace_id = ? AND target_report_id = ? AND relation = 'challenges'
+      ORDER BY event_sequence
+    `).all(workspaceId, reportId);
+    return challenges.filter((challenge) => !this.hasActiveReportRelation(workspaceId, challenge.id, new Set(["withdraws"])) && !this.hasActiveReportRelation(workspaceId, challenge.id, new Set(["resolves"]))).map((challenge) => challenge.id);
+  }
+  hasObsoletedCompletionReport(workspaceId, reportId) {
+    return this.hasActiveReportRelation(workspaceId, reportId, new Set(["withdraws", "corrects", "supersedes"]));
+  }
+  hasActiveReportRelation(workspaceId, reportId, relations) {
+    const rows = this.db.query(`
+      SELECT id, relation FROM reports
+      WHERE workspace_id = ? AND target_report_id = ?
+      ORDER BY event_sequence
+    `).all(workspaceId, reportId);
+    const obsoleted = this.activeObsoletionTargets(workspaceId);
+    return rows.some((row) => relations.has(row.relation) && !obsoleted.has(row.id));
+  }
+  activeObsoletionTargets(workspaceId) {
+    const rows = this.db.query(`
+      SELECT id, target_report_id FROM reports
+      WHERE workspace_id = ? AND target_report_id IS NOT NULL
+        AND relation IN ('withdraws', 'corrects', 'supersedes')
+      ORDER BY event_sequence DESC, id DESC
+    `).all(workspaceId);
+    const obsoleted = new Set;
+    for (const row of rows) {
+      if (!obsoleted.has(row.id))
+        obsoleted.add(row.target_report_id);
+    }
+    return obsoleted;
+  }
+  requireEvidenceRef(workspaceId, reference) {
+    const separator = reference.indexOf(":");
+    if (separator < 1)
+      throw invalidEvidenceRef("Evidence reference needs a kind prefix");
+    const kind = reference.slice(0, separator);
+    const id = reference.slice(separator + 1);
+    if (!id)
+      throw invalidEvidenceRef("Evidence reference ID is empty");
+    let exists = false;
+    if (kind === "artifact") {
+      exists = this.db.query(`
+        SELECT 1 FROM artifacts WHERE workspace_id = ? AND id = ?
+      `).get(workspaceId, id) !== null;
+    } else if (kind === "event") {
+      exists = this.db.query(`
+        SELECT 1 FROM events WHERE workspace_id = ? AND id = ?
+      `).get(workspaceId, id) !== null;
+    } else if (kind === "report") {
+      exists = this.db.query(`
+        SELECT 1 FROM reports WHERE workspace_id = ? AND id = ?
+      `).get(workspaceId, id) !== null;
+    } else if (kind === "checkpoint") {
+      const tasks = this.db.query(`
+        SELECT base_checkpoint_json, result_checkpoint_json
+        FROM tasks WHERE workspace_id = ?
+      `).all(workspaceId);
+      exists = tasks.some((task) => {
+        const checkpoints = [
+          parseCheckpoint(task.base_checkpoint_json),
+          parseCheckpoint(task.result_checkpoint_json)
+        ];
+        return checkpoints.some((checkpoint) => checkpoint !== null && checkpointDigest(checkpoint) === id);
+      });
+    } else {
+      throw invalidEvidenceRef("Unsupported evidence reference kind");
+    }
+    if (!exists) {
+      throw new CollabError("evidence_not_found", `Evidence reference was not found in this workspace. ${EVIDENCE_REFS_DESCRIPTION}`, { reference, allowed_prefixes: [...EVIDENCE_REF_PREFIXES] });
+    }
+  }
+  appendEvent(workspaceId, type, entityId, actor, payload, sessionId = null) {
+    const workspace = this.requireWorkspace(workspaceId);
+    const event = {
+      protocol: COLLAB_COORDINATION_PROTOCOL,
+      workspace_id: workspaceId,
+      epoch_id: workspace.epoch_id,
+      sequence: workspace.event_head_sequence + 1,
+      id: `event_${randomUUID3()}`,
+      type,
+      entity_id: entityId,
+      actor,
+      session_id: sessionId,
+      occurred_at: this.timestamp(),
+      payload,
+      prev_hash: workspace.event_head_hash,
+      hash: ""
+    };
+    event.hash = eventHash(event);
+    this.db.query(`
+      INSERT INTO events
+        (workspace_id, epoch_id, sequence, id, protocol, type, entity_id, actor,
+          session_id, occurred_at, payload_json, prev_hash, hash)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(event.workspace_id, event.epoch_id, event.sequence, event.id, event.protocol, event.type, event.entity_id, event.actor, event.session_id ?? null, event.occurred_at, canonicalJson(event.payload), event.prev_hash, event.hash);
+    this.db.query(`
+      UPDATE workspaces SET event_head_sequence = ?, event_head_hash = ? WHERE id = ?
+    `).run(event.sequence, event.hash, workspaceId);
+    return event;
+  }
+  expireClaim(row, actor) {
+    if (!this.isExpired(row))
+      return row;
+    const now = this.timestamp();
+    const version2 = row.version + 1;
+    const prior = { assignee: row.assignee, lease_id: row.lease_id, lease_expires_at: row.lease_expires_at };
+    this.db.query(`
+      UPDATE tasks SET status = 'open', assignee = NULL, lease_id = NULL, lease_expires_at = NULL,
+        version = ?, updated_at = ? WHERE workspace_id = ? AND id = ?
+    `).run(version2, now, row.workspace_id, row.id);
+    this.expirePendingHandoffs(row.workspace_id, row.id, now, actor, "source_lease_expired");
+    this.appendEvent(row.workspace_id, "task.claim_expired", row.id, actor, { ...prior, version: version2 });
+    return this.requireTaskRow(row.workspace_id, row.id);
+  }
+  clearClaim(row, actor, type, payload) {
+    const now = this.timestamp();
+    const version2 = row.version + 1;
+    this.db.query(`
+      UPDATE tasks SET status = 'open', assignee = NULL, lease_id = NULL,
+        lease_expires_at = NULL, version = ?, updated_at = ?
+      WHERE workspace_id = ? AND id = ?
+    `).run(version2, now, row.workspace_id, row.id);
+    this.expirePendingHandoffs(row.workspace_id, row.id, now, actor, "task_released");
+    this.appendEvent(row.workspace_id, type, row.id, actor, { ...payload, version: version2 });
+    return this.requireTask(row.workspace_id, row.id);
+  }
+  expirePendingHandoffs(workspaceId, taskId, now, actor, reason) {
+    const rows = this.db.query(`
+      SELECT * FROM handoffs WHERE workspace_id = ? AND task_id = ? AND status = 'pending'
+    `).all(workspaceId, taskId);
+    for (const row of rows) {
+      this.db.query(`UPDATE handoffs SET status = 'expired', resolved_at = ? WHERE id = ?`).run(now, row.id);
+      this.appendEvent(workspaceId, "handoff.expired", row.id, actor, { task_id: taskId, reason });
+    }
+  }
+  expireElapsedHandoffs(workspaceId, actor, taskId) {
+    this.requireWorkspace(workspaceId);
+    const reap = this.db.transaction(() => {
+      const now = this.timestamp();
+      const rows = taskId ? this.db.query(`
+            SELECT * FROM handoffs
+            WHERE workspace_id = ? AND task_id = ? AND status = 'pending' AND expires_at <= ?
+          `).all(workspaceId, taskId, now) : this.db.query(`
+            SELECT * FROM handoffs
+            WHERE workspace_id = ? AND status = 'pending' AND expires_at <= ?
+          `).all(workspaceId, now);
+      for (const row of rows) {
+        this.db.query(`UPDATE handoffs SET status = 'expired', resolved_at = ? WHERE id = ?`).run(now, row.id);
+        this.appendEvent(workspaceId, "handoff.expired", row.id, actor, {
+          task_id: row.task_id,
+          reason: "offer_deadline_elapsed"
+        });
+      }
+    });
+    reap.immediate();
+    this.tightenFileModes();
+  }
+  requireDependenciesComplete(row) {
+    const dependencies = parseStringArray(row.dependencies_json);
+    const incomplete = dependencies.filter((id) => !this.dependenciesSatisfied(row.workspace_id, [id]));
+    if (incomplete.length > 0) {
+      throw new CollabError("dependencies_incomplete", "Task dependencies are not complete", { dependencies: incomplete });
+    }
+  }
+  requirePathsAvailable(row) {
+    const conflicts = this.taskPathConflicts(this.taskFromRow(row));
+    if (conflicts.length > 0) {
+      const first = conflicts[0];
+      throw new CollabError("path_scope_conflict", "Task paths overlap reserved work", {
+        conflicting_task_id: first.active_task_id,
+        conflicting_workspace_id: first.active_workspace_id,
+        assignee: first.assignee,
+        assignee_session_id: first.assignee_session_id,
+        lease_expires_at: first.lease_expires_at,
+        conflicts: first.path_pairs
+      });
+    }
+  }
+  requireActiveLease(row, actor, leaseId) {
+    if (row.status !== "claimed" || !row.lease_id || !row.lease_expires_at) {
+      throw new CollabError("lease_not_active", "Task does not have an active lease");
+    }
+    if (this.isExpired(row)) {
+      throw new CollabError("lease_expired", "Task lease has expired", { lease_expires_at: row.lease_expires_at });
+    }
+    if (row.assignee !== actor || row.lease_id !== leaseId) {
+      throw new CollabError("lease_not_holder", "Mutation requires the current lease holder", {
+        assignee: row.assignee
+      });
+    }
+  }
+  requireVersion(row, expected) {
+    if (row.version !== expected) {
+      throw new CollabError("version_conflict", "Task changed since it was read", {
+        expected_version: expected,
+        current_version: row.version
+      });
+    }
+  }
+  recordSessionLeaseLapses(session, now) {
+    if (leaseHolderPresent(session, now))
+      return;
+    const staleAt = new Date(Date.parse(session.last_seen_at) + SESSION_STALE_AFTER_MS + 1).toISOString();
+    this.db.query(`INSERT OR IGNORE INTO session_lease_lapses (lease_id, effective_at)
+      SELECT lease_id, MAX(lease_expires_at, ?) FROM tasks
+      WHERE assignee_session_id = ? AND status = 'claimed' AND lease_expires_at <= ?`).run(staleAt, session.id, now);
+  }
+  isExpired(row, priorHolder, observedAt = this.timestamp()) {
+    if (row.status !== "claimed" || row.lease_expires_at === null || observedAt < row.lease_expires_at)
+      return false;
+    if (!row.assignee_session_id)
+      return true;
+    if (this.db.query(`SELECT 1 FROM session_lease_lapses WHERE lease_id = ?`).get(row.lease_id))
+      return true;
+    const holder = priorHolder ?? this.leaseHolderRow(row.assignee_session_id);
+    return !holder || !leaseHolderPresent(holder, observedAt);
+  }
+  taskFromRow(row) {
+    let effectiveStatus = row.status;
+    if (this.isExpired(row)) {
+      effectiveStatus = row.assignee_session_id ? "recovery_required" : "lease_expired";
+    } else if (row.status === "completed" && row.review_status === "pending") {
+      effectiveStatus = "reported_complete";
+    } else if (row.status === "completed" && row.review_status === "accepted") {
+      effectiveStatus = "accepted";
+    }
+    const baseCheckpoint = parseCheckpoint(row.base_checkpoint_json);
+    const resultCheckpoint = parseCheckpoint(row.result_checkpoint_json);
+    return {
+      id: row.id,
+      workspace_id: row.workspace_id,
+      title: row.title,
+      description: row.description,
+      status: row.status,
+      effective_status: effectiveStatus,
+      dependencies: parseStringArray(row.dependencies_json),
+      path_scopes: parseStringArray(row.path_scopes_json),
+      work_mode: row.work_mode,
+      completion_policy: row.completion_policy,
+      review_status: row.review_status,
+      expected_base_sha: row.expected_base_sha,
+      base_checkpoint: baseCheckpoint,
+      base_checkpoint_digest: baseCheckpoint ? checkpointDigest(baseCheckpoint) : null,
+      result_checkpoint: resultCheckpoint,
+      result_checkpoint_digest: resultCheckpoint ? checkpointDigest(resultCheckpoint) : null,
+      completion_report_id: row.completion_report_id,
+      assignee: row.assignee,
+      assignee_session_id: row.assignee_session_id,
+      assignee_liveness: this.assigneeLiveness(row.assignee_session_id),
+      claim_worktree_id: row.claim_worktree_id,
+      lease_id: row.lease_id,
+      lease_expires_at: row.lease_expires_at,
+      blocker: row.blocker,
+      latest_progress: row.latest_progress,
+      reported_by: row.reported_by,
+      reported_by_session_id: row.reported_by_session_id,
+      reported_at: row.reported_at,
+      accepted_by: row.accepted_by,
+      accepted_by_session_id: row.accepted_by_session_id,
+      accepted_at: row.accepted_at,
+      review_requested_session_id: this.reviewRequestedSessionId(row),
+      version: row.version,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      completed_at: row.completed_at
+    };
+  }
+  sessionProjection(row, observedAt = this.timestamp()) {
+    const rest = row.status === "active" ? this.latestRest(row.id, observedAt) : null;
+    return coordinationSessionFromRow(row, observedAt, rest);
+  }
+  assigneeLiveness(sessionId, observedAt = this.timestamp()) {
+    if (!sessionId)
+      return null;
+    const holder = this.leaseHolderRow(sessionId);
+    if (!holder)
+      return null;
+    const rest = holder.status === "active" ? this.latestRest(sessionId, observedAt) : null;
+    return sessionLivenessWithRest(holder, observedAt, rest);
+  }
+  leaseHolderRow(sessionId) {
+    return this.db.query(`
+      SELECT status, last_seen_at FROM coordination_sessions WHERE id = ?
+    `).get(sessionId);
+  }
+  latestRestDeclaration(sessionId) {
+    return this.db.query(`
+      SELECT type, sequence, occurred_at, payload_json FROM events
+      WHERE workspace_id = (
+          SELECT workspace_id FROM coordination_sessions WHERE id = ?1 AND status = 'active'
+        )
+        AND entity_id = ?1
+        AND type IN ('session.rested', 'session.returned')
+      ORDER BY sequence DESC
+      LIMIT 1
+    `).get(sessionId);
+  }
+  latestRest(sessionId, observedAt) {
+    const declaration = this.latestRestDeclaration(sessionId);
+    return declaration ? restFromDeclaration(declaration, observedAt) : null;
+  }
+  addressedWaiting(session) {
+    const rows = this.db.query(`
+      SELECT type, session_id, payload_json FROM events
+      WHERE workspace_id = ? AND sequence > ?
+        AND type IN ('report.posted', 'handoff.offered')
+      ORDER BY sequence
+    `).all(session.workspace_id, knockReadThrough(this.db, session.workspace_id, session.id, session.cursor_sequence));
+    return rows.filter((row) => isAddressedTo(row, session.id)).length;
+  }
+  requireWorkspace(workspaceId, db = this.db) {
+    const workspace = this.getWorkspace(workspaceId, db);
+    if (!workspace)
+      throw new CollabError("workspace_not_found", `Workspace '${workspaceId}' was not found`);
+    return workspace;
+  }
+  readPresenceSessionByClient(workspaceId, clientInstanceId) {
+    return this.db.query(`
+      SELECT * FROM sessions
+      WHERE workspace_id = ? AND client_instance_id = ?
+    `).get(workspaceId, clientInstanceId);
+  }
+  requirePresenceSessionRow(sessionId) {
+    const row = this.db.query(`SELECT * FROM sessions WHERE id = ?`).get(sessionId);
+    if (!row) {
+      throw new CollabError("session_not_found", `Presence session '${sessionId}' was not found`);
+    }
+    return row;
+  }
+  requireCoordinationSessionRow(sessionId) {
+    const row = this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(sessionId);
+    if (!row)
+      throw new CollabError("session_not_found", `Session '${sessionId}' was not found`);
+    return row;
+  }
+  readTaskRow(workspaceId, taskId) {
+    return this.db.query(`SELECT * FROM tasks WHERE workspace_id = ? AND id = ?`).get(workspaceId, taskId);
+  }
+  requireTaskRow(workspaceId, taskId) {
+    const row = this.readTaskRow(workspaceId, taskId);
+    if (!row)
+      throw new CollabError("task_not_found", `Task '${taskId}' was not found`, { task_id: taskId });
+    return row;
+  }
+  requireTask(workspaceId, taskId) {
+    return this.taskFromRow(this.requireTaskRow(workspaceId, taskId));
+  }
+  listArtifacts(workspaceId, taskId) {
+    const rows = this.db.query(`
+      SELECT id, task_id, kind, uri, sha256, media_type, label, attached_by, attached_at
+        , attached_by_session_id
+      FROM artifacts WHERE workspace_id = ? AND task_id = ? ORDER BY attached_at, id
+    `).all(workspaceId, taskId);
+    return rows.map(artifactFromRow);
+  }
+  requireArtifact(id) {
+    const row = this.db.query(`
+      SELECT id, task_id, kind, uri, sha256, media_type, label, attached_by, attached_at
+        , attached_by_session_id
+      FROM artifacts WHERE id = ?
+    `).get(id);
+    if (!row)
+      throw new CollabError("artifact_not_found", `Artifact '${id}' was not found`);
+    return artifactFromRow(row);
+  }
+  requireDecision(id) {
+    const row = this.db.query(`
+      SELECT id, workspace_id, topic, decision, rationale, recorded_by, recorded_at
+      FROM decisions WHERE id = ?
+    `).get(id);
+    if (!row)
+      throw new CollabError("decision_not_found", `Decision '${id}' was not found`);
+    return decisionFromRow(row);
+  }
+  requireHandoff(id) {
+    const row = this.db.query(`SELECT * FROM handoffs WHERE id = ?`).get(id);
+    if (!row)
+      throw new CollabError("handoff_not_found", `Handoff '${id}' was not found`);
+    return handoffFromRow(row);
+  }
+  latestReceiptKeyForSession(credential, prefix) {
+    return this.latestReceiptKey(this.authenticateSession(credential), prefix);
+  }
+  latestReceiptKey(session, prefix) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*:$/.test(prefix) || prefix.length > 100) {
+      throw new CollabError("invalid_receipt_prefix", "A receipt prefix is a key prefix ending in ':'");
+    }
+    const upper = `${prefix.slice(0, -1)};`;
+    const row = this.db.query(`
+      SELECT idempotency_key FROM mutations
+      WHERE workspace_id = ? AND actor = ? AND idempotency_key >= ? AND idempotency_key < ?
+      ORDER BY idempotency_key DESC
+      LIMIT 1
+    `).get(session.workspace_id, `session:${session.id}`, prefix, upper);
+    return row?.idempotency_key ?? null;
+  }
+  withReceiptPlan(plan, run) {
+    if (!plan)
+      return run();
+    if (this.ambientReceiptPlan)
+      throw new CollabError("receipt_plan_nested", "A receipt plan is already in force");
+    this.ambientReceiptPlan = plan;
+    try {
+      return run();
+    } finally {
+      this.ambientReceiptPlan = null;
+    }
+  }
+  ambientPlanFor(idempotencyKey) {
+    const plan = this.ambientReceiptPlan;
+    if (!plan)
+      return;
+    return idempotencyKey === plan.key || idempotencyKey.startsWith(`${plan.key}:`) ? plan : undefined;
+  }
+  requireReceiptPlan(session, plan) {
+    const latest = this.latestReceiptKey(session, plan.prefix);
+    if (latest === plan.latest || latest === plan.key || latest !== null && latest.startsWith(`${plan.key}:`))
+      return;
+    throw new CollabError("receipt_plan_stale", "Another call by this session acted on the same entity after this call chose its key; nothing was written");
+  }
+  timestamp() {
+    return this.now().toISOString();
+  }
+  requireJournalHead(workspaceId, expected, callerSessionId) {
+    const head = this.requireWorkspace(workspaceId).event_head_sequence;
+    if (expected > head) {
+      throw new CollabError("head_moved", "The expected sequence is ahead of the journal; read the journal, then send again", {
+        expected_head_sequence: expected,
+        head_sequence: head,
+        reports_since: 0,
+        missed_report_ids: [],
+        remedy: "Call collab_report_list (or collab_next) to read the current sequence, then send again with the event_sequence of the last report you read."
+      });
+    }
+    const { count } = this.db.query(`SELECT COUNT(*) AS count FROM reports WHERE workspace_id = ? AND event_sequence > ? AND from_session_id IS NOT ?`).get(workspaceId, expected, callerSessionId);
+    if (count === 0)
+      return;
+    const missed = this.db.query(`SELECT id FROM reports WHERE workspace_id = ? AND event_sequence > ? AND from_session_id IS NOT ? ORDER BY event_sequence ASC LIMIT ?`).all(workspaceId, expected, callerSessionId, MAX_MISSED_REPORT_IDS);
+    const missedReportIds = missed.map((row) => row.id);
+    throw new CollabError("head_moved", "Other sessions or the person desk posted reports after the sequence you last read; read them, then send again", {
+      expected_head_sequence: expected,
+      head_sequence: head,
+      reports_since: count,
+      missed_report_ids: missedReportIds,
+      ...count > missedReportIds.length ? { missed_report_ids_truncated: true } : {},
+      remedy: `Call collab_report_list with after_event_sequence: ${expected} (note: collab_report_list also returns your own reports), read what is new, then send again with the event_sequence of the last report you read.`
+    });
+  }
+  observedAt() {
+    return this.timestamp();
+  }
+  awayBeforeTouch(sessionId, lastSeenAt, now) {
+    const carried = this.resumeAwaySince.get(sessionId);
+    const since = carried !== undefined && carried < lastSeenAt ? carried : lastSeenAt;
+    const elapsed = Date.parse(now) - Date.parse(since);
+    return {
+      away_ms: Number.isFinite(elapsed) && elapsed > 0 ? elapsed : 0,
+      away_since: since,
+      carried: carried !== undefined
+    };
+  }
+  settleAway(sessionId, away) {
+    if (away.carried)
+      this.resumeAwaySince.delete(sessionId);
+    return { away_ms: away.away_ms, away_since: away.away_since };
+  }
+}
+function normalizeMutation(input) {
+  return { ...input, actor: validateActor(input.actor), idempotency_key: validateIdempotencyKey(input.idempotency_key) };
+}
+function normalizeVersionedMutation(input) {
+  validateExpectedVersion(input.expected_version);
+  return normalizeMutation(input);
+}
+function normalizeLeaseInput(input) {
+  return {
+    ...normalizeVersionedMutation(input),
+    task_id: validateId(input.task_id, "task_id"),
+    lease_id: validateId(input.lease_id, "lease_id")
+  };
+}
+function validateActor(value) {
+  const actor = cleanText(value, "actor", 200);
+  if (/^person:/i.test(actor)) {
+    throw new CollabError("invalid_actor", "Actor labels beginning with person: are reserved for the person desk");
+  }
+  return actor;
+}
+function derivedActor(prefix, sessionId) {
+  if (prefix === undefined) {
+    throw new CollabError("actor_required", "Supply actor, or actor_prefix to derive one from the new session id");
+  }
+  if (typeof prefix !== "string" || !/^[a-z][a-z0-9-]{0,39}$/.test(prefix)) {
+    throw new CollabError("invalid_actor_prefix", "actor_prefix is 1 to 40 lower-case letters, digits or dashes");
+  }
+  return validateActor(`${prefix}-${sessionId.slice("session_".length, "session_".length + 6)}`);
+}
+var MAX_MODEL_LABEL = 200;
+function validateModelLabel(value) {
+  const model = cleanText(value, "model", MAX_MODEL_LABEL);
+  if (/[\u0000-\u001f\u007f]/.test(model)) {
+    throw new CollabError("invalid_model", "model must be one line of text");
+  }
+  return model;
+}
+function validateExpectedVersion(value) {
+  if (!Number.isInteger(value) || value < 1) {
+    throw new CollabError("invalid_expected_version", "expected_version must be a positive integer");
+  }
+  return value;
+}
+function validateRuntimeKind(value) {
+  const runtime = cleanText(value, "runtime_kind", 64).toLowerCase();
+  if (!/^[a-z0-9][a-z0-9._:-]*$/.test(runtime)) {
+    throw new CollabError("invalid_runtime_kind", "runtime_kind contains unsupported characters");
+  }
+  return runtime;
+}
+function normalizeSessionCapabilities(values) {
+  if (!Array.isArray(values) || values.length > MAX_SESSION_CAPABILITIES) {
+    throw new CollabError("invalid_declared_capabilities", `A session may declare at most ${MAX_SESSION_CAPABILITIES} capabilities`);
+  }
+  const normalized = values.map((value) => {
+    const capability = cleanText(value, "declared_capability", MAX_SESSION_CAPABILITY_LENGTH).toLowerCase();
+    if (!/^[a-z0-9][a-z0-9._:-]*$/.test(capability)) {
+      throw new CollabError("invalid_declared_capability", "Declared capabilities must be symbolic names, not free-form content");
+    }
+    return capability;
+  });
+  return uniqueSorted(normalized);
+}
+function validatePresenceTtl(value) {
+  const ttl = value ?? DEFAULT_PRESENCE_SECONDS;
+  if (!Number.isInteger(ttl) || ttl < 30 || ttl > MAX_PRESENCE_SECONDS) {
+    throw new CollabError("invalid_presence_ttl", `ttl_seconds must be an integer between 30 and ${MAX_PRESENCE_SECONDS}`);
+  }
+  return ttl;
+}
+function validateSessionListLimit(value) {
+  const limit = value ?? DEFAULT_SESSION_LIST_LIMIT;
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_SESSION_LIST_LIMIT) {
+    throw new CollabError("invalid_session_list_limit", `limit must be an integer between 1 and ${MAX_SESSION_LIST_LIMIT}`);
+  }
+  return limit;
+}
+function validateNextEventLimit(value) {
+  const limit = value ?? DEFAULT_NEXT_EVENT_LIMIT;
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_NEXT_EVENT_LIMIT) {
+    throw new CollabError("invalid_event_limit", `event_limit must be an integer between 1 and ${MAX_NEXT_EVENT_LIMIT}`);
+  }
+  return limit;
+}
+var BOUND_AFTER_SEQUENCE_REMEDY = "A bound collab_next always pages from the acknowledged session cursor. Advance it with " + "collab_cursor_ack (next_anchor of the page you processed), or read from any position " + "without acknowledging with collab_events_since (after_sequence or after_anchor).";
+function requireBoundAfterSequence(afterSequence, session) {
+  if (!Number.isInteger(afterSequence) || afterSequence < 0) {
+    throw new CollabError("invalid_cursor", "Event cursor must be a non-negative integer");
+  }
+  if (afterSequence === session.cursor_sequence)
+    return;
+  throw new CollabError("after_sequence_unsupported_in_bound_session", `after_sequence ${afterSequence} differs from this session's acknowledged cursor ` + `(sequence ${session.cursor_sequence}). ${BOUND_AFTER_SEQUENCE_REMEDY}`, {
+    after_sequence: afterSequence,
+    cursor: {
+      epoch_id: session.cursor_epoch_id,
+      sequence: session.cursor_sequence,
+      hash: session.cursor_hash
+    },
+    cursor_version: session.cursor_version,
+    remedy: BOUND_AFTER_SEQUENCE_REMEDY
+  });
+}
+function normalizeSessionRenewInput(input) {
+  if (input.expected_version !== undefined)
+    validateExpectedVersion(input.expected_version);
+  const request = {
+    task_id: validateId(input.task_id, "task_id"),
+    lease_id: validateId(input.lease_id, "lease_id"),
+    ...input.expected_version === undefined ? {} : { expected_version: input.expected_version }
+  };
+  return { ...request, request, idempotency_key: validateIdempotencyKey(input.idempotency_key) };
+}
+function normalizeSessionLeaseInput(input) {
+  const normalized = {
+    idempotency_key: validateIdempotencyKey(input.idempotency_key),
+    task_id: validateId(input.task_id, "task_id"),
+    lease_id: validateId(input.lease_id, "lease_id"),
+    expected_version: validateExpectedVersion(input.expected_version)
+  };
+  return {
+    ...normalized,
+    request: {
+      task_id: normalized.task_id,
+      lease_id: normalized.lease_id,
+      expected_version: normalized.expected_version
+    }
+  };
+}
+function validateIdempotencyKey(value) {
+  const key = cleanText(value, "idempotency_key", 200);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(key)) {
+    throw new CollabError("invalid_idempotency_key", "Idempotency key contains unsupported characters");
+  }
+  return key;
+}
+function validateId(value, field) {
+  const id = cleanText(value, field, 200);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(id)) {
+    throw new CollabError(`invalid_${field}`, `${field} contains unsupported characters`);
+  }
+  return id;
+}
+function cleanText(value, field, max) {
+  const text = value.trim();
+  if (!text)
+    throw new CollabError(`invalid_${field}`, `${field} must not be empty`);
+  if (text.length > max)
+    throw new CollabError(`invalid_${field}`, `${field} exceeds ${max} characters`);
+  if (text.includes("\x00"))
+    throw new CollabError(`invalid_${field}`, `${field} must not contain NUL bytes`);
+  return text;
+}
+function optionalText(value, field, max) {
+  if (value === undefined || value.trim() === "")
+    return null;
+  return cleanText(value, field, max);
+}
+var REST_UNTIL_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
+var MAX_MISSED_REPORT_IDS = 20;
+function validateExpectedHeadSequence(value) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new CollabError("invalid_expected_head_sequence", "expected_head_sequence must be a non-negative integer");
+  }
+  return value;
+}
+function validateRestMode(value) {
+  if (value !== "resting" && value !== "ready") {
+    throw new CollabError("invalid_mode", 'mode must be "resting" or "ready"');
+  }
+  return value;
+}
+function validateRestUntil(value) {
+  const text = typeof value === "string" ? value.trim() : "";
+  const match = REST_UNTIL_PATTERN.exec(text);
+  if (match) {
+    const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number);
+    const offsetHours = Number(match[7] ?? 0);
+    const offsetMinutes = Number(match[8] ?? 0);
+    const calendar = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+    const parsed = Date.parse(text);
+    if (year >= 1970 && calendar.getUTCFullYear() === year && calendar.getUTCMonth() === month - 1 && calendar.getUTCDate() === day && calendar.getUTCHours() === hour && calendar.getUTCMinutes() === minute && calendar.getUTCSeconds() === second && offsetHours <= 23 && offsetMinutes <= 59 && Number.isFinite(parsed)) {
+      return new Date(parsed).toISOString();
+    }
+  }
+  throw new CollabError("invalid_until", "until must be an ISO-8601 instant with seconds and a time zone, for example 2026-10-09T18:00:00Z");
+}
+function validateRestWakeOn(value) {
+  if (value === undefined)
+    return [];
+  if (!Array.isArray(value) || value.length > 1 || value.length === 1 && value[0] !== "addressed") {
+    throw new CollabError("invalid_wake_on", 'wake_on accepts [] or ["addressed"] in this version');
+  }
+  return value.length === 1 ? ["addressed"] : [];
+}
+function validateTtl(value) {
+  const ttl = value ?? DEFAULT_LEASE_SECONDS;
+  if (!Number.isInteger(ttl) || ttl < 30 || ttl > MAX_LEASE_SECONDS) {
+    throw new CollabError("invalid_ttl", `ttl_seconds must be an integer between 30 and ${MAX_LEASE_SECONDS}`);
+  }
+  return ttl;
+}
+function validateSha256(value) {
+  const digest = value.toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(digest))
+    throw new CollabError("invalid_sha256", "sha256 must be 64 hexadecimal characters");
+  return digest;
+}
+function validateGitObjectId(value) {
+  const oid = value.toLowerCase();
+  if (!/^[a-f0-9]{40,64}$/.test(oid)) {
+    throw new CollabError("invalid_git_object_id", "Git object IDs must contain 40 to 64 hexadecimal characters");
+  }
+  return oid;
+}
+function validateArtifactKind(value) {
+  if (!["file", "commit", "test", "data", "url", "other"].includes(value)) {
+    throw new CollabError("invalid_artifact_kind", "Unsupported artifact kind");
+  }
+  return value;
+}
+function validateReportKind(value) {
+  if (!["observation", "inference", "proposal", "decision"].includes(value)) {
+    throw new CollabError("invalid_report_kind", "Unsupported report kind");
+  }
+  return value;
+}
+function validateReportConfidence(value) {
+  if (!["high", "medium", "low", "unknown"].includes(value)) {
+    throw new CollabError("invalid_report_confidence", "Unsupported report confidence");
+  }
+  return value;
+}
+function validateReportRelation(value) {
+  if (![
+    "informs",
+    "supports",
+    "challenges",
+    "corrects",
+    "withdraws",
+    "supersedes",
+    "resolves"
+  ].includes(value)) {
+    throw new CollabError("invalid_report_relation", "Unsupported report relation");
+  }
+  return value;
+}
+function normalizeEvidenceRefs(references) {
+  if (!Array.isArray(references) || references.length > MAX_REPORT_REFS) {
+    throw new CollabError("invalid_evidence_refs", `A report may contain at most ${MAX_REPORT_REFS} evidence references`);
+  }
+  return uniqueSorted(references.map((reference) => {
+    if (typeof reference !== "string") {
+      throw invalidEvidenceRef("Evidence references must be strings");
+    }
+    try {
+      return cleanText(reference, "evidence_ref", MAX_REPORT_REF_LENGTH);
+    } catch (error51) {
+      if (error51 instanceof CollabError)
+        throw invalidEvidenceRef(error51.message);
+      throw error51;
+    }
+  }));
+}
+function invalidEvidenceRef(reason) {
+  return new CollabError("invalid_evidence_ref", `${reason}. ${EVIDENCE_REFS_DESCRIPTION}`, { allowed_prefixes: [...EVIDENCE_REF_PREFIXES] });
+}
+function normalizePathScopes(scopes) {
+  if (!Array.isArray(scopes) || scopes.length > MAX_PATH_SCOPES) {
+    throw new CollabError("invalid_path_scopes", `A task may have at most ${MAX_PATH_SCOPES} path scopes`);
+  }
+  let totalLength = 0;
+  const normalized = scopes.map((scope) => {
+    if (typeof scope !== "string" || !scope || scope.length > MAX_PATH_SCOPE_LENGTH || scope.includes("\x00") || scope.includes("\\") || isAbsolute4(scope)) {
+      throw new CollabError("invalid_path_scope", "Path scopes must be non-empty repository-relative POSIX paths", { scope });
+    }
+    totalLength += scope.length;
+    if (totalLength > MAX_PATH_SCOPES_TOTAL) {
+      throw new CollabError("invalid_path_scopes", `Combined path scopes may not exceed ${MAX_PATH_SCOPES_TOTAL} characters`);
+    }
+    const clean = posix.normalize(scope.replace(/^\.\//, "")).replace(/\/$/, "");
+    if (!clean || clean === "." || clean === ".." || clean.startsWith("../")) {
+      throw new CollabError("invalid_path_scope", "Root-wide and parent path scopes are not allowed", { scope });
+    }
+    return clean;
+  });
+  return uniqueSorted(normalized);
+}
+function normalizeDependencies(dependencies) {
+  if (!Array.isArray(dependencies) || dependencies.length > MAX_DEPENDENCIES) {
+    throw new CollabError("invalid_dependencies", `A task may have at most ${MAX_DEPENDENCIES} dependencies`);
+  }
+  return uniqueSorted(dependencies.map((id) => validateId(id, "dependency")));
+}
+function pathConflicts(left, right) {
+  const conflicts = [];
+  for (const a of left) {
+    for (const b of right) {
+      const leftKey = a.normalize("NFC").toLowerCase();
+      const rightKey = b.normalize("NFC").toLowerCase();
+      if (leftKey === rightKey || leftKey.startsWith(`${rightKey}/`) || rightKey.startsWith(`${leftKey}/`))
+        conflicts.push([a, b]);
+    }
+  }
+  return conflicts;
+}
+function uniqueSorted(values) {
+  return [...new Set(values)].sort();
+}
+function parseStringArray(json2) {
+  return JSON.parse(json2);
+}
+function artifactFromRow(row) {
+  return { ...row };
+}
+function decisionFromRow(row) {
+  return { ...row };
+}
+function handoffFromRow(row) {
+  return { ...row };
+}
+function eventFromRow(row) {
+  const base = {
+    protocol: row.protocol,
+    workspace_id: row.workspace_id,
+    epoch_id: row.epoch_id,
+    sequence: row.sequence,
+    id: row.id,
+    type: row.type,
+    entity_id: row.entity_id,
+    actor: row.actor,
+    occurred_at: row.occurred_at,
+    payload: JSON.parse(row.payload_json),
+    prev_hash: row.prev_hash,
+    hash: row.hash
+  };
+  return row.protocol === LEGACY_COLLAB_PROTOCOL ? base : { ...base, session_id: row.session_id };
+}
+function eventHash(event) {
+  if (event.protocol === LEGACY_COLLAB_PROTOCOL) {
+    const { hash: _hash2, session_id: _sessionId, ...body2 } = event;
+    return sha2563(canonicalJson(body2));
+  }
+  const { hash: _hash, ...body } = event;
+  return sha2563(canonicalJson(body));
+}
+function verifyEventPage(events, afterSequence, predecessorHash, headSequence, headHash) {
+  if (predecessorHash === null)
+    return false;
+  if (events.length === 0) {
+    return afterSequence === headSequence && predecessorHash === headHash;
+  }
+  let expectedSequence = afterSequence + 1;
+  let previous = predecessorHash;
+  for (const event of events) {
+    if (event.sequence !== expectedSequence || event.prev_hash !== previous)
+      return false;
+    if (event.hash !== eventHash(event))
+      return false;
+    previous = event.hash;
+    expectedSequence += 1;
+  }
+  const lastSequence = events.at(-1)?.sequence ?? afterSequence;
+  return lastSequence !== headSequence || previous === headHash;
+}
+function presenceSessionFromRow(row, observedAt) {
+  const presence = row.left_at ? "left" : observedAt < row.presence_expires_at ? "live" : "stale";
+  return {
+    protocol: COLLAB_SESSION_PROTOCOL,
+    id: row.id,
+    workspace_id: row.workspace_id,
+    epoch_id: row.epoch_id,
+    client_instance_id: row.client_instance_id,
+    actor_label: row.actor_label,
+    actor_key: row.actor_key,
+    runtime_kind: row.runtime_kind,
+    provider_label: row.provider_label,
+    model_label: row.model_label,
+    declared_capabilities: parseStringArray(row.declared_capabilities_json),
+    capability_basis: "self_declared",
+    version: row.version,
+    joined_at: row.joined_at,
+    last_seen_at: row.last_seen_at,
+    presence_expires_at: row.presence_expires_at,
+    presence,
+    left_at: row.left_at
+  };
+}
+function requirePresenceSessionVersion(row, expectedVersion) {
+  if (row.version !== expectedVersion) {
+    throw new CollabError("session_version_conflict", "Presence session version changed", {
+      session_id: row.id,
+      expected_version: expectedVersion,
+      actual_version: row.version
+    });
+  }
+}
+function requireMatchingPresenceSessionJoin(row, input) {
+  const same = row.actor_label === input.actor_label && row.runtime_kind === input.runtime_kind && row.provider_label === input.provider_label && row.model_label === input.model_label && canonicalJson(parseStringArray(row.declared_capabilities_json)) === canonicalJson(input.declared_capabilities);
+  if (!same) {
+    throw new CollabError("session_instance_conflict", "client_instance_id was already joined with different self-declared metadata", { session_id: row.id });
+  }
+}
+function restFromDeclaration(row, observedAt) {
+  if (row.type !== "session.rested")
+    return null;
+  let payload;
+  try {
+    payload = JSON.parse(row.payload_json);
+  } catch {
+    return null;
+  }
+  if (!isRecordValue(payload) || payload.mode !== "resting")
+    return null;
+  const until = typeof payload.until === "string" ? payload.until : payload.until === null ? null : undefined;
+  const reason = typeof payload.reason === "string" ? payload.reason : payload.reason === null ? null : undefined;
+  const wakeOn = payload.wake_on;
+  if (until === undefined || reason === undefined)
+    return null;
+  if (!Array.isArray(wakeOn) || wakeOn.length > 1 || !wakeOn.every((item) => item === "addressed")) {
+    return null;
+  }
+  if (until !== null && !(Date.parse(observedAt) < Date.parse(until)))
+    return null;
+  return {
+    mode: "resting",
+    since: row.occurred_at,
+    until,
+    reason,
+    wake_on: wakeOn.length === 1 ? ["addressed"] : []
+  };
+}
+function leaseHolderPresent(row, observedAt) {
+  return sessionLiveness(row, observedAt) === "live";
+}
+function sessionLiveness(row, observedAt) {
+  if (row.status !== "active")
+    return "stale";
+  const age = Date.parse(observedAt) - Date.parse(row.last_seen_at);
+  return age <= SESSION_STALE_AFTER_MS ? "live" : "stale";
+}
+function sessionLivenessWithRest(row, observedAt, rest) {
+  if (row.status !== "active")
+    return "ended";
+  if (rest)
+    return "resting";
+  return sessionLiveness(row, observedAt);
+}
+var HANDOFF_EXPIRY_IS_NEWS_TO_OFFERER = {
+  target_session_ended: true,
+  offer_deadline_elapsed: true,
+  task_released: false,
+  task_reported_complete: false,
+  task_blocked: false,
+  task_completed: false,
+  source_lease_expired: false
+};
+function handoffExpiryIsNewsToOfferer(reason) {
+  return typeof reason === "string" && Object.hasOwn(HANDOFF_EXPIRY_IS_NEWS_TO_OFFERER, reason) && HANDOFF_EXPIRY_IS_NEWS_TO_OFFERER[reason];
+}
+function isAddressedTo(event, sessionId) {
+  if (event.session_id === sessionId)
+    return false;
+  if (event.type !== "report.posted" && event.type !== "handoff.offered")
+    return false;
+  let payload;
+  try {
+    payload = JSON.parse(event.payload_json);
+  } catch {
+    return false;
+  }
+  if (!isRecordValue(payload))
+    return false;
+  if (event.type === "report.posted") {
+    return payload.to_session_id === sessionId || Array.isArray(payload.also_to_session_ids) && payload.also_to_session_ids.includes(sessionId);
+  }
+  return isRecordValue(payload.handoff) && payload.handoff.to_session_id === sessionId;
+}
+function isOpenTableReport(event, sessionId) {
+  if (event.type !== "report.posted")
+    return false;
+  if (sessionId !== undefined && event.session_id === sessionId)
+    return false;
+  const payload = event.payload ?? {};
+  if (typeof payload.to_session_id === "string" && payload.to_session_id.length > 0)
+    return false;
+  if (Array.isArray(payload.also_to_session_ids) && payload.also_to_session_ids.length > 0)
+    return false;
+  if (typeof payload.target_report_id === "string" && payload.target_report_id.length > 0)
+    return false;
+  if (typeof payload.about_proposal_id === "string" && payload.about_proposal_id.length > 0)
+    return false;
+  if (payload.to_person === true)
+    return false;
+  return true;
+}
+function normalizeAlsoToSessionIds(ids, primaryTo) {
+  if (ids === undefined)
+    return [];
+  if (!Array.isArray(ids) || ids.length > MAX_ALSO_TO_SESSIONS) {
+    throw new CollabError("invalid_also_to_session_ids", `also_to_session_ids must be an array of at most ${MAX_ALSO_TO_SESSIONS} session IDs`);
+  }
+  const seen = new Set;
+  const out = [];
+  for (const raw of ids) {
+    const id = validateId(raw, "also_to_session_ids");
+    if (id === primaryTo || seen.has(id))
+      continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+var REPORT_HEADER_SUMMARY_MAX = 200;
+function firstLineSummary(body) {
+  const firstNonEmpty = body.split(/\r?\n/).map((line) => line.trim()).find((line) => line.length > 0) ?? "";
+  if (firstNonEmpty.length <= REPORT_HEADER_SUMMARY_MAX)
+    return firstNonEmpty;
+  let end = REPORT_HEADER_SUMMARY_MAX;
+  const last = firstNonEmpty.charCodeAt(end - 1);
+  if (last >= 55296 && last <= 56319)
+    end -= 1;
+  return `${firstNonEmpty.slice(0, end)}\u2026`;
+}
+function toReportHeader(report) {
+  return {
+    id: report.id,
+    workspace_id: report.workspace_id,
+    task_id: report.task_id,
+    from_session_id: report.from_session_id,
+    from_actor: report.from_actor,
+    to_session_id: report.to_session_id,
+    ...report.also_to_session_ids && report.also_to_session_ids.length > 0 ? { also_to_session_ids: report.also_to_session_ids } : {},
+    kind: report.kind,
+    relation: report.relation,
+    target_report_id: report.target_report_id,
+    confidence: report.confidence,
+    evidence_refs: report.evidence_refs,
+    authority_scope: report.authority_scope,
+    created_at: report.created_at,
+    event_sequence: report.event_sequence,
+    summary: firstLineSummary(report.body),
+    body_chars: report.body.length
+  };
+}
+function knockReadThrough(db, workspaceId, sessionId, cursorSequence) {
+  try {
+    const row = db.query(`
+      SELECT m.shown_through_sequence AS mark, w.event_head_sequence AS head
+      FROM note_marks m JOIN workspaces w ON w.id = m.workspace_id
+      WHERE m.workspace_id = ? AND m.session_id = ?
+    `).get(workspaceId, sessionId);
+    if (row && Number.isInteger(row.mark) && Number.isInteger(row.head) && row.mark <= row.head) {
+      return Math.max(cursorSequence, row.mark);
+    }
+  } catch {}
+  return cursorSequence;
+}
+function knockDelivery(liveness, rest) {
+  if (liveness === "live")
+    return "tap";
+  if (liveness === "ended")
+    return "none";
+  if (liveness === "resting" && rest?.wake_on.includes("addressed"))
+    return "wake";
+  return "held";
+}
+function recoveryRequiredFirst(tasks, isOwn) {
+  const byExpiry = (left, right) => (left.lease_expires_at ?? "").localeCompare(right.lease_expires_at ?? "") || left.id.localeCompare(right.id);
+  const pending = tasks.filter((task) => task.effective_status === "recovery_required");
+  return [
+    ...pending.filter(isOwn).sort(byExpiry),
+    ...pending.filter((task) => !isOwn(task)).sort(byExpiry)
+  ];
+}
+function coordinationSessionFromRow(row, observedAt, rest) {
+  return {
+    id: row.id,
+    workspace_id: row.workspace_id,
+    worktree_id: row.worktree_id,
+    actor: row.actor,
+    role: row.role,
+    parent_session_id: row.parent_session_id,
+    status: row.status,
+    generation: row.generation,
+    joined_at: row.joined_at,
+    last_seen_at: row.last_seen_at,
+    ended_at: row.ended_at,
+    cursor: {
+      epoch_id: row.cursor_epoch_id,
+      sequence: row.cursor_sequence,
+      hash: row.cursor_hash
+    },
+    cursor_version: row.cursor_version,
+    reset_generation: row.reset_generation,
+    cursor_recovery_required: row.cursor_recovery_required !== 0,
+    liveness: sessionLivenessWithRest(row, observedAt, rest),
+    rest
+  };
+}
+function worktreeFromRow(row) {
+  return {
+    id: row.id,
+    workspace_id: row.workspace_id,
+    root_path: row.root_path,
+    repository_key: row.repository_key,
+    git_common_dir_hash: row.git_common_dir_hash,
+    branch: row.branch,
+    head_sha: row.head_sha,
+    dirty: sqlToBoolean(row.dirty),
+    registered_at: row.registered_at,
+    last_seen_at: row.last_seen_at
+  };
+}
+function checkpointFromWorktreeRow(row, capturedAt) {
+  return {
+    worktree_id: row.id,
+    head_sha: row.head_sha,
+    branch: row.branch,
+    dirty: sqlToBoolean(row.dirty),
+    captured_at: capturedAt
+  };
+}
+function reportFromRow(row) {
+  return {
+    id: row.id,
+    workspace_id: row.workspace_id,
+    task_id: row.task_id,
+    from_session_id: row.from_session_id,
+    from_actor: row.from_actor,
+    to_session_id: row.to_session_id,
+    kind: row.kind,
+    body: row.body,
+    evidence_refs: parseStringArray(row.evidence_refs_json),
+    confidence: row.confidence,
+    confidence_basis: row.confidence_basis,
+    limits: row.limits,
+    relation: row.relation,
+    target_report_id: row.target_report_id,
+    authority_scope: row.authority_scope,
+    authority_basis: row.authority_basis,
+    created_at: row.created_at,
+    event_sequence: row.event_sequence
+  };
+}
+function reviewFromRow(row) {
+  return { ...row };
+}
+function proposalTermsFromRow(row) {
+  if (!isConsentRule(row.rule)) {
+    throw new CollabError("proposal_rule_unsupported", "This proposal was opened under a consent rule this package does not implement", { proposal_report_id: row.report_id, rule: row.rule });
+  }
+  return {
+    report_id: row.report_id,
+    workspace_id: row.workspace_id,
+    rule: row.rule,
+    criteria: row.criteria,
+    extent: row.extent,
+    known_conflicts: row.known_conflicts,
+    origin: row.origin,
+    topic: row.topic,
+    closes_at: row.closes_at,
+    voices: JSON.parse(row.voices_json),
+    author_voice_id: row.author_voice_id,
+    proposal_sha256: row.proposal_sha256,
+    opened_event_id: row.opened_event_id,
+    created_at: row.created_at
+  };
+}
+function proposalPersonActFromRow(row) {
+  const { ai_snapshot_json, proof_json, ...rest } = row;
+  return {
+    ...rest,
+    ai_snapshot: JSON.parse(ai_snapshot_json),
+    proof: proof_json ? JSON.parse(proof_json) : null
+  };
+}
+function proposalSetAsideFromRow(row) {
+  const record2 = JSON.parse(row.set_aside_json);
+  return {
+    ...record2,
+    id: row.id,
+    workspace_id: row.workspace_id,
+    proposal_report_id: row.proposal_report_id,
+    challenge_report_id: row.challenge_report_id,
+    created_at: row.created_at,
+    event_sequence: row.event_sequence
+  };
+}
+var MAX_INBOX_SCAN = 500;
+var MAX_INBOX_PROPOSALS = 50;
+function aiSnapshotOf(status) {
+  const snapshot = {
+    position: status.ai.position,
+    closed: status.ai.closed,
+    qualifying_support_report_ids: status.ai.qualifying_support_report_ids,
+    unresolved_challenge_report_ids: status.ai.unresolved_challenge_report_ids
+  };
+  if (status.rule === CONSENT_RULE_V2) {
+    snapshot.set_aside_challenge_report_ids = (status.set_asides ?? []).map((entry) => entry.challenge_report_id).sort();
+  }
+  return snapshot;
+}
+function normalizeActReason(act, reason) {
+  if (act === "agree") {
+    if (reason !== undefined && reason.trim() !== "") {
+      throw new CollabError("invalid_reason", "An agreement takes no reason");
+    }
+    return null;
+  }
+  return cleanText(reason ?? "", "reason", 2000);
+}
+var PERSON_DESK_ACTOR = "person:desk";
+var PERSON_TERMINAL_ACTOR = "person:terminal";
+var PERSON_PASSKEY_ACTOR = "person:passkey";
+var PERSON_VOICE_ID = "person";
+var PERSON_DESK_LIMITS = "Written at the person desk, which does not authenticate the person.";
+function validatePersonAct(value) {
+  if (value !== "agree" && value !== "reject") {
+    throw new CollabError("invalid_act", "act must be agree or reject");
+  }
+  return value;
+}
+function normalizeProposalTerms(input) {
+  return {
+    question: cleanText(input.question, "question", MAX_REPORT_BODY),
+    criteria: cleanText(input.criteria, "criteria", 4000),
+    extent: cleanText(input.extent, "extent", 1000),
+    known_conflicts: optionalText(input.known_conflicts, "known_conflicts", 4000),
+    evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
+    topic: optionalText(input.topic, "topic", 200),
+    consult_seconds: validateConsultSeconds(input.consult_seconds)
+  };
+}
+function ruleRequestField(rule) {
+  const value = validateConsentRule(rule ?? CONSENT_RULE);
+  return value === CONSENT_RULE ? {} : { rule: value };
+}
+function validateProposalOrigin(value) {
+  if (value !== "ai" && value !== "person_relayed") {
+    throw new CollabError("invalid_origin", "origin must be ai or person_relayed");
+  }
+  return value;
+}
+function validateConsultSeconds(value) {
+  const seconds = value ?? DEFAULT_PROPOSAL_CONSULT_SECONDS;
+  if (!Number.isInteger(seconds) || seconds < MIN_PROPOSAL_CONSULT_SECONDS || seconds > MAX_PROPOSAL_CONSULT_SECONDS) {
+    throw new CollabError("invalid_consult_seconds", `consult_seconds must be an integer between ${MIN_PROPOSAL_CONSULT_SECONDS} and ${MAX_PROPOSAL_CONSULT_SECONDS}`);
+  }
+  return seconds;
+}
+function parseCheckpoint(json2) {
+  return json2 ? JSON.parse(json2) : null;
+}
+function checkpointDigest(checkpoint) {
+  return sha2563(canonicalJson(checkpoint));
+}
+function checkpointStateMatches(left, right) {
+  return left.worktree_id === right.worktree_id && left.head_sha === right.head_sha && left.branch === right.branch && left.algorithm === right.algorithm && left.index_sha256 === right.index_sha256 && left.state_sha256 === right.state_sha256 && left.dirty === right.dirty;
+}
+function requireCompleteGitCheckpoint(checkpoint) {
+  if (checkpoint.source !== "server_observed" || checkpoint.algorithm !== "git-state/v1" || checkpoint.head_sha === null || checkpoint.dirty === null || typeof checkpoint.index_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(checkpoint.index_sha256) || typeof checkpoint.state_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(checkpoint.state_sha256)) {
+    throw new CollabError("git_checkpoint_incomplete", "Acceptance requires a complete server-observed Git checkpoint", { worktree_id: checkpoint.worktree_id });
+  }
+}
+function artifactRepositoryPath(uri, rootPath) {
+  let value = uri;
+  if (value.startsWith("file:")) {
+    try {
+      const url2 = new URL(value);
+      if (url2.protocol !== "file:" || url2.hostname !== "" && url2.hostname !== "localhost") {
+        return null;
+      }
+      value = decodeURIComponent(url2.pathname);
+    } catch {
+      return null;
+    }
+  }
+  if (!value || value.includes("\x00") || value.includes("\\"))
+    return null;
+  let relative2;
+  if (isAbsolute4(value)) {
+    const absolute = posix.normalize(value);
+    if (!absolute.startsWith(`${rootPath}/`))
+      return null;
+    relative2 = absolute.slice(rootPath.length + 1);
+  } else {
+    relative2 = posix.normalize(value);
+  }
+  if (!relative2 || relative2 === "." || relative2 === ".." || relative2.startsWith("../") || relative2.endsWith("/") || relative2 === ".git" || relative2.startsWith(".git/"))
+    return null;
+  return relative2;
+}
+function pathWithinScopes(path, scopes) {
+  return scopes.some((scope) => path === scope || path.startsWith(`${scope}/`));
+}
+function gitCheckpointStaleError(taskId, result, observed, refusal) {
+  const branch = result.branch ? `"${result.branch}"` : "(none: its HEAD was detached)";
+  const remedy = `Two ways forward. (1) Host commit: exactly one commit on branch ${branch} whose only parent ` + `is the result checkpoint HEAD ${result.head_sha}, changing only paths inside the task's ` + "path_scopes, each byte-equal to the newest file artifact this task attached for that uri " + "(since its latest request_changes), with the worktree left clean; then review again. " + `(2) Re-completion: review task "${taskId}" with outcome "request_changes"; once it is ` + "claimed again, collab_task_complete captures a fresh result checkpoint for a new review. " + "Never amend, reset or rewrite a shared branch to meet (1): if other commits already sit " + "on it, use (2).";
+  return new CollabError("git_checkpoint_stale", `The completion worktree changed after its result checkpoint was captured: ${refusal}. ${remedy}`, {
+    result_checkpoint: result,
+    observed_checkpoint: observed,
+    boundary: "checkpoint_validation_is_a_local_observation_not_an_atomic_git_sqlite_lock",
+    host_commit_refusal: refusal,
+    remedy
+  });
+}
+function hydrateLegacyMutationResponse(value, now) {
+  if (Array.isArray(value)) {
+    return value.map((item) => hydrateLegacyMutationResponse(item, now));
+  }
+  if (!isRecordValue(value))
+    return value;
+  const hydratedEntries = Object.entries(value).map(([key, item]) => [
+    key,
+    hydrateLegacyMutationResponse(item, now)
+  ]);
+  const hydrated = Object.fromEntries(hydratedEntries);
+  if (typeof hydrated.id !== "string" || typeof hydrated.workspace_id !== "string" || !["open", "claimed", "blocked", "completed"].includes(typeof hydrated.status === "string" ? hydrated.status : "") || !Array.isArray(hydrated.dependencies) || !Array.isArray(hydrated.path_scopes) || !Number.isInteger(hydrated.version)) {
+    return hydrated;
+  }
+  const expired = hydrated.status === "claimed" && typeof hydrated.lease_expires_at === "string" && now >= hydrated.lease_expires_at;
+  return {
+    ...hydrated,
+    effective_status: typeof hydrated.effective_status === "string" ? hydrated.effective_status : expired ? "lease_expired" : hydrated.status,
+    work_mode: typeof hydrated.work_mode === "string" ? hydrated.work_mode : "coordination",
+    completion_policy: typeof hydrated.completion_policy === "string" ? hydrated.completion_policy : "reported",
+    review_status: typeof hydrated.review_status === "string" ? hydrated.review_status : "legacy_unreviewed",
+    expected_base_sha: hydrated.expected_base_sha ?? null,
+    base_checkpoint: hydrated.base_checkpoint ?? null,
+    base_checkpoint_digest: hydratedCheckpointDigest(hydrated.base_checkpoint_digest, hydrated.base_checkpoint),
+    result_checkpoint: hydrated.result_checkpoint ?? null,
+    result_checkpoint_digest: hydratedCheckpointDigest(hydrated.result_checkpoint_digest, hydrated.result_checkpoint),
+    completion_report_id: hydrated.completion_report_id ?? null,
+    assignee_session_id: hydrated.assignee_session_id ?? null,
+    assignee_liveness: hydrated.assignee_liveness ?? null,
+    claim_worktree_id: hydrated.claim_worktree_id ?? null,
+    reported_by: hydrated.reported_by ?? null,
+    reported_by_session_id: hydrated.reported_by_session_id ?? null,
+    reported_at: hydrated.reported_at ?? null,
+    accepted_by: hydrated.accepted_by ?? null,
+    accepted_by_session_id: hydrated.accepted_by_session_id ?? null,
+    accepted_at: hydrated.accepted_at ?? null,
+    review_requested_session_id: hydrated.review_requested_session_id ?? null
+  };
+}
+function hydratedCheckpointDigest(stored, checkpoint) {
+  if (typeof stored === "string")
+    return stored;
+  return isRecordValue(checkpoint) ? checkpointDigest(checkpoint) : null;
+}
+function isRecordValue(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function booleanToSql(value) {
+  return value === null ? null : value ? 1 : 0;
+}
+function sqlToBoolean(value) {
+  return value === null ? null : value !== 0;
+}
+function hashSessionToken(token) {
+  return sha2563(`agenttool.collab/session-token/v1\x00${token}`);
+}
+function safeDigestEqual(left, right) {
+  const leftBuffer = Buffer.from(left, "hex");
+  const rightBuffer = Buffer.from(right, "hex");
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+function pragmaNumber(db, name) {
+  const row = db.query(`PRAGMA ${name}`).get();
+  const value = row?.[name];
+  if (!Number.isInteger(value)) {
+    throw new CollabError("database_pragma_unavailable", `Could not read PRAGMA ${name}`);
+  }
+  return value;
+}
+function retrySqliteBusy(operation) {
+  const deadline = Date.now() + SQLITE_BUSY_RETRY_MS;
+  let delay = 10;
+  while (true) {
+    try {
+      operation();
+      return;
+    } catch (error51) {
+      const code = error51.code;
+      const busy = code === "SQLITE_BUSY" || error51 instanceof Error && /database is (?:locked|busy)/i.test(error51.message);
+      if (!busy || Date.now() >= deadline)
+        throw error51;
+      const remaining = deadline - Date.now();
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(delay, remaining));
+      delay = Math.min(delay * 2, 100);
+    }
+  }
+}
+function assertSafeDatabaseFile(path) {
+  const stat = lstatSync4(path);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || typeof process.getuid === "function" && stat.uid !== process.getuid()) {
+    throw new CollabError("database_file_unsafe", "The collaboration database path must be a non-linked regular file owned by this user", { path });
+  }
+}
+function quoteIdentifier(value) {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
+    throw new CollabError("invalid_sql_identifier", "Invalid internal SQL identifier");
+  }
+  return `"${value}"`;
+}
+function assertDistinctLegacyWorktreeIdentities(workspaces) {
+  const selectors = [
+    {
+      field: "worktrees.root_path",
+      value: (workspace) => workspace.identity.root_path
+    },
+    {
+      field: "worktrees.id",
+      value: (workspace) => workspace.identity.checkpoint.worktree_id
+    },
+    {
+      field: "worktrees.fingerprint",
+      value: (workspace) => workspace.identity.worktree_fingerprint
+    }
+  ];
+  const collisions = [];
+  for (const selector of selectors) {
+    const groups = new Map;
+    for (const workspace of workspaces) {
+      const value = selector.value(workspace);
+      const workspaceIds2 = groups.get(value) ?? [];
+      workspaceIds2.push(workspace.id);
+      groups.set(value, workspaceIds2);
+    }
+    for (const workspaceIds2 of groups.values()) {
+      if (workspaceIds2.length < 2)
+        continue;
+      collisions.push({
+        field: selector.field,
+        workspace_ids: workspaceIds2.sort()
+      });
+    }
+  }
+  if (collisions.length === 0)
+    return;
+  collisions.sort((left, right) => {
+    const fieldOrder = left.field < right.field ? -1 : left.field > right.field ? 1 : 0;
+    if (fieldOrder !== 0)
+      return fieldOrder;
+    const leftIds = left.workspace_ids.join("\x00");
+    const rightIds = right.workspace_ids.join("\x00");
+    return leftIds < rightIds ? -1 : leftIds > rightIds ? 1 : 0;
+  });
+  const workspaceIds = [
+    ...new Set(collisions.flatMap((collision) => collision.workspace_ids))
+  ].sort();
+  throw new CollabError("migration_identity_collision", "Legacy workspaces resolve to the same worktree identity; migration will not merge distinct journals", {
+    workspace_ids: workspaceIds,
+    collisions,
+    boundary: "v0_3_will_not_merge_distinct_legacy_journals_that_resolve_to_one_worktree",
+    required_action: "keep_the_original_audit_database_and_use_a_compatible_v0_2_client_or_choose_a_fresh_v0_3_database"
+  });
+}
+function safeRepositoryIdentity(rootPath) {
+  try {
+    return inspectRepository(rootPath);
+  } catch {
+    const root = resolve5(rootPath);
+    const repositoryKey = `local-path:${sha2563(root)}`;
+    const worktreeId2 = `wt_${sha2563(`${root}\x00path:${root}`).slice(0, 24)}`;
+    return {
+      requested_root_path: root,
+      root_path: root,
+      repository_key: repositoryKey,
+      git_common_dir_hash: null,
+      worktree_fingerprint: `path:${sha2563(root)}`,
+      checkpoint: {
+        worktree_id: worktreeId2,
+        head_sha: null,
+        branch: null,
+        dirty: null,
+        captured_at: new Date().toISOString()
+      }
+    };
+  }
+}
+function sha2563(value) {
+  return createHash5("sha256").update(value).digest("hex");
+}
+function addSeconds(iso, seconds) {
+  return new Date(new Date(iso).getTime() + seconds * 1000).toISOString();
 }
 
 // src/note-verbs.ts
@@ -30450,582 +38070,12 @@ ${NOTE_CARRY_DISCLAIMER}`,
   return { text, not_carried: notCarried() };
 }
 
-// src/repository.ts
-import { createHash as createHash2 } from "crypto";
-import {
-  closeSync as closeSync5,
-  constants as fsConstants,
-  existsSync as existsSync3,
-  fstatSync as fstatSync3,
-  lstatSync as lstatSync3,
-  openSync as openSync5,
-  readlinkSync,
-  readSync as readSync3,
-  realpathSync,
-  statSync
-} from "fs";
-import { dirname as dirname3, isAbsolute as isAbsolute3, join as join4, relative, resolve as resolve4, sep } from "path";
-import { spawnSync as spawnSync2 } from "child_process";
-var GIT_TIMEOUT_MS = 5000;
-var MAX_GIT_OUTPUT = 1024 * 1024;
-var MAX_UNTRACKED_FILES = 1e4;
-var MAX_UNTRACKED_BYTES = 64 * 1024 * 1024;
-var MAX_UNTRACKED_HASH_MS = 2000;
-var MAX_SUCCESSOR_PATHS = 128;
-var MAX_SUCCESSOR_BYTES = 64 * 1024 * 1024;
-var MAX_SUCCESSOR_INSPECT_MS = 5000;
-var GIT_OBJECT_ID = /^[0-9a-f]{40,64}$/;
-var RAW_DIFF_HEADER = /^:([0-7]{6}) ([0-7]{6}) ([0-9a-f]{40,64}) ([0-9a-f]{40,64}) ([A-Z])$/;
-
-class RepositoryProbeTimeout extends Error {
-  constructor() {
-    super("Repository discovery exhausted its Git time budget");
-  }
-}
-function inspectRepository(rootInput, explicitRepositoryKey, metadataOnly = false, options = {}) {
-  const requested = resolve4(rootInput);
-  if (!existsSync3(requested) || !statSync(requested).isDirectory()) {
-    throw new CollabError("workspace_not_directory", "Workspace root must be an existing directory", { root_path: requested });
-  }
-  const requestedRoot = realpathSync(requested);
-  const topLevel = mayFindRepository(requestedRoot) ? gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"], options) : null;
-  const rootPath = topLevel && existsSync3(topLevel) ? realpathSync(topLevel) : requestedRoot;
-  const explicitKey = explicitRepositoryKey?.trim();
-  if (!topLevel) {
-    const repositoryKey2 = explicitKey ? `explicit:${sha256(explicitKey)}` : `local-path:${sha256(rootPath)}`;
-    return {
-      requested_root_path: requestedRoot,
-      root_path: rootPath,
-      repository_key: repositoryKey2,
-      git_common_dir_hash: null,
-      worktree_fingerprint: `path:${sha256(rootPath)}`,
-      checkpoint: {
-        worktree_id: worktreeId(rootPath, `path:${rootPath}`),
-        head_sha: null,
-        branch: null,
-        dirty: null,
-        captured_at: new Date().toISOString()
-      }
-    };
-  }
-  const commonDirOutput = gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-common-dir"], options) ?? gitOutput(rootPath, ["rev-parse", "--git-common-dir"], options);
-  const gitDirOutput = gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-dir"], options) ?? gitOutput(rootPath, ["rev-parse", "--git-dir"], options);
-  if (!commonDirOutput || !gitDirOutput) {
-    throw new CollabError("git_identity_unavailable", "Git recognized the repository but its local identity could not be resolved", { root_path: rootPath });
-  }
-  const commonDir = realpathIfPresent(resolveGitPath(rootPath, commonDirOutput));
-  const gitDir = realpathIfPresent(resolveGitPath(rootPath, gitDirOutput));
-  const commonDirHash = sha256(commonDir);
-  const repositoryKey = explicitKey ? `explicit:${sha256(explicitKey)}` : `local-git:${commonDirHash}`;
-  const fingerprint = `git:${sha256(`${commonDir}\x00${gitDir}`)}`;
-  const id = worktreeId(rootPath, fingerprint);
-  return {
-    requested_root_path: requestedRoot,
-    root_path: rootPath,
-    repository_key: repositoryKey,
-    portable_repository_key: explicitKey || options.portable === false ? null : portableRepositoryKey(rootPath, options),
-    git_common_dir_hash: commonDirHash,
-    worktree_fingerprint: fingerprint,
-    checkpoint: metadataOnly ? { worktree_id: id, head_sha: null, branch: null, dirty: null, captured_at: new Date().toISOString() } : captureRepoCheckpoint(rootPath, id)
-  };
-}
-function portableRepositoryKey(rootPath, optionsOrDeadline = {}) {
-  const options = typeof optionsOrDeadline === "number" ? { deadline: optionsOrDeadline } : optionsOrDeadline;
-  const origin = gitOutput(rootPath, ["config", "--get-all", "remote.origin.url"], options);
-  const remote = origin ?? gitOutput(rootPath, ["config", "--get-all", "remote.github.url"], options);
-  const canonical = remote ? canonicalRepositoryRemote(remote) : null;
-  if (!canonical || gitOutput(rootPath, ["rev-parse", "--is-shallow-repository"], options) !== "false")
-    return null;
-  const roots = successorGit(rootPath, ["rev-list", "--max-parents=0", "HEAD"], MAX_GIT_OUTPUT, options);
-  if (roots.timed_out && options.deadline !== undefined)
-    throw new RepositoryProbeTimeout;
-  if (!roots.ok)
-    return null;
-  const root = roots.stdout.toString("utf8").trim();
-  if (!GIT_OBJECT_ID.test(root))
-    return null;
-  return `git-root-remote:v1:${sha256(`${root}\x00${canonical}`)}`;
-}
-function canonicalRepositoryRemote(value) {
-  if (/[\s\x00-\x1f\x7f]/.test(value) || value.includes("::") || value.includes("://") && !/^(https?|ssh|git):\/\//i.test(value))
-    return null;
-  let host;
-  let path;
-  let port = "";
-  try {
-    if (/^(https?|ssh|git):\/\//i.test(value)) {
-      const url2 = new URL(value);
-      if (url2.search || url2.hash)
-        return null;
-      host = url2.hostname.toLowerCase();
-      path = url2.pathname;
-      port = url2.port && !(url2.protocol === "ssh:" && url2.port === "22" || url2.protocol === "git:" && url2.port === "9418") ? `:${url2.port}` : "";
-    } else {
-      const scp = /^(?:[^/@:]+@)?([^/:]+):(.+)$/.exec(value);
-      if (!scp)
-        return null;
-      host = scp[1].toLowerCase();
-      path = scp[2];
-    }
-    path = path.replace(/^\/+|\/+$/g, "").replace(/\.git$/i, "");
-    if (!host || !path || path.split("/").some((part) => !part || part === "." || part === "..") || /[%\\?#]/.test(path))
-      return null;
-    return `${host}${port}/${path.toLowerCase()}`;
-  } catch {
-    return null;
-  }
-}
-function captureRepoCheckpoint(rootPath, id) {
-  const head = gitOutput(rootPath, ["rev-parse", "--verify", "HEAD"]);
-  if (!head) {
-    return {
-      worktree_id: id,
-      head_sha: null,
-      branch: null,
-      dirty: null,
-      captured_at: new Date().toISOString()
-    };
-  }
-  const branch = gitOutput(rootPath, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
-  const pathStateBefore = gitBytes(rootPath, [
-    "status",
-    "--porcelain=v1",
-    "-z",
-    "--untracked-files=all"
-  ]);
-  const indexDigest = gitDigest(rootPath, ["ls-files", "-s", "-z"]);
-  const trackedState = gitBytes(rootPath, [
-    "diff",
-    "--no-ext-diff",
-    "--binary",
-    "HEAD",
-    "--"
-  ]);
-  const untrackedPaths = gitBytes(rootPath, [
-    "ls-files",
-    "--others",
-    "--exclude-standard",
-    "-z"
-  ]);
-  const untrackedDigest = untrackedPaths.ok ? digestUntrackedContent(rootPath, untrackedPaths.stdout) : null;
-  const pathStateAfter = gitBytes(rootPath, [
-    "status",
-    "--porcelain=v1",
-    "-z",
-    "--untracked-files=all"
-  ]);
-  const stablePathState = pathStateBefore.ok && pathStateAfter.ok && pathStateBefore.stdout.equals(pathStateAfter.stdout);
-  return {
-    worktree_id: id,
-    head_sha: /^[0-9a-f]{40,64}$/i.test(head) ? head.toLowerCase() : null,
-    branch,
-    dirty: pathStateAfter.ok ? pathStateAfter.stdout.length > 0 : null,
-    algorithm: "git-state/v1",
-    index_sha256: indexDigest,
-    state_sha256: trackedState.ok && stablePathState && untrackedDigest ? sha256Bytes(Buffer.concat([
-      trackedState.stdout,
-      Buffer.from([0]),
-      pathStateAfter.stdout,
-      Buffer.from([0]),
-      Buffer.from(untrackedDigest, "hex")
-    ])) : null,
-    source: "server_observed",
-    captured_at: new Date().toISOString()
-  };
-}
-function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
-  const refuse = (reason) => ({
-    ok: false,
-    commit_sha: commitSha,
-    reason
-  });
-  if (!GIT_OBJECT_ID.test(commitSha) || !GIT_OBJECT_ID.test(parentSha)) {
-    return refuse("The checkpoint HEADs are not Git object IDs");
-  }
-  const commitObject = successorGit(rootPath, ["cat-file", "commit", commitSha]);
-  if (!commitObject.ok)
-    return refuse(`Git could not read commit ${commitSha}`);
-  const headerEnd = commitObject.stdout.indexOf(`
-
-`);
-  const parents = commitObject.stdout.subarray(0, headerEnd === -1 ? commitObject.stdout.length : headerEnd).toString("utf8").split(`
-`).filter((line) => line.startsWith("parent ")).map((line) => line.slice("parent ".length));
-  if (parents.length > 1) {
-    return refuse(`HEAD ${commitSha} is a merge commit, not one fast-forward commit`);
-  }
-  if (parents[0] !== parentSha) {
-    const descends = successorGitExitCode(rootPath, [
-      "merge-base",
-      "--is-ancestor",
-      parentSha,
-      commitSha
-    ]) === 0;
-    return refuse(descends ? `HEAD ${commitSha} is more than one commit ahead of the result checkpoint HEAD ${parentSha}` : `HEAD ${commitSha} does not descend from the result checkpoint HEAD ${parentSha}`);
-  }
-  const diff = successorGit(rootPath, [
-    "diff-tree",
-    "-r",
-    "-z",
-    "--raw",
-    "--no-renames",
-    "--ignore-submodules=none",
-    parentSha,
-    commitSha,
-    "--"
-  ]);
-  const fields = diff.ok ? splitNul(diff.stdout) : null;
-  if (!fields || fields.length % 2 !== 0) {
-    return refuse(`Git could not list the paths commit ${commitSha} changes`);
-  }
-  if (fields.length / 2 > MAX_SUCCESSOR_PATHS) {
-    return refuse(`Commit ${commitSha} changes more than ${MAX_SUCCESSOR_PATHS} paths`);
-  }
-  const budget = { bytes: MAX_SUCCESSOR_BYTES, deadline: performance.now() + MAX_SUCCESSOR_INSPECT_MS };
-  const changes = [];
-  for (let index = 0;index < fields.length; index += 2) {
-    const header = RAW_DIFF_HEADER.exec(fields[index].toString("utf8"));
-    const pathBytes = fields[index + 1];
-    if (!header || !safeGitRelativePath(pathBytes)) {
-      return refuse(`Git reported a change in commit ${commitSha} that cannot be read safely`);
-    }
-    const path = pathBytes.toString("utf8");
-    const [, oldMode, mode, , blob, status] = header;
-    const modeVouched = status === "A" || status === "M" && oldMode === mode;
-    if (status === "D" || mode !== "100644" && mode !== "100755" || !modeVouched) {
-      changes.push({ path, blob_sha256: null });
-      continue;
-    }
-    if (performance.now() > budget.deadline || budget.bytes <= 0) {
-      return refuse(`Inspecting commit ${commitSha} exceeded its bounds`);
-    }
-    const content = successorGit(rootPath, ["cat-file", "blob", blob], budget.bytes);
-    if (!content.ok) {
-      return refuse(`Git could not read the committed bytes of ${path} within the inspection bounds`);
-    }
-    budget.bytes -= content.stdout.length;
-    changes.push({ path, blob_sha256: sha256Bytes(content.stdout) });
-  }
-  return { ok: true, commit_sha: commitSha, parent_sha: parentSha, changes };
-}
-var MAX_CITED_FILE_BYTES = 16 * 1024 * 1024;
-function hashWorktreeFile(rootPath, cited, maxBytes = MAX_CITED_FILE_BYTES) {
-  let root;
-  try {
-    root = realpathSync(rootPath);
-  } catch {
-    return { status: "unreadable", path: null };
-  }
-  if (cited.includes("\x00") || cited.includes("\\"))
-    return { status: "outside", path: null };
-  const candidate = resolve4(root, cited);
-  const inside = relative(root, candidate);
-  if (!inside || inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute3(inside)) {
-    return { status: "outside", path: null };
-  }
-  let walked = root;
-  let isFile = false;
-  const parts = inside.split(sep);
-  for (const [index, part] of parts.entries()) {
-    walked = `${walked}${sep}${part}`;
-    let stat;
-    try {
-      stat = lstatSync3(walked);
-    } catch (error51) {
-      return { status: error51.code === "ENOENT" ? "missing" : "unreadable", path: inside };
-    }
-    if (stat.isSymbolicLink())
-      return { status: "symlink", path: inside };
-    if (index < parts.length - 1 && !stat.isDirectory())
-      return { status: "missing", path: inside };
-    isFile = stat.isFile();
-  }
-  if (!isFile)
-    return { status: "not_a_file", path: inside };
-  let descriptor = null;
-  try {
-    descriptor = openSync5(walked, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
-    const before = fstatSync3(descriptor);
-    if (!before.isFile())
-      return { status: "not_a_file", path: inside };
-    if (before.size > maxBytes)
-      return { status: "too_large", path: inside };
-    const hash2 = createHash2("sha256");
-    const buffer = Buffer.allocUnsafe(64 * 1024);
-    let total = 0;
-    while (true) {
-      const count = readSync3(descriptor, buffer, 0, buffer.length, null);
-      if (count === 0)
-        break;
-      total += count;
-      if (total > maxBytes)
-        return { status: "too_large", path: inside };
-      hash2.update(buffer.subarray(0, count));
-    }
-    const after = fstatSync3(descriptor);
-    if (before.ino !== after.ino || before.size !== after.size || before.mtimeMs !== after.mtimeMs) {
-      return { status: "changed_while_read", path: inside };
-    }
-    return { status: "hashed", path: inside, sha256: hash2.digest("hex"), size: total };
-  } catch (error51) {
-    return { status: error51.code === "ELOOP" ? "symlink" : "unreadable", path: inside };
-  } finally {
-    if (descriptor !== null)
-      closeSync5(descriptor);
-  }
-}
-function gitCommitExists(rootPath, sha, options = {}) {
-  if (!/^[0-9a-f]{7,64}$/i.test(sha))
-    return false;
-  const inRepository = runGit(rootPath, ["rev-parse", "--git-dir"], options);
-  if (!inRepository.ok)
-    return null;
-  const timeout = gitTimeout(options);
-  if (timeout <= 0)
-    return null;
-  const result = spawnRepositoryGit(["-C", rootPath, ...SUCCESSOR_GIT_ARGS, "cat-file", "-e", `${sha}^{commit}`], {
-    timeout,
-    stdio: ["ignore", "ignore", "ignore"],
-    env: successorGitEnv()
-  }, options);
-  if (spawnFailed(result))
-    return null;
-  return result.status === 0;
-}
-function mayFindRepository(rootPath) {
-  if (process.env.GIT_DIR || process.env.GIT_WORK_TREE)
-    return true;
-  for (let directory = rootPath;; directory = dirname3(directory)) {
-    try {
-      lstatSync3(join4(directory, ".git"));
-      return true;
-    } catch (error51) {
-      const code = error51.code;
-      if (code !== "ENOENT" && code !== "ENOTDIR")
-        return true;
-    }
-    if (dirname3(directory) === directory)
-      return false;
-  }
-}
-function exitedDespiteTimeout(result) {
-  return result.error?.code === "ETIMEDOUT" && result.status !== null && result.signal == null;
-}
-function spawnFailed(result) {
-  return result.error != null && !exitedDespiteTimeout(result);
-}
-function spawnTimedOut(result) {
-  return result.error?.code === "ETIMEDOUT" && !exitedDespiteTimeout(result);
-}
-function worktreeId(rootPath, fingerprint) {
-  return `wt_${sha256(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
-}
-function resolveGitPath(rootPath, value) {
-  return value.startsWith("/") ? value : resolve4(rootPath, value);
-}
-function realpathIfPresent(path) {
-  return existsSync3(path) ? realpathSync(path) : resolve4(path);
-}
-function gitOutput(rootPath, args, options = {}) {
-  const result = runGit(rootPath, args, options);
-  if (result.timed_out && options.deadline !== undefined)
-    throw new RepositoryProbeTimeout;
-  if (!result.ok)
-    return null;
-  const value = result.stdout.trim();
-  return value.length > 0 ? value : null;
-}
-function runGit(rootPath, args, options) {
-  const timeout = gitTimeout(options);
-  if (timeout <= 0)
-    return { ok: false, timed_out: true, stdout: "" };
-  const result = spawnRepositoryGit(["-C", rootPath, ...args], {
-    encoding: "utf8",
-    timeout,
-    maxBuffer: MAX_GIT_OUTPUT,
-    stdio: ["ignore", "pipe", "ignore"],
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" }
-  }, options);
-  return {
-    ok: result.status === 0 && !spawnFailed(result),
-    timed_out: spawnTimedOut(result),
-    stdout: typeof result.stdout === "string" ? result.stdout : ""
-  };
-}
-function gitDigest(rootPath, args) {
-  const result = gitBytes(rootPath, args);
-  return result.ok ? sha256Bytes(result.stdout) : null;
-}
-function gitBytes(rootPath, args, maxBuffer = MAX_GIT_OUTPUT) {
-  const result = spawnSync2("git", ["-C", rootPath, ...args], {
-    timeout: GIT_TIMEOUT_MS,
-    maxBuffer,
-    stdio: ["ignore", "pipe", "ignore"]
-  });
-  return {
-    ok: result.status === 0 && !spawnFailed(result),
-    stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0)
-  };
-}
-var SUCCESSOR_GIT_ARGS = ["-c", "core.commitGraph=false", "--no-replace-objects"];
-function successorGitEnv() {
-  return { ...process.env, GIT_GRAFT_FILE: "/dev/null/agenttool-collab-no-grafts" };
-}
-function successorGit(rootPath, args, maxBuffer = MAX_GIT_OUTPUT, options = {}) {
-  const timeout = gitTimeout(options);
-  if (timeout <= 0)
-    return { ok: false, timed_out: true, stdout: Buffer.alloc(0) };
-  const result = spawnRepositoryGit(["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
-    timeout,
-    maxBuffer,
-    stdio: ["ignore", "pipe", "ignore"],
-    env: successorGitEnv()
-  }, options);
-  return {
-    ok: result.status === 0 && !spawnFailed(result),
-    timed_out: spawnTimedOut(result),
-    stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0)
-  };
-}
-function spawnRepositoryGit(args, options, probe) {
-  return probe.spawn ? probe.spawn(args, options) : spawnSync2("git", args, options);
-}
-function gitTimeout(options) {
-  return options.deadline === undefined ? GIT_TIMEOUT_MS : Math.min(GIT_TIMEOUT_MS, Math.ceil(options.deadline - (options.now ?? (() => performance.now()))()));
-}
-function successorGitExitCode(rootPath, args) {
-  const result = spawnSync2("git", ["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
-    timeout: GIT_TIMEOUT_MS,
-    stdio: ["ignore", "ignore", "ignore"],
-    env: successorGitEnv()
-  });
-  return spawnFailed(result) ? null : result.status;
-}
-function digestUntrackedContent(rootPath, paths) {
-  const entries = splitNul(paths);
-  if (!entries || entries.length > MAX_UNTRACKED_FILES)
-    return null;
-  const budget = {
-    remainingBytes: MAX_UNTRACKED_BYTES,
-    deadline: performance.now() + MAX_UNTRACKED_HASH_MS
-  };
-  const aggregate = createHash2("sha256");
-  aggregate.update("agenttool.collab/untracked-state/v1\x00");
-  for (const entry of entries) {
-    if (performance.now() > budget.deadline)
-      return null;
-    if (!safeGitRelativePath(entry))
-      return null;
-    const absolute = Buffer.concat([
-      Buffer.from(rootPath),
-      Buffer.from("/"),
-      entry
-    ]);
-    let stat;
-    try {
-      stat = lstatSync3(absolute);
-      aggregate.update(lengthPrefix(entry.length));
-      aggregate.update(entry);
-      if (stat.isSymbolicLink()) {
-        const target = readlinkSync(absolute, { encoding: "buffer" });
-        if (target.length > budget.remainingBytes || performance.now() > budget.deadline) {
-          return null;
-        }
-        budget.remainingBytes -= target.length;
-        aggregate.update("symlink\x00");
-        aggregate.update(lengthPrefix(target.length));
-        aggregate.update(target);
-      } else if (stat.isFile()) {
-        const digest = digestStableFile(absolute, budget);
-        if (!digest)
-          return null;
-        aggregate.update("file\x00");
-        aggregate.update(lengthPrefix(stat.mode & 73));
-        aggregate.update(digest);
-      } else {
-        return null;
-      }
-    } catch {
-      return null;
-    }
-  }
-  return aggregate.digest("hex");
-}
-function digestStableFile(path, budget) {
-  let descriptor = null;
-  try {
-    descriptor = openSync5(path, "r");
-    const before = fstatSync3(descriptor);
-    if (!before.isFile() || before.size > budget.remainingBytes || performance.now() > budget.deadline)
-      return null;
-    const hash2 = createHash2("sha256");
-    const buffer = Buffer.allocUnsafe(64 * 1024);
-    while (true) {
-      if (performance.now() > budget.deadline)
-        return null;
-      const count = readSync3(descriptor, buffer, 0, buffer.length, null);
-      if (count === 0)
-        break;
-      hash2.update(buffer.subarray(0, count));
-    }
-    const after = fstatSync3(descriptor);
-    if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mode !== after.mode || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs)
-      return null;
-    budget.remainingBytes -= before.size;
-    return hash2.digest();
-  } catch {
-    return null;
-  } finally {
-    if (descriptor !== null)
-      closeSync5(descriptor);
-  }
-}
-function splitNul(value) {
-  if (value.length === 0)
-    return [];
-  const entries = [];
-  let start = 0;
-  for (let index = 0;index < value.length; index += 1) {
-    if (value[index] !== 0)
-      continue;
-    if (index === start)
-      return null;
-    entries.push(value.subarray(start, index));
-    start = index + 1;
-  }
-  return start === value.length ? entries : null;
-}
-function safeGitRelativePath(value) {
-  if (value.length === 0 || value[0] === 47)
-    return false;
-  let start = 0;
-  for (let index = 0;index <= value.length; index += 1) {
-    if (index !== value.length && value[index] !== 47)
-      continue;
-    const component = value.subarray(start, index);
-    if (component.length === 0 || component.length === 1 && component[0] === 46 || component.length === 2 && component[0] === 46 && component[1] === 46)
-      return false;
-    start = index + 1;
-  }
-  return true;
-}
-function lengthPrefix(value) {
-  const prefix2 = Buffer.allocUnsafe(8);
-  prefix2.writeBigUInt64BE(BigInt(value));
-  return prefix2;
-}
-function sha256(value) {
-  return createHash2("sha256").update(value).digest("hex");
-}
-function sha256Bytes(value) {
-  return createHash2("sha256").update(value).digest("hex");
-}
-
 // src/store-notes.ts
 import { randomUUID as randomUUID5 } from "crypto";
 import { realpathSync as realpathSync2 } from "fs";
 
 // src/ballot.ts
-import { createHash as createHash3 } from "crypto";
+import { createHash as createHash6 } from "crypto";
 
 // src/time.ts
 var ZONED_INSTANT = /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(?:([Zz])|([+-])(\d{2}):(\d{2}))$/;
@@ -31119,10 +38169,10 @@ var BALLOT_TIE_NEXT = {
 };
 var BALLOT_BASES = NOTE_BASES;
 function ballotUnitId(voiceIds) {
-  return `unit_${sha2562(canonicalJson(sortedUnique(voiceIds))).slice(0, 32)}`;
+  return `unit_${sha2564(canonicalJson(sortedUnique(voiceIds))).slice(0, 32)}`;
 }
 function electorateSha256(units) {
-  return sha2562(canonicalJson(units));
+  return sha2564(canonicalJson(units));
 }
 function buildElectorate(sessions) {
   const byId = new Map;
@@ -31571,7 +38621,7 @@ function ballotCommitment(input) {
   if (!SALT.test(input.salt)) {
     throw new CollabError("invalid_salt", "a ballot salt is 32 random bytes as 64 lowercase hex characters");
   }
-  return sha2562(canonicalJson({
+  return sha2564(canonicalJson({
     protocol: BALLOT_COMMITMENT_PROTOCOL,
     workspace_id: input.workspace_id,
     ballot_id: input.ballot_id,
@@ -31655,7 +38705,7 @@ function revealedEntryBytes(entry) {
   return Buffer.byteLength(canonicalJson(entry), "utf8");
 }
 function revealedEntriesSha256(entries) {
-  return sha2562(canonicalJson(entries));
+  return sha2564(canonicalJson(entries));
 }
 function unitOutcomes(units, entries) {
   return units.map((unit) => {
@@ -31932,20 +38982,20 @@ function compare(left, right) {
 function refuse(code, message, details, remedy) {
   throw new CollabError(code, message, { ...details, remedy });
 }
-function sha2562(value) {
-  return createHash3("sha256").update(value).digest("hex");
+function sha2564(value) {
+  return createHash6("sha256").update(value).digest("hex");
 }
 
 // src/ballot-seal.ts
-import { randomUUID as randomUUID3 } from "crypto";
+import { randomUUID as randomUUID4 } from "crypto";
 import {
-  chmodSync as chmodSync3,
-  closeSync as closeSync6,
-  existsSync as existsSync4,
+  chmodSync as chmodSync4,
+  closeSync as closeSync7,
+  existsSync as existsSync5,
   fsyncSync as fsyncSync3,
-  lstatSync as lstatSync4,
-  mkdirSync as mkdirSync3,
-  openSync as openSync6,
+  lstatSync as lstatSync5,
+  mkdirSync as mkdirSync4,
+  openSync as openSync7,
   readdirSync as readdirSync2,
   readFileSync as readFileSync3,
   renameSync as renameSync3,
@@ -31953,32 +39003,32 @@ import {
   unlinkSync as unlinkSync3,
   writeSync
 } from "fs";
-import { dirname as dirname4, join as join5 } from "path";
+import { dirname as dirname5, join as join6 } from "path";
 var SEAL_DIRECTORY = "collab-ballots";
 var BALLOT_ID = /^report_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 var CAST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function sealRoot(journalRealpath) {
-  return join5(dirname4(journalRealpath), SEAL_DIRECTORY);
+  return join6(dirname5(journalRealpath), SEAL_DIRECTORY);
 }
 function sealDirectory(journalRealpath, ballotId) {
   if (!BALLOT_ID.test(ballotId))
     throw new CollabError("invalid_ballot_id", "A ballot id is the poll report's id");
-  return join5(sealRoot(journalRealpath), ballotId);
+  return join6(sealRoot(journalRealpath), ballotId);
 }
 function sealPath(journalRealpath, ballotId, castId) {
   if (!CAST_ID.test(castId))
     throw new CollabError("invalid_cast_id", "A cast id is a random uuid");
-  return join5(sealDirectory(journalRealpath, ballotId), `${castId}.json`);
+  return join6(sealDirectory(journalRealpath, ballotId), `${castId}.json`);
 }
 function currentUser() {
   return typeof process.getuid === "function" ? process.getuid() : null;
 }
 function privateDirectory(path) {
-  if (!existsSync4(path)) {
-    mkdirSync3(path, { mode: 448 });
-    chmodSync3(path, 448);
+  if (!existsSync5(path)) {
+    mkdirSync4(path, { mode: 448 });
+    chmodSync4(path, 448);
   }
-  const stat = lstatSync4(path);
+  const stat = lstatSync5(path);
   const uid = currentUser();
   if (!stat.isDirectory() || stat.isSymbolicLink() || uid !== null && stat.uid !== uid) {
     throw new CollabError("seal_directory_unsafe", "The ballot seal directory must be a real directory owned by this user", {
@@ -31986,26 +39036,26 @@ function privateDirectory(path) {
     });
   }
   if ((stat.mode & 63) !== 0)
-    chmodSync3(path, 448);
+    chmodSync4(path, 448);
 }
 function writeSealFile(path, seal) {
-  const directory = dirname4(path);
-  privateDirectory(dirname4(directory));
+  const directory = dirname5(path);
+  privateDirectory(dirname5(directory));
   privateDirectory(directory);
-  if (existsSync4(path)) {
+  if (existsSync5(path)) {
     throw new CollabError("seal_file_exists", "A seal file with this cast id already exists", { operation: "write_seal_file" });
   }
-  const temporary = join5(directory, `.${randomUUID3()}.tmp`);
-  const descriptor = openSync6(temporary, "wx", 384);
+  const temporary = join6(directory, `.${randomUUID4()}.tmp`);
+  const descriptor = openSync7(temporary, "wx", 384);
   try {
     writeSync(descriptor, JSON.stringify(seal));
     fsyncSync3(descriptor);
   } catch (error51) {
-    closeSync6(descriptor);
+    closeSync7(descriptor);
     removeQuietly(temporary);
     throw error51;
   }
-  closeSync6(descriptor);
+  closeSync7(descriptor);
   try {
     renameSync3(temporary, path);
   } catch (error51) {
@@ -32013,19 +39063,19 @@ function writeSealFile(path, seal) {
     throw error51;
   }
   try {
-    const handle = openSync6(directory, "r");
+    const handle = openSync7(directory, "r");
     try {
       fsyncSync3(handle);
     } finally {
-      closeSync6(handle);
+      closeSync7(handle);
     }
   } catch {}
 }
 function readSealFile(path) {
   try {
-    if (!existsSync4(path))
+    if (!existsSync5(path))
       return { state: "missing" };
-    const stat = lstatSync4(path);
+    const stat = lstatSync5(path);
     if (!stat.isFile() || stat.isSymbolicLink())
       return { state: "unreadable" };
     return { state: "read", value: JSON.parse(readFileSync3(path, "utf8")) };
@@ -32039,7 +39089,7 @@ function removeSealFile(path) {
 function listSealFiles(journalRealpath, ballotId) {
   try {
     const directory = sealDirectory(journalRealpath, ballotId);
-    if (!existsSync4(directory))
+    if (!existsSync5(directory))
       return [];
     return readdirSync2(directory).filter((name) => name.endsWith(".json") && CAST_ID.test(name.slice(0, -".json".length))).map((name) => name.slice(0, -".json".length));
   } catch {
@@ -32050,9 +39100,9 @@ var TEMPORARY = /^\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 function listSealTemporaries(journalRealpath, ballotId) {
   try {
     const directory = sealDirectory(journalRealpath, ballotId);
-    if (!existsSync4(directory))
+    if (!existsSync5(directory))
       return [];
-    return readdirSync2(directory).filter((name) => TEMPORARY.test(name)).map((name) => join5(directory, name));
+    return readdirSync2(directory).filter((name) => TEMPORARY.test(name)).map((name) => join6(directory, name));
   } catch {
     return [];
   }
@@ -32060,7 +39110,7 @@ function listSealTemporaries(journalRealpath, ballotId) {
 function listSealBallots(journalRealpath) {
   try {
     const root = sealRoot(journalRealpath);
-    if (!existsSync4(root) || !lstatSync4(root).isDirectory())
+    if (!existsSync5(root) || !lstatSync5(root).isDirectory())
       return [];
     return readdirSync2(root).filter((name) => BALLOT_ID.test(name));
   } catch {
@@ -32070,7 +39120,7 @@ function listSealBallots(journalRealpath) {
 function removeEmptySealDirectory(journalRealpath, ballotId) {
   try {
     const directory = sealDirectory(journalRealpath, ballotId);
-    if (existsSync4(directory) && readdirSync2(directory).length === 0)
+    if (existsSync5(directory) && readdirSync2(directory).length === 0)
       rmdirSync(directory);
   } catch {}
 }
@@ -32078,6952 +39128,6 @@ function removeQuietly(path) {
   try {
     unlinkSync3(path);
   } catch {}
-}
-
-// src/store.ts
-import { Database } from "bun:sqlite";
-import { createHash as createHash6, randomBytes, randomUUID as randomUUID4, timingSafeEqual } from "crypto";
-import {
-  chmodSync as chmodSync4,
-  closeSync as closeSync7,
-  existsSync as existsSync5,
-  lstatSync as lstatSync5,
-  mkdirSync as mkdirSync4,
-  openSync as openSync7
-} from "fs";
-import { dirname as dirname5, isAbsolute as isAbsolute4, join as join6, posix, resolve as resolve5 } from "path";
-
-// src/merkle.ts
-import { createHash as createHash4 } from "crypto";
-var JOURNAL_MERKLE_LEAF_DOMAIN = "agenttool.collab/journal-leaf/v1";
-var RFC6962_EMPTY_ROOT = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-var SHA256_HEX_RE = /^[0-9a-f]{64}$/;
-var LEAF_PREFIX = new Uint8Array([0]);
-var NODE_PREFIX = new Uint8Array([1]);
-var UTF8 = new TextEncoder;
-function isSha256Hex(value) {
-  return typeof value === "string" && SHA256_HEX_RE.test(value);
-}
-function assertSha256Hex(value, label) {
-  if (!isSha256Hex(value)) {
-    throw new RangeError(`${label} must be 64 lowercase hexadecimal characters`);
-  }
-}
-function isValidEpochId(value) {
-  return typeof value === "string" && value.length > 0 && !value.includes("\x00");
-}
-function assertValidEpochId(epochId) {
-  if (!isValidEpochId(epochId)) {
-    throw new RangeError("epoch_id must be a non-empty string containing no NUL bytes");
-  }
-}
-function assertSafeNonNegativeInt(value, label) {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new RangeError(`${label} must be a non-negative safe integer`);
-  }
-}
-function largestPowerOfTwoLessThan(n) {
-  if (!Number.isSafeInteger(n) || n < 2) {
-    throw new RangeError("largestPowerOfTwoLessThan requires a safe integer >= 2");
-  }
-  let k = 1;
-  while (k * 2 < n)
-    k *= 2;
-  return k;
-}
-function rfc6962LeafHash(data) {
-  const bytes = typeof data === "string" ? UTF8.encode(data) : data;
-  return createHash4("sha256").update(LEAF_PREFIX).update(bytes).digest("hex");
-}
-function rfc6962NodeHash(leftHex, rightHex) {
-  assertSha256Hex(leftHex, "left");
-  assertSha256Hex(rightHex, "right");
-  return createHash4("sha256").update(NODE_PREFIX).update(Buffer.from(leftHex, "hex")).update(Buffer.from(rightHex, "hex")).digest("hex");
-}
-function subtreeRoot(leafHashes, start, end) {
-  const n = end - start;
-  if (n === 0)
-    return RFC6962_EMPTY_ROOT;
-  if (n === 1)
-    return leafHashes[start];
-  const k = largestPowerOfTwoLessThan(n);
-  return rfc6962NodeHash(subtreeRoot(leafHashes, start, start + k), subtreeRoot(leafHashes, start + k, end));
-}
-function rfc6962InclusionProof(leafHashes, leafIndex, treeSize = leafHashes.length) {
-  assertSafeNonNegativeInt(treeSize, "tree_size");
-  assertSafeNonNegativeInt(leafIndex, "leaf_index");
-  if (treeSize < 1 || treeSize > leafHashes.length) {
-    throw new RangeError(`tree_size (${treeSize}) must be in [1, ${leafHashes.length}]`);
-  }
-  if (leafIndex >= treeSize) {
-    throw new RangeError(`leaf_index (${leafIndex}) must be < tree_size (${treeSize})`);
-  }
-  for (let i = 0;i < treeSize; i += 1) {
-    assertSha256Hex(leafHashes[i], `leaf_hashes[${i}]`);
-  }
-  const path = [];
-  const walk = (m, start, end) => {
-    const n = end - start;
-    if (n <= 1)
-      return;
-    const k = largestPowerOfTwoLessThan(n);
-    if (m < k) {
-      walk(m, start, start + k);
-      path.push(subtreeRoot(leafHashes, start + k, end));
-    } else {
-      walk(m - k, start + k, end);
-      path.push(subtreeRoot(leafHashes, start, start + k));
-    }
-  };
-  walk(leafIndex, 0, treeSize);
-  return path;
-}
-function rfc6962ConsistencyProof(leafHashes, fromSize, toSize = leafHashes.length) {
-  assertSafeNonNegativeInt(fromSize, "from_size");
-  assertSafeNonNegativeInt(toSize, "to_size");
-  if (fromSize > toSize) {
-    throw new RangeError(`from_size (${fromSize}) must be <= to_size (${toSize})`);
-  }
-  if (toSize > leafHashes.length) {
-    throw new RangeError(`to_size (${toSize}) exceeds available leaves (${leafHashes.length})`);
-  }
-  for (let i = 0;i < toSize; i += 1) {
-    assertSha256Hex(leafHashes[i], `leaf_hashes[${i}]`);
-  }
-  if (fromSize === 0 || fromSize === toSize)
-    return [];
-  const path = [];
-  const subproof = (m, start, end, complete) => {
-    const n = end - start;
-    if (m === n) {
-      if (!complete)
-        path.push(subtreeRoot(leafHashes, start, end));
-      return;
-    }
-    const k = largestPowerOfTwoLessThan(n);
-    if (m <= k) {
-      subproof(m, start, start + k, complete);
-      path.push(subtreeRoot(leafHashes, start + k, end));
-    } else {
-      subproof(m - k, start + k, end, false);
-      path.push(subtreeRoot(leafHashes, start, start + k));
-    }
-  };
-  subproof(fromSize, 0, toSize, true);
-  return path;
-}
-function journalLeafPreimage(epochId, sequence, eventHash) {
-  assertValidEpochId(epochId);
-  if (!Number.isSafeInteger(sequence) || sequence < 1) {
-    throw new RangeError("sequence must be a safe integer >= 1");
-  }
-  assertSha256Hex(eventHash, "event_hash");
-  return UTF8.encode(`${JOURNAL_MERKLE_LEAF_DOMAIN}\x00${epochId}\x00${sequence}\x00${eventHash}`);
-}
-function journalLeafHash(epochId, sequence, eventHash) {
-  return rfc6962LeafHash(journalLeafPreimage(epochId, sequence, eventHash));
-}
-function buildJournalLeafHashes(epochId, eventHashes, limit) {
-  assertValidEpochId(epochId);
-  const leaves = new Array(limit);
-  for (let i = 0;i < limit; i += 1) {
-    leaves[i] = journalLeafHash(epochId, i + 1, eventHashes[i]);
-  }
-  return leaves;
-}
-function journalMerkleRoot(epochId, eventHashes) {
-  assertValidEpochId(epochId);
-  if (eventHashes.length === 0)
-    return RFC6962_EMPTY_ROOT;
-  const leaves = buildJournalLeafHashes(epochId, eventHashes, eventHashes.length);
-  return subtreeRoot(leaves, 0, leaves.length);
-}
-function proveJournalInclusion(epochId, eventHashes, sequence, treeSize = eventHashes.length) {
-  assertValidEpochId(epochId);
-  assertSafeNonNegativeInt(treeSize, "tree_size");
-  if (!Number.isSafeInteger(sequence) || sequence < 1) {
-    throw new RangeError("sequence must be a safe integer >= 1");
-  }
-  if (treeSize > eventHashes.length) {
-    throw new RangeError(`tree_size (${treeSize}) exceeds available events (${eventHashes.length})`);
-  }
-  if (sequence > treeSize) {
-    throw new RangeError(`sequence (${sequence}) must be <= tree_size (${treeSize})`);
-  }
-  const leaves = buildJournalLeafHashes(epochId, eventHashes, treeSize);
-  const root = subtreeRoot(leaves, 0, treeSize);
-  const path = rfc6962InclusionProof(leaves, sequence - 1, treeSize);
-  return {
-    epoch_id: epochId,
-    sequence,
-    event_hash: eventHashes[sequence - 1],
-    leaf_hash: leaves[sequence - 1],
-    tree_size: treeSize,
-    root,
-    path
-  };
-}
-function proveJournalConsistency(epochId, eventHashes, fromSize, toSize = eventHashes.length) {
-  assertValidEpochId(epochId);
-  assertSafeNonNegativeInt(fromSize, "from_size");
-  assertSafeNonNegativeInt(toSize, "to_size");
-  if (fromSize > toSize) {
-    throw new RangeError(`from_size (${fromSize}) must be <= to_size (${toSize})`);
-  }
-  if (toSize > eventHashes.length) {
-    throw new RangeError(`to_size (${toSize}) exceeds available events (${eventHashes.length})`);
-  }
-  const leaves = buildJournalLeafHashes(epochId, eventHashes, toSize);
-  const fromRoot = subtreeRoot(leaves, 0, fromSize);
-  const toRoot = subtreeRoot(leaves, 0, toSize);
-  const path = rfc6962ConsistencyProof(leaves, fromSize, toSize);
-  return {
-    epoch_id: epochId,
-    from_size: fromSize,
-    to_size: toSize,
-    from_root: fromRoot,
-    to_root: toRoot,
-    path
-  };
-}
-
-// src/passkey.ts
-import { createHash as createHash5, createPublicKey, verify } from "crypto";
-var FLAG_USER_PRESENT = 1;
-var FLAG_USER_VERIFIED = 4;
-var BASE64URL = /^[A-Za-z0-9_-]*$/;
-function base64urlDecode(value, field, maxBytes = 64 * 1024) {
-  if (typeof value !== "string" || !BASE64URL.test(value) || value.length === 0) {
-    throw new CollabError("passkey_assertion_invalid", `${field} must be non-empty base64url`);
-  }
-  const bytes = Buffer.from(value, "base64url");
-  if (bytes.length > maxBytes) {
-    throw new CollabError("passkey_assertion_invalid", `${field} exceeds ${maxBytes} bytes`);
-  }
-  return bytes;
-}
-function sha2563(bytes) {
-  return createHash5("sha256").update(bytes).digest();
-}
-function personActChallenge(input) {
-  const challenge_bytes = canonicalJson({ protocol: PERSON_ACT_PROTOCOL, ...input });
-  return { challenge_bytes, challenge: sha2563(challenge_bytes).toString("base64url") };
-}
-var ASSERTION_FIELDS = new Set(["credential_id", "authenticator_data", "client_data_json", "signature", "user_handle"]);
-function normalizePasskeyAssertion(value) {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new CollabError("passkey_assertion_invalid", "The assertion must be a JSON object");
-  }
-  const input = value;
-  const unknown2 = Object.keys(input).filter((key) => !ASSERTION_FIELDS.has(key));
-  if (unknown2.length > 0) {
-    throw new CollabError("passkey_assertion_invalid", "The assertion has fields WebAuthn does not define", { fields: unknown2 });
-  }
-  const field = (name, maxBytes) => {
-    base64urlDecode(input[name], name, maxBytes);
-    return input[name];
-  };
-  const userHandle = input.user_handle === undefined || input.user_handle === null ? null : field("user_handle", 64);
-  return {
-    credential_id: field("credential_id", 1023),
-    authenticator_data: field("authenticator_data", 4096),
-    client_data_json: field("client_data_json", 4096),
-    signature: field("signature", 256),
-    user_handle: userHandle
-  };
-}
-function normalizePasskeyEnrollment(input) {
-  base64urlDecode(input.credential_id, "credential_id", 1023);
-  if (typeof input.public_key_spki !== "string") {
-    throw new CollabError("passkey_key_invalid", "public_key_spki must be base64url DER");
-  }
-  parsePasskeyPublicKey(input.public_key_spki);
-  if (input.algorithm !== -7) {
-    throw new CollabError("passkey_key_invalid", "Only ES256 (COSE algorithm -7) passkeys are supported");
-  }
-  const scope = validatePasskeyScope(input.rp_id, input.origin);
-  let label = null;
-  if (input.label !== undefined && input.label !== null) {
-    if (typeof input.label !== "string" || input.label.trim().length > 80 || /[\u0000-\u001f\u007f]/.test(input.label)) {
-      throw new CollabError("passkey_label_invalid", "label must be at most 80 characters without control characters");
-    }
-    label = input.label.trim() || null;
-  }
-  return {
-    credential_id: input.credential_id,
-    public_key_spki: input.public_key_spki,
-    algorithm: -7,
-    ...scope,
-    label
-  };
-}
-function parsePasskeyPublicKey(spki) {
-  const der = base64urlDecode(spki, "public_key_spki", 1024);
-  let key;
-  try {
-    key = createPublicKey({ key: der, format: "der", type: "spki" });
-  } catch {
-    throw new CollabError("passkey_key_invalid", "public_key_spki is not a DER SubjectPublicKeyInfo");
-  }
-  if (key.asymmetricKeyType !== "ec" || key.asymmetricKeyDetails?.namedCurve !== "prime256v1") {
-    throw new CollabError("passkey_key_invalid", "Only ES256 (P-256) passkeys are supported");
-  }
-  return key;
-}
-function passkeyFingerprint(spki) {
-  return sha2563(base64urlDecode(spki, "public_key_spki", 1024)).toString("hex");
-}
-function validatePasskeyScope(rpId, origin) {
-  if (typeof rpId !== "string" || !/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(rpId)) {
-    throw new CollabError("passkey_scope_invalid", "rp_id must be a lowercase host name");
-  }
-  let url2;
-  try {
-    url2 = new URL(String(origin));
-  } catch {
-    throw new CollabError("passkey_scope_invalid", "origin must be a URL origin");
-  }
-  const secure = url2.protocol === "https:" || url2.protocol === "http:" && url2.hostname === "localhost";
-  const hostMatches = url2.hostname === rpId || url2.hostname.endsWith(`.${rpId}`);
-  if (!secure || !hostMatches || url2.origin !== origin) {
-    throw new CollabError("passkey_scope_invalid", "origin must be an https origin (or http://localhost) whose host is rp_id or one of its subdomains");
-  }
-  return { rp_id: rpId, origin: url2.origin };
-}
-function verifyPasskeyAssertion(input) {
-  const { passkey, assertion } = input;
-  if (assertion.credential_id !== passkey.credential_id) {
-    throw new CollabError("passkey_not_enrolled", "The assertion names a different credential");
-  }
-  const clientDataBytes = base64urlDecode(assertion.client_data_json, "client_data_json");
-  const authenticatorData = base64urlDecode(assertion.authenticator_data, "authenticator_data");
-  const signature = base64urlDecode(assertion.signature, "signature", 256);
-  let clientData;
-  try {
-    const parsed = JSON.parse(clientDataBytes.toString("utf8"));
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
-      throw new Error("not an object");
-    clientData = parsed;
-  } catch {
-    throw new CollabError("passkey_assertion_invalid", "client_data_json is not a JSON object");
-  }
-  if (clientData.type !== "webauthn.get") {
-    throw new CollabError("passkey_assertion_invalid", "client data type must be webauthn.get");
-  }
-  if (clientData.challenge !== input.expected_challenge) {
-    throw new CollabError("passkey_challenge_mismatch", "The assertion signs a different act; request a fresh challenge for the current state");
-  }
-  if (clientData.origin !== passkey.origin || clientData.crossOrigin === true) {
-    throw new CollabError("passkey_origin_mismatch", "The assertion came from another origin");
-  }
-  if (authenticatorData.length < 37) {
-    throw new CollabError("passkey_assertion_invalid", "authenticator_data is too short");
-  }
-  if (!authenticatorData.subarray(0, 32).equals(sha2563(passkey.rp_id))) {
-    throw new CollabError("passkey_rp_mismatch", "The assertion is for another relying party");
-  }
-  const flags = authenticatorData[32];
-  if ((flags & FLAG_USER_PRESENT) === 0 || (flags & FLAG_USER_VERIFIED) === 0) {
-    throw new CollabError("passkey_user_not_verified", "The authenticator did not report user presence and user verification");
-  }
-  const signCount = authenticatorData.readUInt32BE(33);
-  if ((signCount !== 0 || passkey.sign_count !== 0) && signCount <= passkey.sign_count) {
-    throw new CollabError("passkey_counter_regressed", "The signature counter did not increase");
-  }
-  const signed = Buffer.concat([authenticatorData, sha2563(clientDataBytes)]);
-  const valid = verify("sha256", signed, { key: parsePasskeyPublicKey(passkey.public_key_spki), dsaEncoding: "der" }, signature);
-  if (!valid)
-    throw new CollabError("passkey_signature_invalid", "The passkey signature does not verify");
-  return { sign_count: signCount };
-}
-
-// src/proposal.ts
-function proposalBytes(content, rule = CONSENT_RULE) {
-  return canonicalJson({ protocol: PROPOSAL_BYTES_PROTOCOL, rule, ...content });
-}
-function aiPosition(input) {
-  const closed = Date.parse(input.now) >= Date.parse(input.closes_at);
-  const others = [...new Set(input.snapshot_voice_ids)].filter((voice) => voice !== input.author_voice_id).sort();
-  const lone = others.length === 0;
-  const qualifying_support_indexes = input.support_voice_ids.flatMap((voice, index) => lone || voice !== input.author_voice_id ? [index] : []);
-  const supported = new Set(qualifying_support_indexes.map((index) => input.support_voice_ids[index]));
-  const awaiting_voice_ids = others.filter((voice) => !supported.has(voice));
-  const result = (position) => ({
-    position,
-    closed,
-    qualifying_support_indexes,
-    awaiting_voice_ids
-  });
-  if (input.obsoleted)
-    return result(input.obsoleted);
-  const hasSupport = qualifying_support_indexes.length > 0;
-  if (!closed) {
-    if (input.unresolved_challenge)
-      return result("challenged");
-    return result(hasSupport && awaiting_voice_ids.length === 0 ? "consented" : "open");
-  }
-  if (input.unresolved_challenge)
-    return result("split");
-  return result(hasSupport ? "consented" : "lapsed");
-}
-
-// src/store.ts
-var GENESIS_HASH = "0".repeat(64);
-var APPLICATION_ID = 1096041292;
-var HARDENED_PREVIEW_SCHEMA_VERSION = 2;
-var SCHEMA_VERSION = 3;
-var DEFAULT_LEASE_SECONDS = 15 * 60;
-var MAX_LEASE_SECONDS = 60 * 60;
-var REPOSITORY_DISCOVERY_MS = 250;
-var MAX_TEXT = 8000;
-var MAX_REPORT_BODY = 9000;
-var MAX_DEPENDENCIES = 128;
-var MAX_PATH_SCOPES = 128;
-var MAX_PATH_SCOPE_LENGTH = 500;
-var MAX_PATH_SCOPES_TOTAL = 16000;
-var MAX_REPORT_REFS = 128;
-var MAX_REPORT_REF_LENGTH = 2000;
-var DEFAULT_PRESENCE_SECONDS = 2 * 60;
-var MAX_PRESENCE_SECONDS = 60 * 60;
-var MAX_SESSION_CAPABILITIES = 32;
-var MAX_SESSION_CAPABILITY_LENGTH = 100;
-var DEFAULT_SESSION_LIST_LIMIT = 100;
-var MAX_SESSION_LIST_LIMIT = 500;
-var DEFAULT_NEXT_EVENT_LIMIT = 50;
-var MAX_NEXT_EVENT_LIMIT = 50;
-var SESSION_TOKEN_BYTES = 32;
-var SESSION_END_RECOVERY_NOTE = "collab_session_end with release_leases released this expired lease from its own session";
-var PRESENCE_SESSION_COLUMNS = [
-  "id",
-  "workspace_id",
-  "epoch_id",
-  "client_instance_id",
-  "actor_label",
-  "actor_key",
-  "runtime_kind",
-  "provider_label",
-  "model_label",
-  "declared_capabilities_json",
-  "version",
-  "joined_at",
-  "last_seen_at",
-  "presence_expires_at",
-  "left_at"
-];
-var COORDINATION_SESSION_COLUMNS = [
-  "id",
-  "workspace_id",
-  "worktree_id",
-  "actor",
-  "role",
-  "parent_session_id",
-  "status",
-  "generation",
-  "token_hash",
-  "joined_at",
-  "last_seen_at",
-  "ended_at",
-  "cursor_epoch_id",
-  "cursor_sequence",
-  "cursor_hash",
-  "cursor_version",
-  "reset_generation",
-  "cursor_recovery_required"
-];
-var SQLITE_BUSY_RETRY_MS = 15000;
-var V2_GUARD_TRIGGERS = [
-  "tasks_v2_insert_guard",
-  "tasks_v2_update_guard",
-  "tasks_v2_delete_guard",
-  "artifacts_v2_insert_guard",
-  "handoffs_v2_insert_guard"
-];
-
-class CollabStoreCore {
-  db;
-  now;
-  filesystemPath;
-  migrationFailpoint;
-  revealFailpoint;
-  repositoryDiscovery;
-  eventReader;
-  closed = false;
-  ambientReceiptPlan = null;
-  resumeAwaySince = new Map;
-  constructor(path, options = {}) {
-    this.now = options.now ?? (() => new Date);
-    this.migrationFailpoint = options.migration_failpoint;
-    this.revealFailpoint = options.reveal_failpoint;
-    this.repositoryDiscovery = {
-      ...options.repository_discovery,
-      budget_ms: options.repository_discovery?.budget_ms ?? REPOSITORY_DISCOVERY_MS,
-      now: options.repository_discovery?.now ?? (() => performance.now())
-    };
-    const databasePath = path === ":memory:" ? path : resolve5(path);
-    if (databasePath !== ":memory:") {
-      const parent = dirname5(databasePath);
-      const parentAlreadyExisted = existsSync5(parent);
-      mkdirSync4(parent, { recursive: true, mode: 448 });
-      if (!parentAlreadyExisted)
-        chmodSync4(parent, 448);
-      if (existsSync5(databasePath)) {
-        assertSafeDatabaseFile(databasePath);
-      } else {
-        try {
-          const descriptor = openSync7(databasePath, "wx", 384);
-          closeSync7(descriptor);
-        } catch (error51) {
-          if (error51.code !== "EEXIST")
-            throw error51;
-          assertSafeDatabaseFile(databasePath);
-        }
-      }
-      this.filesystemPath = databasePath;
-    }
-    this.db = new Database(databasePath, { create: true, strict: true });
-    try {
-      this.db.exec("PRAGMA busy_timeout = 5000");
-      this.preflightDatabase();
-      this.initialize();
-    } catch (error51) {
-      this.db.close();
-      throw error51;
-    }
-  }
-  close() {
-    this.closed = true;
-    this.eventReader?.close();
-    this.eventReader = undefined;
-    this.db.close();
-  }
-  nonblockingEventReader() {
-    if (this.closed)
-      throw new CollabError("store_closed", "The collaboration store is closed");
-    if (!this.filesystemPath) {
-      if (this.db.inTransaction) {
-        throw new CollabError("event_read_busy", "Finish the active transaction before observing events");
-      }
-      return this.db;
-    }
-    if (!this.eventReader) {
-      const reader = new Database(this.filesystemPath, { readonly: true, strict: true });
-      try {
-        reader.exec("PRAGMA busy_timeout = 0; PRAGMA query_only = ON");
-        this.eventReader = reader;
-      } catch (error51) {
-        reader.close();
-        throw error51;
-      }
-    }
-    return this.eventReader;
-  }
-  defaultSessionCredentialPath(sessionId) {
-    if (!this.filesystemPath) {
-      throw new CollabError("session_file_path_required", "An explicit credential file path is required for an in-memory database");
-    }
-    const id = validateId(sessionId, "session_id");
-    return join6(dirname5(this.filesystemPath), "collab-sessions", `${id}.json`);
-  }
-  initialize() {
-    this.db.exec("PRAGMA foreign_keys = ON");
-    this.db.exec("PRAGMA busy_timeout = 5000");
-    const legacyPreparation = this.prepareLegacyMigration();
-    const migrate = this.db.transaction(() => {
-      const applicationId = pragmaNumber(this.db, "application_id");
-      const userVersion = pragmaNumber(this.db, "user_version");
-      if (applicationId !== 0 && applicationId !== APPLICATION_ID) {
-        throw new CollabError("database_application_mismatch", "The SQLite file belongs to another application", { expected_application_id: APPLICATION_ID, actual_application_id: applicationId });
-      }
-      if (userVersion > SCHEMA_VERSION) {
-        throw new CollabError("database_version_too_new", "The collaboration database was created by a newer package version", { supported_schema_version: SCHEMA_VERSION, actual_schema_version: userVersion });
-      }
-      const tables = this.tableNames();
-      if (tables.length === 0) {
-        this.createLegacySchema();
-        this.migrationFailpoint?.("legacy_schema_created");
-      } else {
-        this.validateLegacyOrV2Shape(userVersion);
-      }
-      const versionAfterLock = pragmaNumber(this.db, "user_version");
-      if (versionAfterLock < HARDENED_PREVIEW_SCHEMA_VERSION) {
-        this.migrateToV2(legacyPreparation);
-      } else if (versionAfterLock === HARDENED_PREVIEW_SCHEMA_VERSION) {
-        this.migrateHardenedPreviewToV3();
-      }
-      this.validateV2Shape("coordination_sessions", [
-        HARDENED_PREVIEW_SCHEMA_VERSION,
-        SCHEMA_VERSION
-      ]);
-      this.validateAllJournals();
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS repository_aliases (
-          worktree_id TEXT PRIMARY KEY REFERENCES worktrees(id),
-          portable_key TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS repository_aliases_key_idx ON repository_aliases(portable_key);
-        CREATE TABLE IF NOT EXISTS repository_discovery (
-          worktree_id TEXT PRIMARY KEY REFERENCES worktrees(id),
-          fingerprint TEXT NOT NULL,
-          outcome TEXT NOT NULL CHECK (outcome IN ('checked', 'unresolvable'))
-        );
-        CREATE TABLE IF NOT EXISTS session_lease_lapses (
-          lease_id TEXT PRIMARY KEY,
-          effective_at TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS proposal_terms (
-          report_id TEXT PRIMARY KEY REFERENCES reports(id),
-          workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-          rule TEXT NOT NULL,
-          criteria TEXT NOT NULL,
-          extent TEXT NOT NULL,
-          known_conflicts TEXT,
-          origin TEXT NOT NULL CHECK (origin IN ('ai', 'person_relayed')),
-          topic TEXT,
-          closes_at TEXT NOT NULL,
-          voices_json TEXT NOT NULL,
-          author_voice_id TEXT NOT NULL,
-          proposal_sha256 TEXT NOT NULL,
-          opened_event_id TEXT NOT NULL,
-          created_at TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS proposal_terms_workspace_idx
-          ON proposal_terms(workspace_id, created_at);
-        CREATE TABLE IF NOT EXISTS proposal_person_acts (
-          id TEXT PRIMARY KEY,
-          workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-          proposal_report_id TEXT NOT NULL REFERENCES proposal_terms(report_id),
-          proposal_sha256 TEXT NOT NULL,
-          act TEXT NOT NULL CHECK (act IN ('agree', 'reject')),
-          party TEXT NOT NULL CHECK (party IN ('person')),
-          basis TEXT NOT NULL CHECK (basis IN ('relayed_by_session', 'controlling_terminal', 'user_verified_passkey')),
-          reason TEXT,
-          -- No foreign key: additive tables never reference the session table,
-          -- which the schema-2 preview upgrade renames.
-          relayed_by_session_id TEXT,
-          ai_snapshot_json TEXT NOT NULL,
-          proof_json TEXT,
-          created_at TEXT NOT NULL,
-          event_sequence INTEGER NOT NULL,
-          CHECK (act = 'reject' OR basis <> 'relayed_by_session')
-        );
-        CREATE INDEX IF NOT EXISTS proposal_person_acts_proposal_idx
-          ON proposal_person_acts(proposal_report_id, event_sequence);
-        CREATE TABLE IF NOT EXISTS person_passkeys (
-          credential_id TEXT PRIMARY KEY,
-          public_key_spki TEXT NOT NULL,
-          algorithm INTEGER NOT NULL CHECK (algorithm = -7),
-          rp_id TEXT NOT NULL,
-          origin TEXT NOT NULL,
-          label TEXT,
-          fingerprint TEXT NOT NULL,
-          sign_count INTEGER NOT NULL DEFAULT 0,
-          enrolled_at TEXT NOT NULL,
-          revoked_at TEXT
-        );
-        CREATE TABLE IF NOT EXISTS person_addressed_reports (
-          report_id TEXT PRIMARY KEY REFERENCES reports(id),
-          workspace_id TEXT NOT NULL REFERENCES workspaces(id)
-        );
-        CREATE TABLE IF NOT EXISTS session_parent_attestations (
-          session_id TEXT PRIMARY KEY,
-          parent_session_id TEXT NOT NULL,
-          basis TEXT NOT NULL CHECK (basis IN ('same_mcp_process')),
-          attested_at TEXT NOT NULL
-        );
-        -- Collab Notes view state (spec 8.1): what the notes surface last showed
-        -- each session. Never journaled and never cited, so it can be lost or
-        -- rebuilt without harm; no foreign keys, so older builds never see it.
-        CREATE TABLE IF NOT EXISTS note_marks (
-          workspace_id TEXT NOT NULL,
-          session_id TEXT NOT NULL,
-          shown_through_sequence INTEGER NOT NULL,
-          updated_at TEXT NOT NULL,
-          PRIMARY KEY (workspace_id, session_id)
-        );
-        CREATE TABLE IF NOT EXISTS note_shown (
-          workspace_id TEXT NOT NULL,
-          session_id TEXT NOT NULL,
-          item_id TEXT NOT NULL,
-          shown_at TEXT NOT NULL,
-          PRIMARY KEY (workspace_id, session_id, item_id)
-        );
-        -- Which ballots may still need a reveal, so housekeeping finds due
-        -- ones without scanning events. state is open or closed.
-        CREATE TABLE IF NOT EXISTS note_ballots (
-          workspace_id TEXT NOT NULL,
-          ballot_id TEXT NOT NULL,
-          closes_at TEXT NOT NULL,
-          state TEXT NOT NULL,
-          PRIMARY KEY (workspace_id, ballot_id)
-        );
-        CREATE INDEX IF NOT EXISTS note_ballots_state_idx ON note_ballots(workspace_id, state, closes_at);
-        -- consent/v2 set-asides: one row per proposal.challenge_set_aside
-        -- event, rebuilt from those events on every open, so losing it loses
-        -- nothing the journal records. No foreign keys; older builds ignore it.
-        CREATE TABLE IF NOT EXISTS proposal_set_asides (
-          id TEXT PRIMARY KEY,
-          workspace_id TEXT NOT NULL,
-          proposal_report_id TEXT NOT NULL,
-          challenge_report_id TEXT NOT NULL,
-          set_aside_json TEXT NOT NULL,
-          created_at TEXT NOT NULL,
-          event_sequence INTEGER NOT NULL,
-          UNIQUE (workspace_id, challenge_report_id)
-        );
-        CREATE INDEX IF NOT EXISTS proposal_set_asides_proposal_idx
-          ON proposal_set_asides(workspace_id, proposal_report_id, event_sequence);
-      `);
-      this.db.exec(`
-        INSERT OR IGNORE INTO note_ballots (workspace_id, ballot_id, closes_at, state)
-        SELECT workspace_id, entity_id, json_extract(payload_json, '$.closes_at'), 'open' FROM events
-        WHERE type = 'ballot.opened' AND json_type(payload_json, '$.closes_at') = 'text';
-        UPDATE note_ballots SET state = 'closed' WHERE state <> 'closed' AND EXISTS (
-          SELECT 1 FROM events e WHERE e.workspace_id = note_ballots.workspace_id
-            AND e.type = 'ballot.closed' AND e.entity_id = note_ballots.ballot_id
-        );
-        INSERT OR IGNORE INTO proposal_set_asides (
-          id, workspace_id, proposal_report_id, challenge_report_id, set_aside_json, created_at, event_sequence
-        )
-        SELECT json_extract(payload_json, '$.set_aside.id'), workspace_id, entity_id,
-          json_extract(payload_json, '$.set_aside.challenge_report_id'), json_extract(payload_json, '$.set_aside'),
-          occurred_at, sequence
-        FROM events
-        WHERE type = 'proposal.challenge_set_aside'
-          AND json_type(payload_json, '$.set_aside.id') = 'text'
-          AND json_type(payload_json, '$.set_aside.challenge_report_id') = 'text'
-        ORDER BY workspace_id, sequence;
-      `);
-      if (this.tableNames().includes("proposal_rejections") && this.db.query(`SELECT 1 FROM proposal_rejections LIMIT 1`).get()) {
-        throw new CollabError("preview_journal_unsupported", "This journal holds rejections from the unreleased consent preview; use a fresh journal");
-      }
-      this.db.exec(`PRAGMA application_id = ${APPLICATION_ID}`);
-      this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
-    });
-    retrySqliteBusy(() => migrate.immediate());
-    if (this.db.filename !== ":memory:") {
-      retrySqliteBusy(() => this.db.exec("PRAGMA journal_mode = WAL"));
-    }
-    this.tightenFileModes();
-  }
-  preflightDatabase() {
-    const applicationId = pragmaNumber(this.db, "application_id");
-    const userVersion = pragmaNumber(this.db, "user_version");
-    if (applicationId !== 0 && applicationId !== APPLICATION_ID) {
-      throw new CollabError("database_application_mismatch", "The SQLite file belongs to another application", { expected_application_id: APPLICATION_ID, actual_application_id: applicationId });
-    }
-    if (userVersion > SCHEMA_VERSION) {
-      throw new CollabError("database_version_too_new", "The collaboration database was created by a newer package version", { supported_schema_version: SCHEMA_VERSION, actual_schema_version: userVersion });
-    }
-    if (this.tableNames().length > 0) {
-      this.validateLegacyOrV2Shape(userVersion);
-      if (userVersion >= HARDENED_PREVIEW_SCHEMA_VERSION) {
-        this.db.transaction(() => this.validateAllJournals()).deferred();
-      }
-    }
-  }
-  prepareLegacyMigration() {
-    if (this.tableNames().length === 0 || pragmaNumber(this.db, "user_version") >= HARDENED_PREVIEW_SCHEMA_VERSION)
-      return [];
-    const workspaces = this.db.query(`
-      SELECT id, root_path FROM workspaces ORDER BY id
-    `).all();
-    const prepared = workspaces.map((workspace) => ({
-      ...workspace,
-      identity: safeRepositoryIdentity(workspace.root_path)
-    }));
-    assertDistinctLegacyWorktreeIdentities(prepared);
-    return prepared;
-  }
-  createLegacySchema() {
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS workspaces (
-        id TEXT PRIMARY KEY,
-        epoch_id TEXT NOT NULL,
-        root_path TEXT NOT NULL UNIQUE,
-        name TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        event_head_sequence INTEGER NOT NULL DEFAULT 0,
-        event_head_hash TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS tasks (
-        id TEXT NOT NULL,
-        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-        title TEXT NOT NULL,
-        description TEXT,
-        status TEXT NOT NULL CHECK(status IN ('open', 'claimed', 'blocked', 'completed')),
-        dependencies_json TEXT NOT NULL,
-        path_scopes_json TEXT NOT NULL,
-        assignee TEXT,
-        lease_id TEXT,
-        lease_expires_at TEXT,
-        blocker TEXT,
-        latest_progress TEXT,
-        version INTEGER NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        completed_at TEXT,
-        PRIMARY KEY (workspace_id, id)
-      );
-      CREATE INDEX IF NOT EXISTS tasks_workspace_status_idx
-        ON tasks(workspace_id, status, lease_expires_at);
-      CREATE TABLE IF NOT EXISTS artifacts (
-        id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL,
-        task_id TEXT NOT NULL,
-        kind TEXT NOT NULL CHECK(kind IN ('file', 'commit', 'test', 'data', 'url', 'other')),
-        uri TEXT NOT NULL,
-        sha256 TEXT,
-        media_type TEXT,
-        label TEXT,
-        attached_by TEXT NOT NULL,
-        attached_at TEXT NOT NULL,
-        FOREIGN KEY (workspace_id, task_id) REFERENCES tasks(workspace_id, id)
-      );
-      CREATE INDEX IF NOT EXISTS artifacts_task_idx ON artifacts(workspace_id, task_id, attached_at);
-      CREATE TABLE IF NOT EXISTS decisions (
-        id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-        topic TEXT NOT NULL,
-        decision TEXT NOT NULL,
-        rationale TEXT,
-        recorded_by TEXT NOT NULL,
-        recorded_at TEXT NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS decisions_workspace_idx ON decisions(workspace_id, recorded_at);
-      CREATE TABLE IF NOT EXISTS handoffs (
-        id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL,
-        task_id TEXT NOT NULL,
-        from_actor TEXT NOT NULL,
-        to_actor TEXT NOT NULL,
-        summary TEXT NOT NULL,
-        status TEXT NOT NULL CHECK(status IN ('pending', 'accepted', 'declined', 'expired')),
-        offered_at TEXT NOT NULL,
-        expires_at TEXT NOT NULL,
-        resolved_at TEXT,
-        FOREIGN KEY (workspace_id, task_id) REFERENCES tasks(workspace_id, id)
-      );
-      CREATE INDEX IF NOT EXISTS handoffs_target_idx
-        ON handoffs(workspace_id, to_actor, status, expires_at);
-      CREATE TABLE IF NOT EXISTS events (
-        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-        epoch_id TEXT NOT NULL,
-        sequence INTEGER NOT NULL,
-        id TEXT NOT NULL UNIQUE,
-        protocol TEXT NOT NULL,
-        type TEXT NOT NULL,
-        entity_id TEXT NOT NULL,
-        actor TEXT NOT NULL,
-        occurred_at TEXT NOT NULL,
-        payload_json TEXT NOT NULL,
-        prev_hash TEXT NOT NULL,
-        hash TEXT NOT NULL,
-        PRIMARY KEY (workspace_id, sequence)
-      );
-      CREATE TABLE IF NOT EXISTS mutations (
-        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-        actor TEXT NOT NULL,
-        idempotency_key TEXT NOT NULL,
-        operation TEXT NOT NULL,
-        request_hash TEXT NOT NULL,
-        response_json TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        PRIMARY KEY (workspace_id, actor, idempotency_key)
-      );
-    `);
-  }
-  migrateToV2(preparedWorkspaces) {
-    if (this.hasColumn("workspaces", "repository_key")) {
-      throw new CollabError("database_partial_migration", "The collaboration database has v0.2 columns without a committed schema version");
-    }
-    const journalHeads = this.db.query(`
-      SELECT id, epoch_id, event_head_sequence, event_head_hash
-      FROM workspaces ORDER BY id
-    `).all();
-    const currentWorkspaces = this.db.query(`
-      SELECT id, root_path FROM workspaces ORDER BY id
-    `).all();
-    if (canonicalJson(currentWorkspaces) !== canonicalJson(preparedWorkspaces.map(({ id, root_path }) => ({ id, root_path })))) {
-      throw new CollabError("migration_source_changed", "Legacy workspace roots changed while migration identities were prepared; retry startup");
-    }
-    const identities = new Map(preparedWorkspaces.map((workspace) => [workspace.id, workspace.identity]));
-    this.db.exec(`
-      ALTER TABLE workspaces
-        ADD COLUMN repository_key TEXT NOT NULL DEFAULT '';
-
-      ALTER TABLE tasks
-        ADD COLUMN coordination_mode TEXT NOT NULL DEFAULT 'legacy_v1'
-        CHECK(coordination_mode IN ('legacy_v1', 'session_v2'));
-      ALTER TABLE tasks
-        ADD COLUMN work_mode TEXT NOT NULL DEFAULT 'coordination'
-        CHECK(work_mode IN ('coordination', 'read_only', 'edit'));
-      ALTER TABLE tasks
-        ADD COLUMN completion_policy TEXT NOT NULL DEFAULT 'reported'
-        CHECK(completion_policy IN ('reported', 'accepted'));
-      ALTER TABLE tasks
-        ADD COLUMN review_status TEXT NOT NULL DEFAULT 'legacy_unreviewed'
-        CHECK(review_status IN ('legacy_unreviewed', 'not_required', 'pending', 'accepted', 'changes_requested'));
-      ALTER TABLE tasks ADD COLUMN review_generation INTEGER NOT NULL DEFAULT 0;
-      ALTER TABLE tasks ADD COLUMN expected_base_sha TEXT;
-      ALTER TABLE tasks ADD COLUMN base_checkpoint_json TEXT;
-      ALTER TABLE tasks ADD COLUMN result_checkpoint_json TEXT;
-      ALTER TABLE tasks ADD COLUMN completion_report_id TEXT;
-      ALTER TABLE tasks ADD COLUMN assignee_session_id TEXT;
-      ALTER TABLE tasks ADD COLUMN claim_worktree_id TEXT;
-      ALTER TABLE tasks ADD COLUMN reported_by TEXT;
-      ALTER TABLE tasks ADD COLUMN reported_by_session_id TEXT;
-      ALTER TABLE tasks ADD COLUMN reported_at TEXT;
-      ALTER TABLE tasks ADD COLUMN accepted_by TEXT;
-      ALTER TABLE tasks ADD COLUMN accepted_by_session_id TEXT;
-      ALTER TABLE tasks ADD COLUMN accepted_at TEXT;
-
-      ALTER TABLE artifacts ADD COLUMN attached_by_session_id TEXT;
-      ALTER TABLE handoffs ADD COLUMN from_session_id TEXT;
-      ALTER TABLE handoffs ADD COLUMN to_session_id TEXT;
-      ALTER TABLE events ADD COLUMN session_id TEXT;
-
-      CREATE TABLE repositories (
-        key TEXT PRIMARY KEY,
-        created_at TEXT NOT NULL
-      );
-      CREATE TABLE worktrees (
-        id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-        repository_key TEXT NOT NULL REFERENCES repositories(key),
-        root_path TEXT NOT NULL UNIQUE,
-        git_common_dir_hash TEXT,
-        fingerprint TEXT NOT NULL,
-        branch TEXT,
-        head_sha TEXT,
-        dirty INTEGER,
-        registered_at TEXT NOT NULL,
-        last_seen_at TEXT NOT NULL
-      );
-      CREATE INDEX worktrees_repository_idx
-        ON worktrees(repository_key, workspace_id);
-
-      CREATE TABLE IF NOT EXISTS sessions (
-        id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-        epoch_id TEXT NOT NULL,
-        client_instance_id TEXT NOT NULL,
-        actor_label TEXT NOT NULL,
-        actor_key TEXT NOT NULL UNIQUE,
-        runtime_kind TEXT NOT NULL,
-        provider_label TEXT,
-        model_label TEXT,
-        declared_capabilities_json TEXT NOT NULL,
-        version INTEGER NOT NULL,
-        joined_at TEXT NOT NULL,
-        last_seen_at TEXT NOT NULL,
-        presence_expires_at TEXT NOT NULL,
-        left_at TEXT,
-        UNIQUE (workspace_id, client_instance_id)
-      );
-      CREATE INDEX IF NOT EXISTS sessions_workspace_presence_idx
-        ON sessions(workspace_id, left_at, presence_expires_at);
-
-      CREATE TABLE coordination_sessions (
-        id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-        worktree_id TEXT NOT NULL REFERENCES worktrees(id),
-        actor TEXT NOT NULL,
-        role TEXT,
-        parent_session_id TEXT REFERENCES coordination_sessions(id),
-        status TEXT NOT NULL CHECK(status IN ('active', 'ended')),
-        generation INTEGER NOT NULL,
-        token_hash TEXT NOT NULL,
-        joined_at TEXT NOT NULL,
-        last_seen_at TEXT NOT NULL,
-        ended_at TEXT,
-        cursor_epoch_id TEXT NOT NULL,
-        cursor_sequence INTEGER NOT NULL,
-        cursor_hash TEXT NOT NULL,
-        cursor_version INTEGER NOT NULL DEFAULT 0,
-        reset_generation INTEGER NOT NULL DEFAULT 0,
-        cursor_recovery_required INTEGER NOT NULL DEFAULT 0
-          CHECK(cursor_recovery_required IN (0, 1))
-      );
-      CREATE INDEX coordination_sessions_workspace_status_idx
-        ON coordination_sessions(workspace_id, status, last_seen_at);
-
-      CREATE TABLE reports (
-        id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-        task_id TEXT,
-        from_session_id TEXT REFERENCES coordination_sessions(id),
-        from_actor TEXT NOT NULL,
-        to_session_id TEXT REFERENCES coordination_sessions(id),
-        kind TEXT NOT NULL CHECK(kind IN ('observation', 'inference', 'proposal', 'decision')),
-        body TEXT NOT NULL,
-        evidence_refs_json TEXT NOT NULL,
-        confidence TEXT NOT NULL CHECK(confidence IN ('high', 'medium', 'low', 'unknown')),
-        confidence_basis TEXT,
-        limits TEXT,
-        relation TEXT NOT NULL CHECK(relation IN ('informs', 'supports', 'challenges', 'corrects', 'withdraws', 'supersedes', 'resolves')),
-        target_report_id TEXT REFERENCES reports(id),
-        authority_scope TEXT,
-        authority_basis TEXT,
-        created_at TEXT NOT NULL,
-        event_sequence INTEGER NOT NULL,
-        FOREIGN KEY (workspace_id, task_id) REFERENCES tasks(workspace_id, id)
-      );
-      CREATE INDEX reports_workspace_event_idx
-        ON reports(workspace_id, event_sequence);
-      CREATE INDEX reports_target_idx ON reports(target_report_id);
-
-      CREATE TABLE task_reviews (
-        id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL,
-        task_id TEXT NOT NULL,
-        review_generation INTEGER NOT NULL,
-        outcome TEXT NOT NULL CHECK(outcome IN ('accepted', 'changes_requested')),
-        summary TEXT NOT NULL,
-        reviewer_actor TEXT NOT NULL,
-        reviewer_session_id TEXT NOT NULL REFERENCES coordination_sessions(id),
-        created_at TEXT NOT NULL,
-        event_sequence INTEGER NOT NULL,
-        UNIQUE(workspace_id, task_id, review_generation),
-        FOREIGN KEY (workspace_id, task_id) REFERENCES tasks(workspace_id, id)
-      );
-
-      CREATE TABLE task_recoveries (
-        id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL,
-        task_id TEXT NOT NULL,
-        prior_lease_id TEXT NOT NULL,
-        prior_session_id TEXT,
-        recovered_by_session_id TEXT NOT NULL REFERENCES coordination_sessions(id),
-        action TEXT NOT NULL CHECK(action IN ('takeover', 'release', 'block')),
-        note TEXT NOT NULL,
-        prior_checkpoint_json TEXT,
-        new_lease_id TEXT,
-        recovered_at TEXT NOT NULL,
-        event_sequence INTEGER NOT NULL,
-        UNIQUE(workspace_id, task_id, prior_lease_id),
-        FOREIGN KEY (workspace_id, task_id) REFERENCES tasks(workspace_id, id)
-      );
-
-      CREATE TABLE session_cursor_resets (
-        id TEXT PRIMARY KEY,
-        session_id TEXT NOT NULL REFERENCES coordination_sessions(id),
-        from_epoch_id TEXT NOT NULL,
-        from_sequence INTEGER NOT NULL,
-        from_hash TEXT NOT NULL,
-        to_epoch_id TEXT NOT NULL,
-        to_sequence INTEGER NOT NULL,
-        to_hash TEXT NOT NULL,
-        reason TEXT NOT NULL,
-        reset_generation INTEGER NOT NULL,
-        created_at TEXT NOT NULL
-      );
-
-      CREATE TABLE v2_write_guard (
-        nonce TEXT PRIMARY KEY,
-        enabled INTEGER NOT NULL CHECK(enabled = 1)
-      );
-
-      CREATE TABLE schema_migrations (
-        version INTEGER PRIMARY KEY,
-        protocol TEXT NOT NULL,
-        applied_at TEXT NOT NULL
-      );
-    `);
-    this.migrationFailpoint?.("v2_tables_created");
-    const now = this.timestamp();
-    const workspaces = this.db.query(`
-      SELECT id, root_path FROM workspaces ORDER BY created_at, id
-    `).all();
-    for (const workspace of workspaces) {
-      const identity = identities.get(workspace.id);
-      if (!identity) {
-        throw new CollabError("migration_identity_missing", "A prepared legacy repository identity is missing", { workspace_id: workspace.id });
-      }
-      this.db.query(`INSERT OR IGNORE INTO repositories (key, created_at) VALUES (?, ?)`).run(identity.repository_key, now);
-      this.db.query(`UPDATE workspaces SET repository_key = ? WHERE id = ?`).run(identity.repository_key, workspace.id);
-      this.db.query(`
-        INSERT INTO worktrees (
-          id, workspace_id, repository_key, root_path, git_common_dir_hash, fingerprint,
-          branch, head_sha, dirty, registered_at, last_seen_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(identity.checkpoint.worktree_id, workspace.id, identity.repository_key, identity.root_path, identity.git_common_dir_hash, identity.worktree_fingerprint, identity.checkpoint.branch, identity.checkpoint.head_sha, booleanToSql(identity.checkpoint.dirty), now, now);
-    }
-    this.migrationFailpoint?.("v1_rows_backfilled");
-    this.db.exec(`
-      CREATE INDEX workspaces_repository_idx ON workspaces(repository_key);
-
-      CREATE TRIGGER tasks_v2_insert_guard
-      BEFORE INSERT ON tasks
-      WHEN NEW.coordination_mode = 'session_v2'
-        AND NOT EXISTS (SELECT 1 FROM v2_write_guard WHERE enabled = 1)
-      BEGIN
-        SELECT RAISE(ABORT, 'agenttool_collab_v2_write_requires_v2_client');
-      END;
-
-      CREATE TRIGGER tasks_v2_update_guard
-      BEFORE UPDATE ON tasks
-      WHEN (OLD.coordination_mode = 'session_v2' OR NEW.coordination_mode = 'session_v2')
-        AND NOT EXISTS (SELECT 1 FROM v2_write_guard WHERE enabled = 1)
-      BEGIN
-        SELECT RAISE(ABORT, 'agenttool_collab_v2_write_requires_v2_client');
-      END;
-
-      CREATE TRIGGER tasks_v2_delete_guard
-      BEFORE DELETE ON tasks
-      WHEN OLD.coordination_mode = 'session_v2'
-        AND NOT EXISTS (SELECT 1 FROM v2_write_guard WHERE enabled = 1)
-      BEGIN
-        SELECT RAISE(ABORT, 'agenttool_collab_v2_write_requires_v2_client');
-      END;
-
-      CREATE TRIGGER artifacts_v2_insert_guard
-      BEFORE INSERT ON artifacts
-      WHEN EXISTS (
-        SELECT 1 FROM tasks
-        WHERE workspace_id = NEW.workspace_id AND id = NEW.task_id
-          AND coordination_mode = 'session_v2'
-      )
-        AND NOT EXISTS (SELECT 1 FROM v2_write_guard WHERE enabled = 1)
-      BEGIN
-        SELECT RAISE(ABORT, 'agenttool_collab_v2_write_requires_v2_client');
-      END;
-
-      CREATE TRIGGER handoffs_v2_insert_guard
-      BEFORE INSERT ON handoffs
-      WHEN EXISTS (
-        SELECT 1 FROM tasks
-        WHERE workspace_id = NEW.workspace_id AND id = NEW.task_id
-          AND coordination_mode = 'session_v2'
-      )
-        AND NOT EXISTS (SELECT 1 FROM v2_write_guard WHERE enabled = 1)
-      BEGIN
-        SELECT RAISE(ABORT, 'agenttool_collab_v2_write_requires_v2_client');
-      END;
-    `);
-    this.migrationFailpoint?.("v2_guards_created");
-    const headsAfter = this.db.query(`
-      SELECT id, epoch_id, event_head_sequence, event_head_hash
-      FROM workspaces ORDER BY id
-    `).all();
-    if (canonicalJson(headsAfter) !== canonicalJson(journalHeads)) {
-      throw new CollabError("migration_journal_changed", "Migration attempted to change a pre-existing journal head");
-    }
-    const foreignKeyFailures = this.db.query(`PRAGMA foreign_key_check`).all();
-    if (foreignKeyFailures.length > 0) {
-      throw new CollabError("migration_foreign_key_failure", "Migration would leave invalid foreign-key references", { failures: foreignKeyFailures.length });
-    }
-    const integrity = this.db.query(`PRAGMA integrity_check`).get();
-    if (integrity.integrity_check !== "ok") {
-      throw new CollabError("migration_integrity_failure", "SQLite integrity verification failed during migration");
-    }
-    const insertMigration = this.db.query(`
-      INSERT INTO schema_migrations (version, protocol, applied_at)
-      VALUES (?, ?, ?)
-    `);
-    insertMigration.run(HARDENED_PREVIEW_SCHEMA_VERSION, COLLAB_COORDINATION_PROTOCOL, now);
-    insertMigration.run(SCHEMA_VERSION, COLLAB_COORDINATION_PROTOCOL, now);
-    this.migrationFailpoint?.("v2_verified");
-  }
-  migrateHardenedPreviewToV3() {
-    this.validateV2Shape("sessions", [HARDENED_PREVIEW_SCHEMA_VERSION]);
-    const journalHeads = this.db.query(`
-      SELECT id, epoch_id, event_head_sequence, event_head_hash
-      FROM workspaces ORDER BY id
-    `).all();
-    const sessionRows = this.db.query(`
-      SELECT * FROM sessions ORDER BY id
-    `).all();
-    this.db.exec(`
-      ALTER TABLE sessions RENAME TO coordination_sessions;
-      DROP INDEX sessions_workspace_status_idx;
-      CREATE INDEX coordination_sessions_workspace_status_idx
-        ON coordination_sessions(workspace_id, status, last_seen_at);
-
-      CREATE TABLE sessions (
-        id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-        epoch_id TEXT NOT NULL,
-        client_instance_id TEXT NOT NULL,
-        actor_label TEXT NOT NULL,
-        actor_key TEXT NOT NULL UNIQUE,
-        runtime_kind TEXT NOT NULL,
-        provider_label TEXT,
-        model_label TEXT,
-        declared_capabilities_json TEXT NOT NULL,
-        version INTEGER NOT NULL,
-        joined_at TEXT NOT NULL,
-        last_seen_at TEXT NOT NULL,
-        presence_expires_at TEXT NOT NULL,
-        left_at TEXT,
-        UNIQUE (workspace_id, client_instance_id)
-      );
-      CREATE INDEX sessions_workspace_presence_idx
-        ON sessions(workspace_id, left_at, presence_expires_at);
-    `);
-    this.migrationFailpoint?.("v3_session_planes_created");
-    const migratedRows = this.db.query(`
-      SELECT * FROM coordination_sessions ORDER BY id
-    `).all();
-    if (canonicalJson(migratedRows) !== canonicalJson(sessionRows)) {
-      throw new CollabError("migration_session_rows_changed", "Credential-bound preview session rows changed during the v0.3 table rename");
-    }
-    const headsAfter = this.db.query(`
-      SELECT id, epoch_id, event_head_sequence, event_head_hash
-      FROM workspaces ORDER BY id
-    `).all();
-    if (canonicalJson(headsAfter) !== canonicalJson(journalHeads)) {
-      throw new CollabError("migration_journal_changed", "Migration attempted to change a pre-existing journal head");
-    }
-    this.db.query(`
-      INSERT INTO schema_migrations (version, protocol, applied_at)
-      VALUES (?, ?, ?)
-    `).run(SCHEMA_VERSION, COLLAB_COORDINATION_PROTOCOL, this.timestamp());
-    if (this.db.query("PRAGMA foreign_key_check").all().length > 0) {
-      throw new CollabError("migration_foreign_key_failure", "Migration would leave invalid foreign-key references");
-    }
-    const integrity = this.db.query("PRAGMA integrity_check").get();
-    if (integrity.integrity_check !== "ok") {
-      throw new CollabError("migration_integrity_failure", "SQLite integrity verification failed during migration");
-    }
-    this.migrationFailpoint?.("v3_verified");
-  }
-  tableNames() {
-    const rows = this.db.query(`
-      SELECT name FROM sqlite_master
-      WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
-      ORDER BY name
-    `).all();
-    return rows.map((row) => row.name);
-  }
-  hasColumn(table, column) {
-    return this.tableColumns(table).includes(column);
-  }
-  tableColumns(table) {
-    const rows = this.db.query(`PRAGMA table_info(${quoteIdentifier(table)})`).all();
-    return rows.map((row) => row.name);
-  }
-  hasExactColumns(table, columns) {
-    return canonicalJson(this.tableColumns(table)) === canonicalJson(columns);
-  }
-  validateLegacyOrV2Shape(userVersion) {
-    const required2 = {
-      workspaces: [
-        "id",
-        "epoch_id",
-        "root_path",
-        "name",
-        "created_at",
-        "event_head_sequence",
-        "event_head_hash"
-      ],
-      tasks: [
-        "id",
-        "workspace_id",
-        "title",
-        "description",
-        "status",
-        "dependencies_json",
-        "path_scopes_json",
-        "assignee",
-        "lease_id",
-        "lease_expires_at",
-        "blocker",
-        "latest_progress",
-        "version",
-        "created_at",
-        "updated_at",
-        "completed_at"
-      ],
-      artifacts: [
-        "id",
-        "workspace_id",
-        "task_id",
-        "kind",
-        "uri",
-        "sha256",
-        "media_type",
-        "label",
-        "attached_by",
-        "attached_at"
-      ],
-      decisions: [
-        "id",
-        "workspace_id",
-        "topic",
-        "decision",
-        "rationale",
-        "recorded_by",
-        "recorded_at"
-      ],
-      handoffs: [
-        "id",
-        "workspace_id",
-        "task_id",
-        "from_actor",
-        "to_actor",
-        "summary",
-        "status",
-        "offered_at",
-        "expires_at",
-        "resolved_at"
-      ],
-      events: [
-        "workspace_id",
-        "epoch_id",
-        "sequence",
-        "id",
-        "protocol",
-        "type",
-        "entity_id",
-        "actor",
-        "occurred_at",
-        "payload_json",
-        "prev_hash",
-        "hash"
-      ],
-      mutations: [
-        "workspace_id",
-        "actor",
-        "idempotency_key",
-        "operation",
-        "request_hash",
-        "response_json",
-        "created_at"
-      ]
-    };
-    this.requireColumns(required2, "The SQLite file is not a complete agenttool collaboration database");
-    const names = new Set(this.tableNames());
-    const hasV2Marker = names.has("coordination_sessions") || names.has("schema_migrations") || this.hasColumn("workspaces", "repository_key") || this.hasColumn("tasks", "coordination_mode") || this.hasColumn("events", "session_id");
-    if (userVersion < HARDENED_PREVIEW_SCHEMA_VERSION) {
-      if (hasV2Marker || pragmaNumber(this.db, "application_id") !== 0 || names.has("sessions") && !this.hasExactColumns("sessions", PRESENCE_SESSION_COLUMNS)) {
-        throw new CollabError("database_partial_migration", "The collaboration database has unrecognized hardened objects without a committed schema version");
-      }
-      return;
-    }
-    if (userVersion === HARDENED_PREVIEW_SCHEMA_VERSION) {
-      if (names.has("coordination_sessions")) {
-        throw new CollabError("database_partial_migration", "The hardened preview database has an unexpected coordination-session table name");
-      }
-      this.validateV2Shape("sessions", [HARDENED_PREVIEW_SCHEMA_VERSION]);
-      return;
-    }
-    if (userVersion === SCHEMA_VERSION) {
-      this.validateV2Shape("coordination_sessions", [
-        HARDENED_PREVIEW_SCHEMA_VERSION,
-        SCHEMA_VERSION
-      ]);
-    }
-  }
-  validateV2Shape(sessionTable, expectedMigrationVersions) {
-    const required2 = {
-      workspaces: ["repository_key"],
-      tasks: [
-        "coordination_mode",
-        "work_mode",
-        "completion_policy",
-        "review_status",
-        "review_generation",
-        "expected_base_sha",
-        "base_checkpoint_json",
-        "result_checkpoint_json",
-        "completion_report_id",
-        "assignee_session_id",
-        "claim_worktree_id",
-        "reported_by",
-        "reported_by_session_id",
-        "reported_at",
-        "accepted_by",
-        "accepted_by_session_id",
-        "accepted_at"
-      ],
-      artifacts: ["attached_by_session_id"],
-      handoffs: ["from_session_id", "to_session_id"],
-      events: ["session_id"],
-      repositories: ["key", "created_at"],
-      worktrees: [
-        "id",
-        "workspace_id",
-        "repository_key",
-        "root_path",
-        "git_common_dir_hash",
-        "fingerprint",
-        "branch",
-        "head_sha",
-        "dirty",
-        "registered_at",
-        "last_seen_at"
-      ],
-      [sessionTable]: [...COORDINATION_SESSION_COLUMNS],
-      reports: [
-        "id",
-        "workspace_id",
-        "task_id",
-        "from_session_id",
-        "from_actor",
-        "to_session_id",
-        "kind",
-        "body",
-        "evidence_refs_json",
-        "confidence",
-        "confidence_basis",
-        "limits",
-        "relation",
-        "target_report_id",
-        "authority_scope",
-        "authority_basis",
-        "created_at",
-        "event_sequence"
-      ],
-      task_reviews: [
-        "id",
-        "workspace_id",
-        "task_id",
-        "review_generation",
-        "outcome",
-        "summary",
-        "reviewer_actor",
-        "reviewer_session_id",
-        "created_at",
-        "event_sequence"
-      ],
-      task_recoveries: [
-        "id",
-        "workspace_id",
-        "task_id",
-        "prior_lease_id",
-        "prior_session_id",
-        "recovered_by_session_id",
-        "action",
-        "note",
-        "prior_checkpoint_json",
-        "new_lease_id",
-        "recovered_at",
-        "event_sequence"
-      ],
-      session_cursor_resets: [
-        "id",
-        "session_id",
-        "from_epoch_id",
-        "from_sequence",
-        "from_hash",
-        "to_epoch_id",
-        "to_sequence",
-        "to_hash",
-        "reason",
-        "reset_generation",
-        "created_at"
-      ],
-      v2_write_guard: ["nonce", "enabled"],
-      schema_migrations: ["version", "protocol", "applied_at"]
-    };
-    this.requireColumns(required2, "The hardened collaboration schema is incomplete");
-    if (!this.hasExactColumns(sessionTable, COORDINATION_SESSION_COLUMNS)) {
-      throw new CollabError("database_schema_mismatch", "The credential-bound coordination session table has an unexpected shape");
-    }
-    if (sessionTable === "coordination_sessions" && !this.hasExactColumns("sessions", PRESENCE_SESSION_COLUMNS)) {
-      throw new CollabError("database_schema_mismatch", "The self-declared presence session table has an unexpected shape");
-    }
-    const triggers = this.db.query(`
-      SELECT name, sql FROM sqlite_master
-      WHERE type = 'trigger' AND name IN (${V2_GUARD_TRIGGERS.map(() => "?").join(", ")})
-    `).all(...V2_GUARD_TRIGGERS);
-    const byName = new Map(triggers.map((trigger) => [trigger.name, trigger.sql ?? ""]));
-    for (const trigger of V2_GUARD_TRIGGERS) {
-      const sql = byName.get(trigger);
-      if (!sql || !sql.includes("v2_write_guard") || !sql.includes("agenttool_collab_v2_write_requires_v2_client")) {
-        throw new CollabError("database_schema_mismatch", "A required v0.2 write guard is missing or malformed", { trigger });
-      }
-    }
-    const migrationRows = this.db.query(`
-      SELECT version, protocol FROM schema_migrations ORDER BY version
-    `).all();
-    if (canonicalJson(migrationRows.map((row) => row.version)) !== canonicalJson(expectedMigrationVersions) || migrationRows.some((row) => row.protocol !== COLLAB_COORDINATION_PROTOCOL)) {
-      throw new CollabError("database_migration_receipt_invalid", "The collaboration schema migration ledger is missing or inconsistent");
-    }
-    const staleGuards = this.db.query(`SELECT COUNT(*) AS count FROM v2_write_guard`).get();
-    if (staleGuards.count !== 0) {
-      throw new CollabError("database_write_guard_invalid", "The v0.2 write guard contains unexpected persistent state");
-    }
-    if (this.db.query(`PRAGMA foreign_key_check`).all().length > 0) {
-      throw new CollabError("database_foreign_key_failure", "The collaboration database contains invalid foreign-key references");
-    }
-  }
-  requireColumns(required2, message) {
-    const names = new Set(this.tableNames());
-    for (const [table, columns] of Object.entries(required2)) {
-      if (!names.has(table)) {
-        throw new CollabError("database_schema_mismatch", message, {
-          missing_table: table
-        });
-      }
-      for (const column of columns) {
-        if (!this.hasColumn(table, column)) {
-          throw new CollabError("database_schema_mismatch", message, {
-            table,
-            missing_column: column
-          });
-        }
-      }
-    }
-  }
-  validateAllJournals() {
-    const workspaces = this.db.query(`SELECT id FROM workspaces ORDER BY id`).all();
-    for (const workspace of workspaces) {
-      if (!this.verifyJournalRows(workspace.id)) {
-        throw new CollabError("database_journal_invalid", "A workspace event journal failed hash-chain verification", { workspace_id: workspace.id });
-      }
-    }
-  }
-  tightenFileModes() {
-    if (!this.filesystemPath)
-      return;
-    for (const path of [this.filesystemPath, `${this.filesystemPath}-wal`, `${this.filesystemPath}-shm`]) {
-      if (!existsSync5(path))
-        continue;
-      const stat = lstatSync5(path);
-      if (!stat.isFile() || stat.isSymbolicLink() || typeof process.getuid === "function" && stat.uid !== process.getuid()) {
-        throw new CollabError("database_sidecar_unsafe", "A collaboration database or sidecar path is not a regular file owned by this user", { operation: "tighten_database_file_mode" });
-      }
-      chmodSync4(path, 384);
-    }
-  }
-  discoverRepositoryKey(budget, probe) {
-    const now = this.repositoryDiscovery.now();
-    const fullSlice = budget.deadline === undefined;
-    budget.deadline ??= now + this.repositoryDiscovery.budget_ms;
-    if (now >= budget.deadline)
-      return;
-    try {
-      return probe({ ...this.repositoryDiscovery, deadline: budget.deadline });
-    } catch (error51) {
-      if (error51 instanceof RepositoryProbeTimeout && !fullSlice)
-        return;
-      return null;
-    }
-  }
-  prepareRepositoryAliases(budget) {
-    const rows = this.db.query(`
-      SELECT w.* FROM worktrees w
-      LEFT JOIN repository_discovery d ON d.worktree_id = w.id AND d.fingerprint = w.fingerprint
-      WHERE d.worktree_id IS NULL AND w.repository_key LIKE 'local-git:%'
-      ORDER BY w.id
-    `).iterate();
-    const prepared = [];
-    for (const row of rows) {
-      const key = this.discoverRepositoryKey(budget, (options) => {
-        const identity = inspectRepository(row.root_path, undefined, true, options);
-        if (identity.repository_key === row.repository_key && identity.worktree_fingerprint === row.fingerprint) {
-          return identity.portable_repository_key ?? null;
-        }
-        return null;
-      });
-      if (key === undefined)
-        break;
-      prepared.push({ row, key });
-    }
-    return prepared;
-  }
-  recordRepositoryAlias(worktreeId2, key) {
-    if (key)
-      this.db.query(`INSERT OR IGNORE INTO repository_aliases (worktree_id, portable_key) VALUES (?, ?)`).run(worktreeId2, key);
-  }
-  recordRepositoryDiscovery(worktreeId2, fingerprint, key) {
-    if (key === undefined)
-      return;
-    this.recordRepositoryAlias(worktreeId2, key);
-    this.db.query(`INSERT INTO repository_discovery (worktree_id, fingerprint, outcome) VALUES (?, ?, ?)
-      ON CONFLICT(worktree_id) DO UPDATE SET fingerprint = excluded.fingerprint, outcome = excluded.outcome`).run(worktreeId2, fingerprint, key ? "checked" : "unresolvable");
-  }
-  repositoryPartitions(identity) {
-    return this.db.query(`
-      SELECT DISTINCT w.id FROM workspaces w
-      LEFT JOIN worktrees t ON t.workspace_id = w.id
-      WHERE w.repository_key = ? OR t.repository_key = ?
-      ORDER BY w.created_at, w.id
-    `).all(identity.repository_key, identity.repository_key);
-  }
-  portableRepositoryWorkspace(key) {
-    if (!key)
-      return;
-    const pending = this.db.query(`SELECT 1 FROM worktrees w LEFT JOIN repository_discovery d
-      ON d.worktree_id = w.id AND d.fingerprint = w.fingerprint
-      WHERE d.worktree_id IS NULL AND w.repository_key LIKE 'local-git:%' LIMIT 1`).get();
-    if (pending)
-      return;
-    const matches = this.db.query(`SELECT DISTINCT w.workspace_id AS id FROM worktrees w
-      JOIN repository_aliases a ON a.worktree_id = w.id WHERE a.portable_key = ? LIMIT 2`).all(key);
-    return matches.length === 1 ? matches[0] : undefined;
-  }
-  openWorkspace(input) {
-    const actor = validateActor(input.actor);
-    const identity = inspectRepository(input.root_path, input.repository_key, false, { portable: false });
-    const budget = {};
-    const cached2 = this.db.query(`SELECT a.portable_key FROM repository_discovery d
-      LEFT JOIN repository_aliases a ON a.worktree_id = d.worktree_id
-      WHERE d.worktree_id = ? AND d.fingerprint = ?`).get(identity.checkpoint.worktree_id, identity.worktree_fingerprint);
-    const registered = this.db.query(`SELECT 1 FROM worktrees WHERE root_path = ?`).get(identity.root_path);
-    const aliases = !registered && this.repositoryPartitions(identity).length === 0 && identity.repository_key.startsWith("local-git:") ? this.prepareRepositoryAliases(budget) : [];
-    identity.portable_repository_key = cached2 ? cached2.portable_key : identity.repository_key.startsWith("local-git:") ? this.discoverRepositoryKey(budget, (options) => portableRepositoryKey(identity.root_path, options)) : null;
-    const created = this.db.transaction(() => {
-      const now = this.timestamp();
-      for (const { row, key } of aliases) {
-        const current = this.requireWorktreeRow(row.id);
-        if (current.root_path !== row.root_path || current.fingerprint !== row.fingerprint || current.repository_key !== row.repository_key || current.workspace_id !== row.workspace_id) {
-          continue;
-        }
-        this.recordRepositoryDiscovery(row.id, row.fingerprint, key);
-      }
-      const existingWorktree = this.db.query(`
-        SELECT * FROM worktrees WHERE root_path = ?
-      `).get(identity.root_path);
-      if (existingWorktree) {
-        if (existingWorktree.repository_key !== identity.repository_key || existingWorktree.fingerprint !== identity.worktree_fingerprint) {
-          throw new CollabError("worktree_identity_changed", "This path now resolves to a different repository/worktree identity", {
-            root_path: identity.root_path,
-            registered_worktree_id: existingWorktree.id
-          });
-        }
-        this.recordRepositoryDiscovery(existingWorktree.id, identity.worktree_fingerprint, identity.portable_repository_key);
-        this.touchWorktree(existingWorktree, identity.checkpoint, now);
-        return this.requireWorkspace(existingWorktree.workspace_id);
-      }
-      const partitions = this.repositoryPartitions(identity);
-      if (partitions.length > 1) {
-        throw new CollabError("repository_partitioned", "Multiple preserved journals require explicit reconciliation", {
-          workspace_ids: partitions.map((partition) => partition.id)
-        });
-      }
-      const repositoryWorkspace = partitions[0] ?? this.portableRepositoryWorkspace(identity.portable_repository_key);
-      const id = repositoryWorkspace?.id ?? `ws_${sha2564(identity.repository_key).slice(0, 24)}`;
-      const existing = this.getWorkspace(id);
-      if (existing && !repositoryWorkspace) {
-        throw new CollabError("workspace_identity_collision", "Workspace identity collision");
-      }
-      if (existing) {
-        this.registerWorktree(existing.id, identity, now, actor, true);
-        this.recordRepositoryDiscovery(identity.checkpoint.worktree_id, identity.worktree_fingerprint, identity.portable_repository_key);
-        return this.requireWorkspace(existing.id);
-      }
-      const epochId = `epoch_${randomUUID4()}`;
-      const name = cleanText(input.name ?? identity.root_path.split("/").at(-1) ?? id, "name", 200);
-      this.db.query(`INSERT OR IGNORE INTO repositories (key, created_at) VALUES (?, ?)`).run(identity.repository_key, now);
-      this.db.query(`
-        INSERT INTO workspaces
-          (id, epoch_id, root_path, repository_key, name, created_at,
-            event_head_sequence, event_head_hash)
-        VALUES (?, ?, ?, ?, ?, ?, 0, ?)
-      `).run(id, epochId, identity.root_path, identity.repository_key, name, now, GENESIS_HASH);
-      this.registerWorktree(id, identity, now, actor, false);
-      this.recordRepositoryDiscovery(identity.checkpoint.worktree_id, identity.worktree_fingerprint, identity.portable_repository_key);
-      this.appendEvent(id, "workspace.opened", id, actor, {
-        root_path: identity.root_path,
-        repository_key: identity.repository_key,
-        worktree_id: identity.checkpoint.worktree_id,
-        name,
-        rights_profile: "xenia.rights/0.1"
-      });
-      return this.requireWorkspace(id);
-    }).immediate();
-    this.tightenFileModes();
-    return created;
-  }
-  getWorkspace(workspaceId, db = this.db) {
-    const row = db.query(`
-      SELECT id, epoch_id, root_path, repository_key, name, created_at,
-        event_head_sequence, event_head_hash
-      FROM workspaces WHERE id = ?
-    `).get(workspaceId);
-    return row ? { ...row } : null;
-  }
-  getWorktree(workspaceId, rootPath) {
-    const identity = inspectRepository(rootPath);
-    const row = this.db.query(`
-      SELECT * FROM worktrees WHERE workspace_id = ? AND root_path = ?
-    `).get(workspaceId, identity.root_path);
-    return row ? worktreeFromRow(row) : null;
-  }
-  joinSession(input) {
-    const normalized = {
-      workspace_id: validateId(input.workspace_id, "workspace_id"),
-      client_instance_id: validateId(input.client_instance_id, "client_instance_id"),
-      actor_label: validateActor(input.actor_label),
-      runtime_kind: validateRuntimeKind(input.runtime_kind),
-      provider_label: optionalText(input.provider_label, "provider_label", 100),
-      model_label: optionalText(input.model_label, "model_label", 200),
-      declared_capabilities: normalizeSessionCapabilities(input.declared_capabilities ?? []),
-      ttl_seconds: validatePresenceTtl(input.ttl_seconds)
-    };
-    const workspace = this.requireWorkspace(normalized.workspace_id);
-    const transaction = this.db.transaction(() => {
-      const existing = this.readPresenceSessionByClient(normalized.workspace_id, normalized.client_instance_id);
-      if (existing) {
-        requireMatchingPresenceSessionJoin(existing, normalized);
-        if (existing.left_at) {
-          throw new CollabError("session_instance_ended", "This presence session already left; use a new client_instance_id", { session_id: existing.id });
-        }
-        return presenceSessionFromRow(existing, this.timestamp());
-      }
-      const now = this.timestamp();
-      const id = `session_${randomUUID4()}`;
-      const actorKey = `session:${id}`;
-      this.db.query(`
-        INSERT INTO sessions (
-          id, workspace_id, epoch_id, client_instance_id, actor_label, actor_key,
-          runtime_kind, provider_label, model_label, declared_capabilities_json,
-          version, joined_at, last_seen_at, presence_expires_at, left_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, NULL)
-      `).run(id, workspace.id, workspace.epoch_id, normalized.client_instance_id, normalized.actor_label, actorKey, normalized.runtime_kind, normalized.provider_label, normalized.model_label, canonicalJson(normalized.declared_capabilities), now, now, addSeconds(now, normalized.ttl_seconds));
-      return presenceSessionFromRow(this.requirePresenceSessionRow(id), now);
-    });
-    const session = transaction.immediate();
-    this.tightenFileModes();
-    return session;
-  }
-  getSession(sessionId) {
-    return presenceSessionFromRow(this.requirePresenceSessionRow(validateId(sessionId, "session_id")), this.timestamp());
-  }
-  listSessions(workspaceId, presence, limit) {
-    const id = validateId(workspaceId, "workspace_id");
-    this.requireWorkspace(id);
-    if (presence !== undefined && presence !== "live" && presence !== "stale" && presence !== "left") {
-      throw new CollabError("invalid_presence", "presence must be live, stale, or left");
-    }
-    const observedAt = this.timestamp();
-    const boundedLimit = validateSessionListLimit(limit);
-    let rows;
-    if (presence === "live") {
-      rows = this.db.query(`
-        SELECT * FROM sessions
-        WHERE workspace_id = ? AND left_at IS NULL AND presence_expires_at > ?
-        ORDER BY joined_at DESC, id DESC LIMIT ?
-      `).all(id, observedAt, boundedLimit);
-    } else if (presence === "stale") {
-      rows = this.db.query(`
-        SELECT * FROM sessions
-        WHERE workspace_id = ? AND left_at IS NULL AND presence_expires_at <= ?
-        ORDER BY joined_at DESC, id DESC LIMIT ?
-      `).all(id, observedAt, boundedLimit);
-    } else if (presence === "left") {
-      rows = this.db.query(`
-        SELECT * FROM sessions
-        WHERE workspace_id = ? AND left_at IS NOT NULL
-        ORDER BY joined_at DESC, id DESC LIMIT ?
-      `).all(id, boundedLimit);
-    } else {
-      rows = this.db.query(`
-        SELECT * FROM sessions
-        WHERE workspace_id = ?
-        ORDER BY joined_at DESC, id DESC LIMIT ?
-      `).all(id, boundedLimit);
-    }
-    return rows.map((row) => presenceSessionFromRow(row, observedAt));
-  }
-  heartbeatSession(input) {
-    const normalized = {
-      session_id: validateId(input.session_id, "session_id"),
-      idempotency_key: validateIdempotencyKey(input.idempotency_key),
-      expected_version: validateExpectedVersion(input.expected_version),
-      ttl_seconds: validatePresenceTtl(input.ttl_seconds)
-    };
-    const initial = this.requirePresenceSessionRow(normalized.session_id);
-    return this.mutate(initial.workspace_id, initial.actor_key, normalized.idempotency_key, "session.heartbeat", normalized, () => {
-      const row = this.requirePresenceSessionRow(normalized.session_id);
-      requirePresenceSessionVersion(row, normalized.expected_version);
-      if (row.left_at) {
-        throw new CollabError("session_left", "An explicitly left presence session cannot heartbeat", { session_id: row.id });
-      }
-      const now = this.timestamp();
-      this.db.query(`
-          UPDATE sessions
-          SET version = ?, last_seen_at = ?, presence_expires_at = ?
-          WHERE id = ?
-        `).run(row.version + 1, now, addSeconds(now, normalized.ttl_seconds), row.id);
-      return presenceSessionFromRow(this.requirePresenceSessionRow(row.id), now);
-    });
-  }
-  leaveSession(input) {
-    const normalized = {
-      session_id: validateId(input.session_id, "session_id"),
-      idempotency_key: validateIdempotencyKey(input.idempotency_key),
-      expected_version: validateExpectedVersion(input.expected_version)
-    };
-    const initial = this.requirePresenceSessionRow(normalized.session_id);
-    return this.mutate(initial.workspace_id, initial.actor_key, normalized.idempotency_key, "session.leave", normalized, () => {
-      const row = this.requirePresenceSessionRow(normalized.session_id);
-      requirePresenceSessionVersion(row, normalized.expected_version);
-      const now = this.timestamp();
-      if (!row.left_at) {
-        this.db.query(`
-            UPDATE sessions SET version = ?, left_at = ? WHERE id = ?
-          `).run(row.version + 1, now, row.id);
-      }
-      return presenceSessionFromRow(this.requirePresenceSessionRow(row.id), now);
-    });
-  }
-  startSession(input) {
-    const id = `session_${randomUUID4()}`;
-    const actor = input.actor !== undefined ? validateActor(input.actor) : derivedActor(input.actor_prefix, id);
-    const role = optionalText(input.role, "role", 200);
-    const seatRef = input.seat_ref == null ? null : validateSeatRef(input.seat_ref);
-    const model = input.model === undefined ? null : validateModelLabel(input.model);
-    const identity = inspectRepository(input.root_path, input.repository_key, true, { portable: false });
-    const workspace = this.openWorkspace({
-      root_path: input.root_path,
-      actor,
-      repository_key: input.repository_key
-    });
-    const worktreeRow = this.db.query(`
-      SELECT * FROM worktrees WHERE workspace_id = ? AND root_path = ?
-    `).get(workspace.id, identity.root_path);
-    if (!worktreeRow) {
-      throw new CollabError("worktree_not_found", "The session worktree was not registered");
-    }
-    const parentSessionId = input.parent_session_id ? validateId(input.parent_session_id, "parent_session_id") : null;
-    const joined = this.db.transaction(() => {
-      const partitions = this.repositoryPartitions(identity);
-      if (partitions.length > 1) {
-        throw new CollabError("repository_partitioned", "Multiple preserved journals require explicit reconciliation before session start", {
-          workspace_ids: partitions.map((partition) => partition.id)
-        });
-      }
-      if (parentSessionId) {
-        const parent = this.requireCoordinationSessionRow(parentSessionId);
-        if (parent.workspace_id !== workspace.id) {
-          throw new CollabError("parent_session_mismatch", "A parent session must belong to the same workspace");
-        }
-      }
-      const now = this.timestamp();
-      const token = randomBytes(SESSION_TOKEN_BYTES).toString("base64url");
-      const generation = 1;
-      this.db.query(`
-        INSERT INTO coordination_sessions (
-          id, workspace_id, worktree_id, actor, role, parent_session_id, status,
-          generation, token_hash, joined_at, last_seen_at, ended_at,
-          cursor_epoch_id, cursor_sequence, cursor_hash, cursor_version, reset_generation
-        ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, NULL, ?, 0, ?, 0, 0)
-      `).run(id, workspace.id, worktreeRow.id, actor, role, parentSessionId, generation, hashSessionToken(token), now, now, workspace.epoch_id, GENESIS_HASH);
-      if (parentSessionId && input.parent_attested === true) {
-        this.db.query(`
-          INSERT INTO session_parent_attestations (session_id, parent_session_id, basis, attested_at)
-          VALUES (?, ?, 'same_mcp_process', ?)
-        `).run(id, parentSessionId, now);
-      }
-      this.appendEvent(workspace.id, "session.joined", id, actor, {
-        worktree_id: worktreeRow.id,
-        role,
-        parent_session_id: parentSessionId,
-        ...seatRef ? { seat_ref: seatRef } : {},
-        ...model ? { model } : {},
-        identity_boundary: "session_credentials_fence_cooperating_local_clients_but_do_not_authenticate_a_person_or_model"
-      }, id);
-      return this.sessionHandle(this.requireCoordinationSessionRow(id), token, this.requireWorkspace(workspace.id), worktreeRow);
-    }).immediate();
-    this.tightenFileModes();
-    return joined;
-  }
-  resumeSession(credential, options = {}) {
-    const sessionId = validateId(credential.session_id, "session_id");
-    let lastSeenBeforeResume = "";
-    const resumed = this.db.transaction(() => {
-      const row = this.authenticateResumeToken(sessionId, credential.session_token);
-      lastSeenBeforeResume = row.last_seen_at;
-      const now = this.timestamp();
-      this.recordSessionLeaseLapses(row, now);
-      const nextGeneration = row.generation + 1;
-      const persistedCursor = {
-        epoch_id: row.cursor_epoch_id,
-        sequence: row.cursor_sequence,
-        hash: row.cursor_hash
-      };
-      let recovery = row.cursor_recovery_required !== 0 ? {
-        required: true,
-        cause: "host_cursor_mismatch",
-        persisted_cursor: persistedCursor,
-        host_cursor: credential.last_cursor ?? null,
-        expected_cursor_version: row.cursor_version
-      } : undefined;
-      try {
-        this.validateEventAnchor(row.workspace_id, persistedCursor);
-      } catch (error51) {
-        if (error51 instanceof CollabError) {
-          recovery = {
-            required: true,
-            cause: "persisted_cursor_invalid",
-            persisted_cursor: persistedCursor,
-            host_cursor: credential.last_cursor ?? null,
-            expected_cursor_version: row.cursor_version
-          };
-        } else {
-          throw error51;
-        }
-      }
-      if (!recovery && credential.last_cursor) {
-        try {
-          const known = this.validateEventAnchor(row.workspace_id, credential.last_cursor);
-          if (known.epoch_id !== persistedCursor.epoch_id || known.sequence !== persistedCursor.sequence || known.hash !== persistedCursor.hash) {
-            recovery = {
-              required: true,
-              cause: "host_cursor_mismatch",
-              persisted_cursor: persistedCursor,
-              host_cursor: known,
-              expected_cursor_version: row.cursor_version
-            };
-          }
-        } catch (error51) {
-          if (error51 instanceof CollabError) {
-            recovery = {
-              required: true,
-              cause: "host_cursor_invalid",
-              persisted_cursor: persistedCursor,
-              host_cursor: credential.last_cursor,
-              expected_cursor_version: row.cursor_version
-            };
-          } else {
-            throw error51;
-          }
-        }
-      }
-      if (recovery && !options.allow_cursor_recovery) {
-        throw new CollabError("cursor_reset_required", "The host and persisted session cursors require an explicit audited reset", { ...recovery });
-      }
-      const changed = this.db.query(`
-        UPDATE coordination_sessions
-        SET generation = ?, last_seen_at = ?, cursor_recovery_required = ?
-        WHERE id = ? AND generation = ? AND status = 'active'
-      `).run(nextGeneration, now, recovery ? 1 : 0, sessionId, row.generation);
-      if (changed.changes !== 1) {
-        throw new CollabError("session_auth_failed", "Session credentials are invalid");
-      }
-      this.appendEvent(row.workspace_id, "session.resumed", row.id, row.actor, {
-        worktree_id: row.worktree_id,
-        generation: nextGeneration,
-        cursor_recovery_required: recovery?.required ?? false,
-        cursor_recovery_cause: recovery?.cause ?? null
-      }, row.id);
-      const next = this.requireCoordinationSessionRow(row.id);
-      const workspace = this.requireWorkspace(row.workspace_id);
-      const worktree = this.requireWorktreeRow(row.worktree_id);
-      const handle = this.sessionHandle(next, credential.session_token, workspace, worktree);
-      if (recovery) {
-        handle.cursor_recovery = recovery;
-        handle.credential.last_cursor = credential.last_cursor;
-      }
-      return handle;
-    }).immediate();
-    const carried = this.resumeAwaySince.get(sessionId);
-    if (carried === undefined || lastSeenBeforeResume < carried) {
-      this.resumeAwaySince.set(sessionId, lastSeenBeforeResume);
-    }
-    this.tightenFileModes();
-    return resumed;
-  }
-  endSession(input) {
-    return this.endSessionWithReleases(input).session;
-  }
-  endSessionWithReleases(input) {
-    const reason = optionalText(input.reason, "reason", 2000);
-    if (input.release_leases !== undefined && typeof input.release_leases !== "boolean") {
-      throw new CollabError("invalid_release_leases", "release_leases must be a boolean");
-    }
-    const releaseLeases = input.release_leases === true;
-    if (input.release_summary !== undefined && !releaseLeases) {
-      throw new CollabError("invalid_release_summary", "release_summary applies only together with release_leases: true");
-    }
-    const releaseSummary = optionalText(input.release_summary, "release_summary", 2000);
-    const ended = this.db.transaction(() => {
-      const row = this.authenticateSession(input, { allow_cursor_recovery: true });
-      const now = this.timestamp();
-      const releasedLeases = [];
-      if (releaseLeases) {
-        const held = this.db.query(`
-          SELECT * FROM tasks
-          WHERE workspace_id = ? AND assignee_session_id = ?
-            AND status = 'claimed' AND lease_id IS NOT NULL
-          ORDER BY id
-        `).all(row.workspace_id, row.id);
-        if (held.length > 0) {
-          const releaseNote = releaseSummary ?? reason;
-          const guardNonce = `guard_${randomUUID4()}`;
-          this.db.query(`INSERT INTO v2_write_guard (nonce, enabled) VALUES (?, 1)`).run(guardNonce);
-          try {
-            for (const task of held) {
-              const leaseId = task.lease_id;
-              const expired = this.isExpired(task, row, now);
-              if (expired) {
-                const lapsed = this.expireSessionLeaseForRecovery(task, row, now);
-                this.recordRecoveryWithoutTakeover(task, row, {
-                  prior: lapsed.prior,
-                  expiry_version: lapsed.expiryVersion,
-                  action: "release",
-                  recovery_note: releaseNote ?? SESSION_END_RECOVERY_NOTE,
-                  blocker: null,
-                  now
-                });
-                releasedLeases.push({ task_id: task.id, lease_id: leaseId, via: "recovery" });
-              } else {
-                this.clearSessionClaim(task, row, "task.released", {
-                  summary: releaseNote,
-                  released_by_session_end: true
-                });
-                releasedLeases.push({ task_id: task.id, lease_id: leaseId, via: "release" });
-              }
-            }
-          } finally {
-            this.db.query(`DELETE FROM v2_write_guard WHERE nonce = ?`).run(guardNonce);
-          }
-        }
-      }
-      const refusal = this.liveLeaseRefusal(row.workspace_id, row.id, now);
-      if (refusal)
-        throw refusal;
-      const incomingHandoffs = this.db.query(`
-        SELECT * FROM handoffs
-        WHERE workspace_id = ? AND to_session_id = ? AND status = 'pending'
-        ORDER BY offered_at, id
-      `).all(row.workspace_id, row.id);
-      for (const handoff of incomingHandoffs) {
-        this.db.query(`
-          UPDATE handoffs SET status = 'expired', resolved_at = ? WHERE id = ?
-        `).run(now, handoff.id);
-        this.appendEvent(row.workspace_id, "handoff.expired", handoff.id, row.actor, {
-          task_id: handoff.task_id,
-          reason: "target_session_ended"
-        }, row.id);
-      }
-      const changed = this.db.query(`
-        UPDATE coordination_sessions
-        SET status = 'ended', ended_at = ?, last_seen_at = ?, generation = generation + 1,
-          token_hash = ?
-        WHERE id = ? AND generation = ? AND status = 'active'
-      `).run(now, now, hashSessionToken(randomBytes(SESSION_TOKEN_BYTES).toString("base64url")), row.id, row.generation);
-      if (changed.changes !== 1) {
-        throw new CollabError("session_auth_failed", "Session credentials are invalid");
-      }
-      this.appendEvent(row.workspace_id, "session.ended", row.id, row.actor, { reason }, row.id);
-      return {
-        session: this.sessionProjection(this.requireCoordinationSessionRow(row.id)),
-        released_leases: releasedLeases
-      };
-    }).immediate();
-    this.resumeAwaySince.delete(input.session_id);
-    this.tightenFileModes();
-    return ended;
-  }
-  listCoordinationSessions(workspaceId, status) {
-    const workspace = this.requireWorkspace(workspaceId);
-    const rows = status ? this.db.query(`
-          SELECT * FROM coordination_sessions
-          WHERE workspace_id = ? AND status = ?
-          ORDER BY joined_at, id
-        `).all(workspace.id, status) : this.db.query(`
-          SELECT * FROM coordination_sessions
-          WHERE workspace_id = ?
-          ORDER BY joined_at, id
-        `).all(workspace.id);
-    const observedAt = this.timestamp();
-    return rows.map((row) => this.sessionProjection(row, observedAt));
-  }
-  getCoordinationSession(sessionId) {
-    const id = validateId(sessionId, "session_id");
-    const row = this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(id);
-    return row ? this.sessionProjection(row) : null;
-  }
-  sessionSeatRef(sessionId) {
-    const id = validateId(sessionId, "session_id");
-    const row = this.db.query(`
-      SELECT json_extract(payload_json, '$.seat_ref') AS seat_ref FROM events
-      WHERE type = 'session.joined' AND entity_id = ?
-    `).get(id);
-    return typeof row?.seat_ref === "string" ? row.seat_ref : null;
-  }
-  activeSessionIdsForSeatRefs(seatRefs) {
-    const refs = [...new Set(seatRefs.map(validateSeatRef))];
-    if (refs.length === 0)
-      return [];
-    const rows = this.db.query(`
-      SELECT s.id FROM coordination_sessions s
-      JOIN events e ON e.type = 'session.joined' AND e.entity_id = s.id
-      WHERE s.status = 'active'
-        AND json_extract(e.payload_json, '$.seat_ref') IN (${refs.map(() => "?").join(", ")})
-      ORDER BY s.joined_at, s.id
-    `).all(...refs);
-    return rows.map((row) => row.id);
-  }
-  addresseeHint(workspaceId, sessionId) {
-    const id = validateId(sessionId, "session_id");
-    const read = this.db.transaction(() => {
-      const row = this.requireCoordinationSessionRow(id);
-      if (row.workspace_id !== workspaceId) {
-        throw new CollabError("session_workspace_mismatch", "The addressed session belongs to another workspace", { session_id: id });
-      }
-      const session = this.sessionProjection(row);
-      return {
-        session_id: session.id,
-        liveness: session.liveness,
-        rest: session.rest,
-        delivery: knockDelivery(session.liveness, session.rest)
-      };
-    });
-    return read.deferred();
-  }
-  restSessionForSession(input) {
-    const mode = validateRestMode(input.mode);
-    if (mode === "ready") {
-      for (const field of ["until", "reason", "wake_on"]) {
-        if (input[field] !== undefined) {
-          throw new CollabError(`invalid_${field}`, `${field} applies only to mode "resting"`);
-        }
-      }
-    }
-    const until = input.until === undefined ? null : validateRestUntil(input.until);
-    const reason = optionalText(input.reason, "reason", MAX_REST_REASON_LENGTH);
-    const wakeOn = validateRestWakeOn(input.wake_on);
-    const request = mode === "resting" ? { mode, until, reason, wake_on: wakeOn } : { mode };
-    return this.mutateAsSession(input, input.idempotency_key, "session.rest.v2", request, (session) => {
-      if (mode === "resting") {
-        if (until !== null && Date.parse(until) <= Date.parse(this.timestamp())) {
-          throw new CollabError("invalid_until", "until must be a future instant");
-        }
-        this.appendEvent(session.workspace_id, "session.rested", session.id, session.actor, {
-          mode: "resting",
-          until,
-          reason,
-          wake_on: wakeOn
-        }, session.id);
-      } else {
-        const open = this.latestRestDeclaration(session.id);
-        this.appendEvent(session.workspace_id, "session.returned", session.id, session.actor, {
-          mode: "ready",
-          prior_rest_sequence: open?.type === "session.rested" ? open.sequence : null
-        }, session.id);
-      }
-      return this.sessionProjection(this.requireCoordinationSessionRow(session.id));
-    });
-  }
-  preflightSessionEnd(credential) {
-    const sessionId = validateId(credential.session_id, "session_id");
-    const row = this.authenticateResumeToken(sessionId, credential.session_token);
-    const refusal = this.liveLeaseRefusal(row.workspace_id, row.id, this.timestamp(), true);
-    if (refusal)
-      throw refusal;
-  }
-  acknowledgeSessionCursor(input) {
-    const acknowledged = this.db.transaction(() => {
-      const row = this.authenticateSession(input);
-      const anchor = this.validateEventAnchor(row.workspace_id, input.anchor);
-      this.recordSessionLeaseLapses(row, this.timestamp());
-      if (anchor.epoch_id !== row.cursor_epoch_id) {
-        throw new CollabError("cursor_epoch_mismatch", "The cursor belongs to another journal epoch");
-      }
-      if (anchor.sequence < row.cursor_sequence) {
-        throw new CollabError("cursor_regression", "A session cursor cannot move backwards", {
-          current_sequence: row.cursor_sequence
-        });
-      }
-      if (anchor.sequence === row.cursor_sequence) {
-        if (anchor.hash !== row.cursor_hash) {
-          throw new CollabError("cursor_fork_detected", "The cursor sequence now resolves to a different journal hash");
-        }
-        this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), row.id);
-        return this.sessionProjection(this.requireCoordinationSessionRow(row.id));
-      }
-      if (row.cursor_version !== input.expected_cursor_version) {
-        throw new CollabError("cursor_version_conflict", "The session cursor changed", {
-          expected_cursor_version: input.expected_cursor_version,
-          current_cursor_version: row.cursor_version
-        });
-      }
-      const now = this.timestamp();
-      const changed = this.db.query(`
-        UPDATE coordination_sessions
-        SET cursor_epoch_id = ?, cursor_sequence = ?, cursor_hash = ?,
-          cursor_version = cursor_version + 1, last_seen_at = ?
-        WHERE id = ? AND generation = ? AND cursor_version = ? AND status = 'active'
-      `).run(anchor.epoch_id, anchor.sequence, anchor.hash, now, row.id, row.generation, row.cursor_version);
-      if (changed.changes !== 1) {
-        throw new CollabError("cursor_version_conflict", "The session cursor changed");
-      }
-      return this.sessionProjection(this.requireCoordinationSessionRow(row.id));
-    }).immediate();
-    this.tightenFileModes();
-    return acknowledged;
-  }
-  resetSessionCursor(input) {
-    const reason = cleanText(input.reason, "reason", 2000);
-    this.mutateAsSession(input, input.idempotency_key, "cursor.reset.v2", {
-      expected_cursor_version: input.expected_cursor_version,
-      target: input.target,
-      reason
-    }, (row) => {
-      if (row.cursor_version !== input.expected_cursor_version) {
-        throw new CollabError("cursor_version_conflict", "The session cursor changed");
-      }
-      const target = this.validateEventAnchor(row.workspace_id, input.target);
-      const now = this.timestamp();
-      const resetGeneration = row.reset_generation + 1;
-      const id = `cursor_reset_${randomUUID4()}`;
-      this.db.query(`
-        INSERT INTO session_cursor_resets (
-          id, session_id, from_epoch_id, from_sequence, from_hash,
-          to_epoch_id, to_sequence, to_hash, reason, reset_generation, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, row.id, row.cursor_epoch_id, row.cursor_sequence, row.cursor_hash, target.epoch_id, target.sequence, target.hash, reason, resetGeneration, now);
-      const changed = this.db.query(`
-        UPDATE coordination_sessions
-        SET cursor_epoch_id = ?, cursor_sequence = ?, cursor_hash = ?,
-          cursor_version = cursor_version + 1, reset_generation = ?, last_seen_at = ?,
-          cursor_recovery_required = 0
-        WHERE id = ? AND generation = ? AND cursor_version = ? AND status = 'active'
-      `).run(target.epoch_id, target.sequence, target.hash, resetGeneration, now, row.id, row.generation, row.cursor_version);
-      if (changed.changes !== 1) {
-        throw new CollabError("cursor_version_conflict", "The session cursor changed");
-      }
-      this.appendEvent(row.workspace_id, "session.cursor_reset", id, row.actor, {
-        from: {
-          epoch_id: row.cursor_epoch_id,
-          sequence: row.cursor_sequence,
-          hash: row.cursor_hash
-        },
-        to: target,
-        reason,
-        reset_generation: resetGeneration
-      }, row.id);
-      return this.sessionProjection(this.requireCoordinationSessionRow(row.id));
-    }, { allow_cursor_recovery: true });
-    const current = this.authenticateSession(input, {
-      allow_cursor_recovery: true
-    });
-    if (current.cursor_recovery_required !== 0) {
-      throw new CollabError("cursor_reset_receipt_stale", "This reset receipt predates the current recovery fence; use a new idempotency key", {
-        persisted_cursor: {
-          epoch_id: current.cursor_epoch_id,
-          sequence: current.cursor_sequence,
-          hash: current.cursor_hash
-        },
-        expected_cursor_version: current.cursor_version
-      });
-    }
-    return this.sessionProjection(current);
-  }
-  workspaceStatus(workspaceId) {
-    const workspace = this.requireWorkspace(workspaceId);
-    const tasks = this.listTasks(workspaceId);
-    const counts = { open: 0, claimed: 0, blocked: 0, completed: 0 };
-    let expiredClaims = 0;
-    for (const task of tasks) {
-      if (task.effective_status === "lease_expired") {
-        counts.open += 1;
-        expiredClaims += 1;
-      } else if (task.effective_status === "recovery_required") {
-        counts.claimed += 1;
-        expiredClaims += 1;
-      } else {
-        counts[task.status] += 1;
-      }
-    }
-    const decisions = this.db.query(`
-      SELECT id, workspace_id, topic, decision, rationale, recorded_by, recorded_at
-      FROM decisions WHERE workspace_id = ? ORDER BY recorded_at DESC, id DESC LIMIT 10
-    `).all(workspaceId);
-    return {
-      workspace,
-      counts,
-      expired_claims: expiredClaims,
-      active_claims: tasks.filter((task) => task.effective_status === "claimed"),
-      blocked_tasks: tasks.filter((task) => task.status === "blocked"),
-      pending_reviews: tasks.filter((task) => task.review_status === "pending"),
-      active_sessions: this.listCoordinationSessions(workspaceId, "active"),
-      recent_decisions: decisions.map(decisionFromRow),
-      recent_reports: this.listReports(workspaceId, { limit: 20 })
-    };
-  }
-  createTask(input) {
-    const sessionOnly = input;
-    if (sessionOnly.work_mode !== undefined || sessionOnly.completion_policy !== undefined || sessionOnly.expected_base_sha !== undefined) {
-      throw new CollabError("session_required_for_v2_task_options", "work_mode, completion_policy, and expected_base_sha require createTaskForSession");
-    }
-    const normalized = {
-      ...normalizeMutation(input),
-      workspace_id: input.workspace_id,
-      id: input.id ? validateId(input.id, "task_id") : undefined,
-      title: cleanText(input.title, "title", 300),
-      description: optionalText(input.description, "description", MAX_TEXT),
-      dependencies: normalizeDependencies(input.dependencies ?? []),
-      path_scopes: normalizePathScopes(input.path_scopes ?? [])
-    };
-    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.create", normalized, () => {
-      this.requireWorkspace(input.workspace_id);
-      const id = normalized.id ?? `task_${randomUUID4()}`;
-      if (normalized.dependencies.includes(id)) {
-        throw new CollabError("invalid_dependency", "A task cannot depend on itself", { task_id: id });
-      }
-      for (const dependency of normalized.dependencies)
-        this.requireTaskRow(input.workspace_id, dependency);
-      if (this.readTaskRow(input.workspace_id, id)) {
-        throw new CollabError("task_exists", `Task '${id}' already exists`, { task_id: id });
-      }
-      const now = this.timestamp();
-      this.db.query(`
-        INSERT INTO tasks (
-          id, workspace_id, title, description, status, dependencies_json, path_scopes_json,
-          assignee, lease_id, lease_expires_at, blocker, latest_progress, version,
-          created_at, updated_at, completed_at
-        ) VALUES (?, ?, ?, ?, 'open', ?, ?, NULL, NULL, NULL, NULL, NULL, 1, ?, ?, NULL)
-      `).run(id, input.workspace_id, normalized.title, normalized.description, canonicalJson(normalized.dependencies), canonicalJson(normalized.path_scopes), now, now);
-      this.appendEvent(input.workspace_id, "task.created", id, normalized.actor, {
-        title: normalized.title,
-        description: normalized.description,
-        dependencies: normalized.dependencies,
-        path_scopes: normalized.path_scopes,
-        version: 1
-      });
-      return this.requireTask(input.workspace_id, id);
-    });
-  }
-  createTaskForSession(input) {
-    const normalized = {
-      idempotency_key: validateIdempotencyKey(input.idempotency_key),
-      id: input.id ? validateId(input.id, "task_id") : undefined,
-      title: cleanText(input.title, "title", 300),
-      description: optionalText(input.description, "description", MAX_TEXT),
-      dependencies: normalizeDependencies(input.dependencies ?? []),
-      path_scopes: normalizePathScopes(input.path_scopes ?? []),
-      work_mode: input.work_mode ?? "edit",
-      completion_policy: input.completion_policy,
-      expected_base_sha: input.expected_base_sha ? validateGitObjectId(input.expected_base_sha) : null
-    };
-    if (!["coordination", "read_only", "edit"].includes(normalized.work_mode)) {
-      throw new CollabError("invalid_work_mode", "Unsupported task work mode");
-    }
-    if (normalized.work_mode === "edit" && normalized.path_scopes.length === 0) {
-      throw new CollabError("edit_scope_required", "Edit tasks require at least one repository-relative path scope");
-    }
-    const completionPolicy = normalized.completion_policy ?? (normalized.work_mode === "edit" ? "accepted" : "reported");
-    if (!["reported", "accepted"].includes(completionPolicy)) {
-      throw new CollabError("invalid_completion_policy", "Unsupported completion policy");
-    }
-    const request = { ...normalized, completion_policy: completionPolicy };
-    return this.mutateAsSession(input, normalized.idempotency_key, "task.create.v2", request, (session) => {
-      const id = normalized.id ?? `task_${randomUUID4()}`;
-      if (normalized.dependencies.includes(id)) {
-        throw new CollabError("invalid_dependency", "A task cannot depend on itself", {
-          task_id: id
-        });
-      }
-      for (const dependency of normalized.dependencies) {
-        this.requireTaskRow(session.workspace_id, dependency);
-      }
-      if (this.readTaskRow(session.workspace_id, id)) {
-        throw new CollabError("task_exists", `Task '${id}' already exists`, { task_id: id });
-      }
-      const now = this.timestamp();
-      this.db.query(`
-        INSERT INTO tasks (
-          id, workspace_id, title, description, status, dependencies_json, path_scopes_json,
-          coordination_mode, work_mode, completion_policy, review_status, review_generation,
-          expected_base_sha, base_checkpoint_json, result_checkpoint_json, completion_report_id,
-          assignee, assignee_session_id, claim_worktree_id, lease_id, lease_expires_at,
-          blocker, latest_progress, reported_by, reported_by_session_id, reported_at,
-          accepted_by, accepted_by_session_id, accepted_at, version,
-          created_at, updated_at, completed_at
-        ) VALUES (
-          ?, ?, ?, ?, 'open', ?, ?,
-          'session_v2', ?, ?, 'not_required', 0,
-          ?, NULL, NULL, NULL,
-          NULL, NULL, NULL, NULL, NULL,
-          NULL, NULL, NULL, NULL, NULL,
-          NULL, NULL, NULL, 1,
-          ?, ?, NULL
-        )
-      `).run(id, session.workspace_id, normalized.title, normalized.description, canonicalJson(normalized.dependencies), canonicalJson(normalized.path_scopes), normalized.work_mode, completionPolicy, normalized.expected_base_sha, now, now);
-      this.appendEvent(session.workspace_id, "task.created", id, session.actor, {
-        title: normalized.title,
-        description: normalized.description,
-        dependencies: normalized.dependencies,
-        path_scopes: normalized.path_scopes,
-        work_mode: normalized.work_mode,
-        completion_policy: completionPolicy,
-        expected_base_sha: normalized.expected_base_sha,
-        version: 1
-      }, session.id);
-      return this.requireTask(session.workspace_id, id);
-    });
-  }
-  claimTaskForSession(input) {
-    const taskId = validateId(input.task_id, "task_id");
-    const expectedVersion = validateExpectedVersion(input.expected_version);
-    const ttl = validateTtl(input.ttl_seconds);
-    const request = { task_id: taskId, expected_version: expectedVersion, ttl_seconds: ttl };
-    const replay = this.readSessionMutationReceipt(input, input.idempotency_key, "task.claim.v2", request);
-    if (replay.found)
-      return replay.value;
-    const preparedCheckpoint = this.captureSessionWorktree(input);
-    return this.mutateAsSession(input, input.idempotency_key, "task.claim.v2", request, (session) => {
-      let row = this.requireTaskRow(session.workspace_id, taskId);
-      this.requireVersion(row, expectedVersion);
-      if (this.isExpired(row)) {
-        if (row.assignee_session_id) {
-          throw new CollabError("recovery_required", "An expired session lease requires an explicit recovery note", this.recoveryBundle(row));
-        }
-        row = this.expireClaim(row, "system:clock");
-      }
-      if (row.status === "completed") {
-        throw new CollabError("task_completed", "Completed tasks cannot be claimed", {
-          review_status: row.review_status
-        });
-      }
-      if (row.status === "blocked") {
-        throw new CollabError("task_blocked", "Blocked tasks must be unblocked before claiming", {
-          blocker: row.blocker
-        });
-      }
-      if (row.status === "claimed") {
-        throw new CollabError("task_claimed", "Task already has an active claim", {
-          assignee: row.assignee,
-          assignee_session_id: row.assignee_session_id,
-          lease_expires_at: row.lease_expires_at
-        });
-      }
-      if (row.work_mode === "edit" && parseStringArray(row.path_scopes_json).length === 0) {
-        throw new CollabError("edit_scope_required", "Edit tasks require path scopes");
-      }
-      this.requireDependenciesComplete(row);
-      this.requirePathsAvailable(row);
-      const worktree = this.requirePreparedWorktree(session, preparedCheckpoint);
-      const checkpoint = preparedCheckpoint.checkpoint;
-      this.requireExpectedBase(row, checkpoint);
-      const now = this.timestamp();
-      const leaseId = `lease_${randomUUID4()}`;
-      const expiresAt = addSeconds(now, ttl);
-      const version2 = row.version + 1;
-      this.db.query(`
-        UPDATE tasks
-        SET coordination_mode = 'session_v2',
-          status = 'claimed', assignee = ?, assignee_session_id = ?,
-          claim_worktree_id = ?, lease_id = ?, lease_expires_at = ?,
-          blocker = NULL, base_checkpoint_json = ?,
-          result_checkpoint_json = NULL, completion_report_id = NULL,
-          review_status = 'not_required',
-          reported_by = NULL, reported_by_session_id = NULL, reported_at = NULL,
-          accepted_by = NULL, accepted_by_session_id = NULL, accepted_at = NULL,
-          completed_at = NULL, version = ?, updated_at = ?
-        WHERE workspace_id = ? AND id = ?
-      `).run(session.actor, session.id, worktree.id, leaseId, expiresAt, canonicalJson(checkpoint), version2, now, row.workspace_id, row.id);
-      this.appendEvent(row.workspace_id, "task.claimed", row.id, session.actor, {
-        lease_id: leaseId,
-        lease_expires_at: expiresAt,
-        worktree_id: worktree.id,
-        base_checkpoint: checkpoint,
-        version: version2,
-        checkpoint_boundary: "server_observed_local_git_state_is_evidence_not_atomic_attribution_or_a_filesystem_lock"
-      }, session.id);
-      return this.requireTask(row.workspace_id, row.id);
-    });
-  }
-  recoverTaskForSession(input) {
-    const taskId = validateId(input.task_id, "task_id");
-    const expectedVersion = validateExpectedVersion(input.expected_version);
-    const recoveryNote = cleanText(input.recovery_note, "recovery_note", 4000);
-    const action = input.action ?? "takeover";
-    if (!["takeover", "release", "block"].includes(action)) {
-      throw new CollabError("invalid_recovery_action", "Recovery action is invalid");
-    }
-    const blocker = optionalText(input.blocker, "blocker", 2000);
-    if (action === "block" && !blocker) {
-      throw new CollabError("recovery_blocker_required", "Blocking recovery requires a blocker");
-    }
-    const ttl = validateTtl(input.ttl_seconds);
-    const request = {
-      task_id: taskId,
-      expected_version: expectedVersion,
-      recovery_note: recoveryNote,
-      action,
-      blocker,
-      ttl_seconds: ttl
-    };
-    const replay = this.readSessionMutationReceipt(input, input.idempotency_key, "task.recover.v2", request);
-    if (replay.found)
-      return replay.value;
-    const preparedCheckpoint = action === "takeover" ? this.captureSessionWorktree(input) : null;
-    return this.mutateAsSession(input, input.idempotency_key, "task.recover.v2", request, (session) => {
-      const row = this.requireTaskRow(session.workspace_id, taskId);
-      this.requireVersion(row, expectedVersion);
-      if (!this.isExpired(row, row.assignee_session_id === session.id ? session : undefined) || !row.lease_id || !row.assignee_session_id) {
-        throw new CollabError("recovery_not_required", "Only an expired session-owned lease can be explicitly recovered");
-      }
-      const now = this.timestamp();
-      const { prior, expiryVersion } = this.expireSessionLeaseForRecovery(row, session, now);
-      if (action !== "takeover") {
-        return this.recordRecoveryWithoutTakeover(row, session, {
-          prior,
-          expiry_version: expiryVersion,
-          action,
-          recovery_note: recoveryNote,
-          blocker,
-          now
-        });
-      }
-      const worktree = this.requirePreparedWorktree(session, preparedCheckpoint);
-      const checkpoint = preparedCheckpoint.checkpoint;
-      const opened = this.requireTaskRow(row.workspace_id, row.id);
-      this.requireDependenciesComplete(opened);
-      this.requirePathsAvailable(opened);
-      this.requireExpectedBase(opened, checkpoint);
-      const leaseId = `lease_${randomUUID4()}`;
-      const leaseExpiresAt = addSeconds(now, ttl);
-      const version2 = expiryVersion + 1;
-      this.db.query(`
-        UPDATE tasks
-        SET status = 'claimed', assignee = ?, assignee_session_id = ?,
-          claim_worktree_id = ?, lease_id = ?, lease_expires_at = ?,
-          blocker = NULL, base_checkpoint_json = ?, version = ?, updated_at = ?
-        WHERE workspace_id = ? AND id = ?
-      `).run(session.actor, session.id, worktree.id, leaseId, leaseExpiresAt, canonicalJson(checkpoint), version2, now, row.workspace_id, row.id);
-      const event = this.appendEvent(row.workspace_id, "task.recovered", row.id, session.actor, {
-        prior_lease: prior,
-        recovery_note: recoveryNote,
-        recovery_checkpoint: checkpoint,
-        lease_id: leaseId,
-        lease_expires_at: leaseExpiresAt,
-        version: version2,
-        note: "Recovery acknowledges an expired coordination lease; it does not accept or attribute prior work."
-      }, session.id);
-      this.db.query(`
-        INSERT INTO task_recoveries (
-          id, workspace_id, task_id, prior_lease_id, prior_session_id,
-          recovered_by_session_id, action, note, prior_checkpoint_json,
-          new_lease_id, recovered_at, event_sequence
-        ) VALUES (?, ?, ?, ?, ?, ?, 'takeover', ?, ?, ?, ?, ?)
-      `).run(`recovery_${randomUUID4()}`, row.workspace_id, row.id, prior.lease_id, prior.session_id, session.id, recoveryNote, prior.checkpoint ? canonicalJson(prior.checkpoint) : null, leaseId, now, event.sequence);
-      return this.requireTask(row.workspace_id, row.id);
-    });
-  }
-  renewLeaseForSession(input) {
-    const normalized = normalizeSessionRenewInput(input);
-    const ttl = validateTtl(input.ttl_seconds);
-    return this.mutateAsSession(input, normalized.idempotency_key, "task.renew.v2", { ...normalized.request, ttl_seconds: ttl }, (session) => {
-      const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
-      this.requireActiveSessionLease(row, session, normalized.lease_id);
-      const now = this.timestamp();
-      const candidate = addSeconds(now, ttl);
-      const expiresAt = row.lease_expires_at && row.lease_expires_at > candidate ? row.lease_expires_at : candidate;
-      const version2 = row.version;
-      this.db.query(`
-          UPDATE tasks SET lease_expires_at = ?, version = ?, updated_at = ?
-          WHERE workspace_id = ? AND id = ?
-        `).run(expiresAt, version2, now, row.workspace_id, row.id);
-      this.appendEvent(row.workspace_id, "task.lease_renewed", row.id, session.actor, {
-        lease_id: normalized.lease_id,
-        lease_expires_at: expiresAt,
-        version: version2
-      }, session.id);
-      return this.requireTask(row.workspace_id, row.id);
-    });
-  }
-  progressTaskForSession(input) {
-    const normalized = normalizeSessionLeaseInput(input);
-    const message = cleanText(input.message, "message", 2000);
-    return this.mutateAsSession(input, normalized.idempotency_key, "task.progress.v2", { ...normalized.request, message }, (session) => {
-      const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
-      this.requireVersion(row, normalized.expected_version);
-      this.requireActiveSessionLease(row, session, normalized.lease_id);
-      const now = this.timestamp();
-      const version2 = row.version + 1;
-      this.db.query(`
-          UPDATE tasks SET latest_progress = ?, version = ?, updated_at = ?
-          WHERE workspace_id = ? AND id = ?
-        `).run(message, version2, now, row.workspace_id, row.id);
-      this.appendEvent(row.workspace_id, "task.progressed", row.id, session.actor, {
-        message,
-        version: version2
-      }, session.id);
-      return this.requireTask(row.workspace_id, row.id);
-    });
-  }
-  releaseTaskForSession(input) {
-    const normalized = normalizeSessionLeaseInput(input);
-    const summary = optionalText(input.summary, "summary", 2000);
-    return this.mutateAsSession(input, normalized.idempotency_key, "task.release.v2", { ...normalized.request, summary }, (session) => {
-      const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
-      this.requireVersion(row, normalized.expected_version);
-      this.requireActiveSessionLease(row, session, normalized.lease_id);
-      return this.clearSessionClaim(row, session, "task.released", { summary });
-    });
-  }
-  blockTaskForSession(input) {
-    const normalized = normalizeSessionLeaseInput(input);
-    const blocker = cleanText(input.blocker, "blocker", 2000);
-    return this.mutateAsSession(input, normalized.idempotency_key, "task.block.v2", { ...normalized.request, blocker }, (session) => {
-      const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
-      this.requireVersion(row, normalized.expected_version);
-      this.requireActiveSessionLease(row, session, normalized.lease_id);
-      const now = this.timestamp();
-      const version2 = row.version + 1;
-      this.db.query(`
-          UPDATE tasks
-          SET status = 'blocked', assignee = NULL, assignee_session_id = NULL,
-            claim_worktree_id = NULL, lease_id = NULL, lease_expires_at = NULL,
-            blocker = ?, version = ?, updated_at = ?
-          WHERE workspace_id = ? AND id = ?
-        `).run(blocker, version2, now, row.workspace_id, row.id);
-      this.expirePendingHandoffs(row.workspace_id, row.id, now, session.actor, "task_blocked");
-      this.appendEvent(row.workspace_id, "task.blocked", row.id, session.actor, {
-        blocker,
-        version: version2
-      }, session.id);
-      return this.requireTask(row.workspace_id, row.id);
-    });
-  }
-  unblockTaskForSession(input) {
-    const taskId = validateId(input.task_id, "task_id");
-    const expectedVersion = validateExpectedVersion(input.expected_version);
-    const note = optionalText(input.note, "note", 2000);
-    return this.mutateAsSession(input, input.idempotency_key, "task.unblock.v2", { task_id: taskId, expected_version: expectedVersion, note }, (session) => {
-      const row = this.requireTaskRow(session.workspace_id, taskId);
-      this.requireVersion(row, expectedVersion);
-      if (row.status !== "blocked") {
-        throw new CollabError("task_not_blocked", "Only blocked tasks can be unblocked");
-      }
-      const now = this.timestamp();
-      const version2 = row.version + 1;
-      this.db.query(`
-          UPDATE tasks
-          SET status = 'open', blocker = NULL, review_status = 'not_required',
-            version = ?, updated_at = ?
-          WHERE workspace_id = ? AND id = ?
-        `).run(version2, now, row.workspace_id, row.id);
-      this.appendEvent(row.workspace_id, "task.unblocked", row.id, session.actor, {
-        note,
-        version: version2
-      }, session.id);
-      return this.requireTask(row.workspace_id, row.id);
-    });
-  }
-  attachArtifactForSession(input) {
-    const normalized = normalizeSessionLeaseInput(input);
-    const artifactInput = {
-      kind: validateArtifactKind(input.kind),
-      uri: cleanText(input.uri, "uri", 2000),
-      sha256: input.sha256 ? validateSha256(input.sha256) : null,
-      media_type: optionalText(input.media_type, "media_type", 200),
-      label: optionalText(input.label, "label", 300)
-    };
-    return this.mutateAsSession(input, normalized.idempotency_key, "artifact.attach.v2", { ...normalized.request, ...artifactInput }, (session) => {
-      const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
-      this.requireVersion(row, normalized.expected_version);
-      this.requireActiveSessionLease(row, session, normalized.lease_id);
-      const now = this.timestamp();
-      const id = `artifact_${randomUUID4()}`;
-      this.db.query(`
-          INSERT INTO artifacts (
-            id, workspace_id, task_id, kind, uri, sha256, media_type, label,
-            attached_by, attached_by_session_id, attached_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(id, row.workspace_id, row.id, artifactInput.kind, artifactInput.uri, artifactInput.sha256, artifactInput.media_type, artifactInput.label, session.actor, session.id, now);
-      const version2 = row.version + 1;
-      this.db.query(`
-          UPDATE tasks SET version = ?, updated_at = ?
-          WHERE workspace_id = ? AND id = ?
-        `).run(version2, now, row.workspace_id, row.id);
-      const artifact = this.requireArtifact(id);
-      this.appendEvent(row.workspace_id, "artifact.attached", row.id, session.actor, {
-        artifact,
-        version: version2
-      }, session.id);
-      return { task: this.requireTask(row.workspace_id, row.id), artifact };
-    });
-  }
-  completeTaskForSession(input) {
-    const normalized = normalizeSessionLeaseInput(input);
-    const summary = cleanText(input.summary, "summary", 4000);
-    const confidence = validateReportConfidence(input.confidence ?? "unknown");
-    const confidenceBasis = optionalText(input.confidence_basis, "confidence_basis", 2000);
-    const limits = optionalText(input.limits, "limits", 2000);
-    const evidenceRefs = normalizeEvidenceRefs(input.evidence_refs ?? []);
-    const reviewRequestedSessionId = input.review_requested_session_id === undefined ? null : validateId(input.review_requested_session_id, "review_requested_session_id");
-    const request = {
-      ...normalized.request,
-      summary,
-      confidence,
-      confidence_basis: confidenceBasis,
-      limits,
-      evidence_refs: evidenceRefs,
-      ...reviewRequestedSessionId ? { review_requested_session_id: reviewRequestedSessionId } : {}
-    };
-    const replay = this.readSessionMutationReceipt(input, normalized.idempotency_key, "task.complete.v2", request);
-    if (replay.found)
-      return replay.value;
-    const preparedCheckpoint = this.captureSessionWorktree(input);
-    return this.mutateAsSession(input, normalized.idempotency_key, "task.complete.v2", request, (session) => {
-      const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
-      this.requireVersion(row, normalized.expected_version);
-      this.requireActiveSessionLease(row, session, normalized.lease_id);
-      for (const reference of evidenceRefs) {
-        this.requireEvidenceRef(row.workspace_id, reference);
-      }
-      if (reviewRequestedSessionId) {
-        this.requireRequestedReviewer(row, session, reviewRequestedSessionId);
-      }
-      this.requirePreparedWorktree(session, preparedCheckpoint);
-      const checkpoint = preparedCheckpoint.checkpoint;
-      const report = this.appendReportInternal(session, {
-        task_id: row.id,
-        to_session_id: null,
-        kind: "observation",
-        body: summary,
-        evidence_refs: evidenceRefs,
-        confidence,
-        confidence_basis: confidenceBasis,
-        limits,
-        relation: "informs",
-        target_report_id: null,
-        authority_scope: null,
-        authority_basis: null
-      });
-      const now = this.timestamp();
-      const version2 = row.version + 1;
-      const reviewGeneration = row.review_generation + 1;
-      const reviewStatus = row.completion_policy === "accepted" ? "pending" : "not_required";
-      this.db.query(`
-          UPDATE tasks
-          SET status = 'completed', review_status = ?, review_generation = ?,
-            assignee = NULL, assignee_session_id = NULL, claim_worktree_id = NULL,
-            lease_id = NULL, lease_expires_at = NULL, blocker = NULL,
-            latest_progress = ?, result_checkpoint_json = ?, completion_report_id = ?,
-            reported_by = ?, reported_by_session_id = ?, reported_at = ?,
-            accepted_by = NULL, accepted_by_session_id = NULL, accepted_at = NULL,
-            version = ?, updated_at = ?, completed_at = ?
-          WHERE workspace_id = ? AND id = ?
-        `).run(reviewStatus, reviewGeneration, summary, canonicalJson(checkpoint), report.id, session.actor, session.id, now, version2, now, now, row.workspace_id, row.id);
-      this.expirePendingHandoffs(row.workspace_id, row.id, now, session.actor, "task_reported_complete");
-      this.appendEvent(row.workspace_id, reviewStatus === "pending" ? "task.reported_complete" : "task.completed", row.id, session.actor, {
-        completion_report_id: report.id,
-        completion_policy: row.completion_policy,
-        review_status: reviewStatus,
-        review_generation: reviewGeneration,
-        result_checkpoint: checkpoint,
-        summary,
-        version: version2,
-        note: reviewStatus === "pending" ? "Reported completion does not satisfy dependencies until a distinct session accepts it." : "Reported completion satisfies this task's explicit reported-only policy; it is not external acceptance.",
-        ...reviewRequestedSessionId ? { review_requested_session_id: reviewRequestedSessionId } : {}
-      }, session.id);
-      if (reviewRequestedSessionId) {
-        this.appendReportInternal(session, {
-          task_id: row.id,
-          to_session_id: reviewRequestedSessionId,
-          kind: "proposal",
-          body: `Review requested: please review the reported completion of task ${row.id} ` + `(${row.title}) with collab_task_review. This is a request, not a reservation; ` + "any distinct session may still review.",
-          evidence_refs: [`report:${report.id}`],
-          confidence: "unknown",
-          confidence_basis: null,
-          limits: null,
-          relation: "informs",
-          target_report_id: null,
-          authority_scope: null,
-          authority_basis: null
-        });
-      }
-      return this.requireTask(row.workspace_id, row.id);
-    });
-  }
-  getTask(workspaceId, taskId) {
-    const task = this.requireTask(workspaceId, taskId);
-    task.artifacts = this.listArtifacts(workspaceId, taskId);
-    return task;
-  }
-  listTasks(workspaceId, status) {
-    this.requireWorkspace(workspaceId);
-    const rows = status ? this.db.query(`
-          SELECT * FROM tasks WHERE workspace_id = ? AND status = ? ORDER BY created_at, id
-        `).all(workspaceId, status) : this.db.query(`
-          SELECT * FROM tasks WHERE workspace_id = ? ORDER BY created_at, id
-        `).all(workspaceId);
-    return rows.map((row) => this.taskFromRow(row));
-  }
-  claimTask(input) {
-    const normalized = {
-      ...normalizeVersionedMutation(input),
-      workspace_id: input.workspace_id,
-      task_id: validateId(input.task_id, "task_id"),
-      ttl_seconds: validateTtl(input.ttl_seconds)
-    };
-    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.claim", normalized, () => {
-      let row = this.requireTaskRow(input.workspace_id, normalized.task_id);
-      this.requireVersion(row, normalized.expected_version);
-      const priorAssignee = row.assignee;
-      const expired = this.isExpired(row);
-      if (expired) {
-        row = this.expireClaim(row, normalized.actor);
-      }
-      if (row.status === "completed")
-        throw new CollabError("task_completed", "Completed tasks cannot be claimed");
-      if (row.status === "blocked")
-        throw new CollabError("task_blocked", "Blocked tasks must be unblocked before claiming", { blocker: row.blocker });
-      if (row.status === "claimed") {
-        throw new CollabError("task_claimed", "Task already has an active claim", {
-          assignee: row.assignee,
-          lease_expires_at: row.lease_expires_at
-        });
-      }
-      this.requireDependenciesComplete(row);
-      this.requirePathsAvailable(row);
-      const now = this.timestamp();
-      const leaseId = `lease_${randomUUID4()}`;
-      const expiresAt = addSeconds(now, normalized.ttl_seconds);
-      const nextVersion = row.version + 1;
-      this.db.query(`
-        UPDATE tasks SET status = 'claimed', assignee = ?, lease_id = ?, lease_expires_at = ?,
-          blocker = NULL, version = ?, updated_at = ?
-        WHERE workspace_id = ? AND id = ?
-      `).run(normalized.actor, leaseId, expiresAt, nextVersion, now, input.workspace_id, normalized.task_id);
-      this.appendEvent(input.workspace_id, "task.claimed", normalized.task_id, normalized.actor, {
-        lease_id: leaseId,
-        lease_expires_at: expiresAt,
-        previous_assignee: expired ? priorAssignee : null,
-        version: nextVersion
-      });
-      return this.requireTask(input.workspace_id, normalized.task_id);
-    });
-  }
-  renewLease(input) {
-    if (input.expected_version !== undefined)
-      validateExpectedVersion(input.expected_version);
-    const normalized = {
-      ...normalizeMutation(input),
-      task_id: validateId(input.task_id, "task_id"),
-      lease_id: validateId(input.lease_id, "lease_id"),
-      ...input.expected_version === undefined ? {} : { expected_version: input.expected_version }
-    };
-    const ttl = validateTtl(input.ttl_seconds);
-    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.renew", { ...normalized, ttl_seconds: ttl }, () => {
-      const row = this.requireTaskRow(input.workspace_id, normalized.task_id);
-      this.requireActiveLease(row, normalized.actor, normalized.lease_id);
-      const now = this.timestamp();
-      const candidate = addSeconds(now, ttl);
-      const expiresAt = row.lease_expires_at && row.lease_expires_at > candidate ? row.lease_expires_at : candidate;
-      const version2 = row.version;
-      this.db.query(`
-        UPDATE tasks SET lease_expires_at = ?, version = ?, updated_at = ?
-        WHERE workspace_id = ? AND id = ?
-      `).run(expiresAt, version2, now, input.workspace_id, normalized.task_id);
-      this.appendEvent(input.workspace_id, "task.lease_renewed", normalized.task_id, normalized.actor, {
-        lease_id: normalized.lease_id,
-        lease_expires_at: expiresAt,
-        version: version2
-      });
-      return this.requireTask(input.workspace_id, normalized.task_id);
-    });
-  }
-  progressTask(input) {
-    const normalized = { ...normalizeLeaseInput(input), message: cleanText(input.message, "message", 2000) };
-    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.progress", normalized, () => {
-      const row = this.requireTaskRow(input.workspace_id, normalized.task_id);
-      this.requireVersion(row, normalized.expected_version);
-      this.requireActiveLease(row, normalized.actor, normalized.lease_id);
-      const now = this.timestamp();
-      const version2 = row.version + 1;
-      this.db.query(`
-        UPDATE tasks SET latest_progress = ?, version = ?, updated_at = ?
-        WHERE workspace_id = ? AND id = ?
-      `).run(normalized.message, version2, now, input.workspace_id, normalized.task_id);
-      this.appendEvent(input.workspace_id, "task.progressed", normalized.task_id, normalized.actor, {
-        message: normalized.message,
-        version: version2
-      });
-      return this.requireTask(input.workspace_id, normalized.task_id);
-    });
-  }
-  releaseTask(input) {
-    const normalized = { ...normalizeLeaseInput(input), summary: optionalText(input.summary, "summary", 2000) };
-    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.release", normalized, () => {
-      const row = this.requireTaskRow(input.workspace_id, normalized.task_id);
-      this.requireVersion(row, normalized.expected_version);
-      this.requireActiveLease(row, normalized.actor, normalized.lease_id);
-      return this.clearClaim(row, normalized.actor, "task.released", { summary: normalized.summary });
-    });
-  }
-  blockTask(input) {
-    const normalized = { ...normalizeLeaseInput(input), blocker: cleanText(input.blocker, "blocker", 2000) };
-    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.block", normalized, () => {
-      const row = this.requireTaskRow(input.workspace_id, normalized.task_id);
-      this.requireVersion(row, normalized.expected_version);
-      this.requireActiveLease(row, normalized.actor, normalized.lease_id);
-      const now = this.timestamp();
-      const version2 = row.version + 1;
-      this.db.query(`
-        UPDATE tasks SET status = 'blocked', assignee = NULL, lease_id = NULL,
-          lease_expires_at = NULL, blocker = ?, version = ?, updated_at = ?
-        WHERE workspace_id = ? AND id = ?
-      `).run(normalized.blocker, version2, now, input.workspace_id, normalized.task_id);
-      this.expirePendingHandoffs(input.workspace_id, normalized.task_id, now, normalized.actor, "task_blocked");
-      this.appendEvent(input.workspace_id, "task.blocked", normalized.task_id, normalized.actor, {
-        blocker: normalized.blocker,
-        version: version2
-      });
-      return this.requireTask(input.workspace_id, normalized.task_id);
-    });
-  }
-  unblockTask(input) {
-    const normalized = {
-      ...normalizeVersionedMutation(input),
-      workspace_id: input.workspace_id,
-      task_id: validateId(input.task_id, "task_id"),
-      note: optionalText(input.note, "note", 2000)
-    };
-    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.unblock", normalized, () => {
-      const row = this.requireTaskRow(input.workspace_id, normalized.task_id);
-      this.requireVersion(row, normalized.expected_version);
-      if (row.status !== "blocked")
-        throw new CollabError("task_not_blocked", "Only blocked tasks can be unblocked");
-      const now = this.timestamp();
-      const version2 = row.version + 1;
-      this.db.query(`
-        UPDATE tasks SET status = 'open', blocker = NULL, version = ?, updated_at = ?
-        WHERE workspace_id = ? AND id = ?
-      `).run(version2, now, input.workspace_id, normalized.task_id);
-      this.appendEvent(input.workspace_id, "task.unblocked", normalized.task_id, normalized.actor, {
-        note: normalized.note,
-        version: version2
-      });
-      return this.requireTask(input.workspace_id, normalized.task_id);
-    });
-  }
-  completeTask(input) {
-    const normalized = { ...normalizeLeaseInput(input), summary: cleanText(input.summary, "summary", 4000) };
-    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.complete", normalized, () => {
-      const row = this.requireTaskRow(input.workspace_id, normalized.task_id);
-      this.requireVersion(row, normalized.expected_version);
-      this.requireActiveLease(row, normalized.actor, normalized.lease_id);
-      const now = this.timestamp();
-      const version2 = row.version + 1;
-      this.db.query(`
-        UPDATE tasks SET status = 'completed', assignee = NULL, lease_id = NULL,
-          lease_expires_at = NULL, blocker = NULL, latest_progress = ?, version = ?,
-          updated_at = ?, completed_at = ?
-        WHERE workspace_id = ? AND id = ?
-      `).run(normalized.summary, version2, now, now, input.workspace_id, normalized.task_id);
-      this.expirePendingHandoffs(input.workspace_id, normalized.task_id, now, normalized.actor, "task_completed");
-      this.appendEvent(input.workspace_id, "task.completed", normalized.task_id, normalized.actor, {
-        completion_basis: "actor_reported",
-        note: "Completion records the reporting actor's outcome; it is not coordinator review or acceptance.",
-        summary: normalized.summary,
-        version: version2
-      });
-      return this.requireTask(input.workspace_id, normalized.task_id);
-    });
-  }
-  attachArtifact(input) {
-    const normalized = {
-      ...normalizeLeaseInput(input),
-      kind: input.kind,
-      uri: cleanText(input.uri, "uri", 2000),
-      sha256: input.sha256 ? validateSha256(input.sha256) : null,
-      media_type: optionalText(input.media_type, "media_type", 200),
-      label: optionalText(input.label, "label", 300)
-    };
-    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "artifact.attach", normalized, () => {
-      const row = this.requireTaskRow(input.workspace_id, normalized.task_id);
-      this.requireVersion(row, normalized.expected_version);
-      this.requireActiveLease(row, normalized.actor, normalized.lease_id);
-      const now = this.timestamp();
-      const id = `artifact_${randomUUID4()}`;
-      this.db.query(`
-        INSERT INTO artifacts
-          (id, workspace_id, task_id, kind, uri, sha256, media_type, label, attached_by, attached_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, input.workspace_id, normalized.task_id, normalized.kind, normalized.uri, normalized.sha256, normalized.media_type, normalized.label, normalized.actor, now);
-      const version2 = row.version + 1;
-      this.db.query(`UPDATE tasks SET version = ?, updated_at = ? WHERE workspace_id = ? AND id = ?`).run(version2, now, input.workspace_id, normalized.task_id);
-      const artifact = this.requireArtifact(id);
-      this.appendEvent(input.workspace_id, "artifact.attached", normalized.task_id, normalized.actor, {
-        artifact,
-        version: version2
-      });
-      return { task: this.requireTask(input.workspace_id, normalized.task_id), artifact };
-    });
-  }
-  recordDecision(input) {
-    const normalized = {
-      ...normalizeMutation(input),
-      workspace_id: input.workspace_id,
-      topic: cleanText(input.topic, "topic", 500),
-      decision: cleanText(input.decision, "decision", 4000),
-      rationale: optionalText(input.rationale, "rationale", 4000)
-    };
-    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "decision.record", normalized, () => {
-      this.requireWorkspace(input.workspace_id);
-      const id = `decision_${randomUUID4()}`;
-      const now = this.timestamp();
-      this.db.query(`
-        INSERT INTO decisions (id, workspace_id, topic, decision, rationale, recorded_by, recorded_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(id, input.workspace_id, normalized.topic, normalized.decision, normalized.rationale, normalized.actor, now);
-      const decision = this.requireDecision(id);
-      this.appendEvent(input.workspace_id, "decision.recorded", id, normalized.actor, { decision });
-      return decision;
-    });
-  }
-  appendReportForSession(input) {
-    const expectedHead = input.expected_head_sequence === undefined ? undefined : validateExpectedHeadSequence(input.expected_head_sequence);
-    const normalized = {
-      task_id: input.task_id ? validateId(input.task_id, "task_id") : null,
-      to_session_id: input.to_session_id ? validateId(input.to_session_id, "to_session_id") : null,
-      kind: validateReportKind(input.kind),
-      body: cleanText(input.body, "body", MAX_REPORT_BODY),
-      evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
-      confidence: validateReportConfidence(input.confidence ?? "unknown"),
-      confidence_basis: optionalText(input.confidence_basis, "confidence_basis", 2000),
-      limits: optionalText(input.limits, "limits", 2000),
-      relation: validateReportRelation(input.relation ?? "informs"),
-      target_report_id: input.target_report_id ? validateId(input.target_report_id, "target_report_id") : null,
-      authority_scope: optionalText(input.authority_scope, "authority_scope", 1000),
-      authority_basis: optionalText(input.authority_basis, "authority_basis", 2000),
-      ...input.to_person === true ? { to_person: true } : {}
-    };
-    return this.mutateAsSession(input, input.idempotency_key, "report.append.v2", expectedHead === undefined ? normalized : { ...normalized, expected_head_sequence: expectedHead }, (session) => {
-      this.validateReportInput(session, normalized);
-      this.refuseProposalRewrite(normalized);
-      if (expectedHead !== undefined)
-        this.requireJournalHead(session.workspace_id, expectedHead, session.id);
-      return this.appendReportInternal(session, normalized);
-    });
-  }
-  openProposalForSession(input) {
-    const normalized = {
-      ...normalizeProposalTerms(input),
-      task_id: input.task_id ? validateId(input.task_id, "task_id") : null,
-      confidence: validateReportConfidence(input.confidence ?? "unknown"),
-      confidence_basis: optionalText(input.confidence_basis, "confidence_basis", 2000),
-      limits: optionalText(input.limits, "limits", 2000),
-      origin: validateProposalOrigin(input.origin ?? "ai"),
-      supersedes_report_id: input.supersedes_report_id ? validateId(input.supersedes_report_id, "supersedes_report_id") : null,
-      ...ruleRequestField(input.rule)
-    };
-    return this.mutateAsSession(input, input.idempotency_key, "proposal.open.v1", normalized, (session) => {
-      const reportInput = {
-        task_id: normalized.task_id,
-        to_session_id: null,
-        kind: "proposal",
-        body: normalized.question,
-        evidence_refs: normalized.evidence_refs,
-        confidence: normalized.confidence,
-        confidence_basis: normalized.confidence_basis,
-        limits: normalized.limits,
-        relation: normalized.supersedes_report_id ? "supersedes" : "informs",
-        target_report_id: normalized.supersedes_report_id,
-        authority_scope: null,
-        authority_basis: null
-      };
-      this.validateReportInput(session, reportInput);
-      if (normalized.supersedes_report_id) {
-        this.requireOpenToRevision(session.workspace_id, normalized.supersedes_report_id);
-      }
-      return this.openProposalInternal(session, this.consentVoice(session.id), reportInput, {
-        ...normalized,
-        rule: normalized.rule ?? CONSENT_RULE
-      });
-    });
-  }
-  openPersonProposal(input) {
-    const normalized = { ...normalizeProposalTerms(input), ...ruleRequestField(input.rule) };
-    const idempotencyKey = validateIdempotencyKey(input.idempotency_key);
-    return this.mutate(input.workspace_id, PERSON_DESK_ACTOR, idempotencyKey, "person.proposal.open.v1", normalized, () => {
-      for (const reference of normalized.evidence_refs)
-        this.requireEvidenceRef(input.workspace_id, reference);
-      const reportInput = {
-        task_id: null,
-        to_session_id: null,
-        kind: "proposal",
-        body: normalized.question,
-        evidence_refs: normalized.evidence_refs,
-        confidence: "unknown",
-        confidence_basis: null,
-        limits: PERSON_DESK_LIMITS,
-        relation: "informs",
-        target_report_id: null,
-        authority_scope: null,
-        authority_basis: null
-      };
-      return this.openProposalInternal({ workspace_id: input.workspace_id, actor: PERSON_DESK_ACTOR, id: null }, PERSON_VOICE_ID, reportInput, { ...normalized, origin: "person_relayed", supersedes_report_id: null, rule: normalized.rule ?? CONSENT_RULE });
-    });
-  }
-  withdrawPersonProposal(input) {
-    const normalized = {
-      proposal_report_id: validateId(input.proposal_report_id, "proposal_report_id"),
-      reason: cleanText(input.reason, "reason", 2000)
-    };
-    const idempotencyKey = validateIdempotencyKey(input.idempotency_key);
-    return this.mutate(input.workspace_id, PERSON_DESK_ACTOR, idempotencyKey, "person.proposal.withdraw.v1", normalized, () => {
-      const proposal = this.requireReport(normalized.proposal_report_id);
-      this.requireProposalTerms(input.workspace_id, proposal.id);
-      if (proposal.from_session_id !== null || proposal.from_actor !== PERSON_DESK_ACTOR) {
-        throw new CollabError("report_author_mismatch", "The desk withdraws only proposals it opened; an agent withdraws its own");
-      }
-      if (this.proposalRetirement(input.workspace_id, proposal.id)) {
-        throw new CollabError("proposal_not_on_table", "This proposal was already withdrawn or superseded");
-      }
-      this.appendReportInternal({ workspace_id: input.workspace_id, actor: PERSON_DESK_ACTOR, id: null }, {
-        task_id: proposal.task_id,
-        to_session_id: null,
-        kind: "observation",
-        body: normalized.reason,
-        evidence_refs: [],
-        confidence: "unknown",
-        confidence_basis: null,
-        limits: PERSON_DESK_LIMITS,
-        relation: "withdraws",
-        target_report_id: proposal.id,
-        authority_scope: null,
-        authority_basis: null,
-        about_proposal_id: proposal.id
-      });
-      return this.proposalStatusInternal(input.workspace_id, proposal.id);
-    });
-  }
-  openProposalInternal(author, authorVoiceId, reportInput, terms) {
-    const now = this.timestamp();
-    const voices = this.liveVoiceSnapshot(author.workspace_id, now);
-    const report = this.appendReportInternal(author, reportInput);
-    const closesAt = new Date(Date.parse(now) + terms.consult_seconds * 1000).toISOString();
-    const proposalSha256 = sha2564(proposalBytes({
-      workspace_id: author.workspace_id,
-      report_id: report.id,
-      task_id: report.task_id,
-      question: report.body,
-      criteria: terms.criteria,
-      extent: terms.extent,
-      relies_on: report.evidence_refs,
-      known_conflicts: terms.known_conflicts,
-      limits: report.limits,
-      origin: terms.origin,
-      topic: terms.topic,
-      closes_at: closesAt,
-      supersedes_report_id: terms.supersedes_report_id
-    }, terms.rule));
-    const event = this.appendEvent(author.workspace_id, "proposal.opened", report.id, author.actor, {
-      rule: terms.rule,
-      proposal_sha256: proposalSha256,
-      criteria: terms.criteria,
-      extent: terms.extent,
-      known_conflicts: terms.known_conflicts,
-      origin: terms.origin,
-      topic: terms.topic,
-      closes_at: closesAt,
-      voices,
-      author_voice_id: authorVoiceId
-    }, author.id);
-    this.db.query(`
-      INSERT INTO proposal_terms (
-        report_id, workspace_id, rule, criteria, extent, known_conflicts, origin,
-        topic, closes_at, voices_json, author_voice_id, proposal_sha256,
-        opened_event_id, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(report.id, author.workspace_id, terms.rule, terms.criteria, terms.extent, terms.known_conflicts, terms.origin, terms.topic, closesAt, canonicalJson(voices), authorVoiceId, proposalSha256, event.id, now);
-    return this.proposalStatusInternal(author.workspace_id, report.id);
-  }
-  relayProposalRejectionForSession(input) {
-    const expectedHead = input.expected_head_sequence === undefined ? undefined : validateExpectedHeadSequence(input.expected_head_sequence);
-    const normalized = {
-      proposal_report_id: validateId(input.proposal_report_id, "proposal_report_id"),
-      proposal_sha256: validateSha256(input.proposal_sha256),
-      reason: cleanText(input.reason, "reason", 2000)
-    };
-    const request = expectedHead === undefined ? normalized : { ...normalized, expected_head_sequence: expectedHead };
-    return this.mutateAsSession(input, input.idempotency_key, "proposal.reject.relay.v1", request, (session) => {
-      const terms = this.requireProposalTerms(session.workspace_id, normalized.proposal_report_id);
-      if (expectedHead !== undefined)
-        this.requireJournalHead(session.workspace_id, expectedHead, session.id);
-      return this.recordPersonAct({
-        workspace_id: terms.workspace_id,
-        proposal_report_id: terms.report_id,
-        proposal_sha256: normalized.proposal_sha256,
-        act: "reject",
-        reason: normalized.reason,
-        basis: "relayed_by_session",
-        actor: session.actor,
-        session_id: session.id,
-        proof: null,
-        expected_ai_snapshot: null
-      });
-    });
-  }
-  personActChallenge(input) {
-    const act = validatePersonAct(input.act);
-    const reason = normalizeActReason(act, input.reason);
-    const transaction = this.db.transaction(() => {
-      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
-      const status = this.proposalStatusInternal(terms.workspace_id, terms.report_id);
-      this.refuseUnrecordableAct(status, act, "user_verified_passkey");
-      const prior = this.personActCount(terms.report_id);
-      const aiSnapshot = aiSnapshotOf(status);
-      return {
-        workspace_id: terms.workspace_id,
-        proposal_report_id: terms.report_id,
-        proposal_sha256: terms.proposal_sha256,
-        act,
-        reason,
-        prior_person_acts: prior,
-        ai_snapshot: aiSnapshot,
-        ...personActChallenge({
-          act,
-          workspace_id: terms.workspace_id,
-          proposal_report_id: terms.report_id,
-          proposal_sha256: terms.proposal_sha256,
-          prior_person_acts: prior,
-          reason,
-          ai_snapshot: aiSnapshot
-        }),
-        passkeys: this.listPersonPasskeys().filter((key) => key.revoked_at === null).map((key) => ({
-          credential_id: key.credential_id,
-          rp_id: key.rp_id,
-          origin: key.origin,
-          label: key.label,
-          fingerprint: key.fingerprint
-        }))
-      };
-    });
-    return transaction.deferred();
-  }
-  recordPersonActAtTerminal(input) {
-    const act = validatePersonAct(input.act);
-    const reason = normalizeActReason(act, input.reason);
-    const transaction = this.db.transaction(() => {
-      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
-      return this.recordPersonAct({
-        workspace_id: terms.workspace_id,
-        proposal_report_id: terms.report_id,
-        proposal_sha256: validateSha256(input.proposal_sha256),
-        act,
-        reason,
-        basis: "controlling_terminal",
-        actor: PERSON_TERMINAL_ACTOR,
-        session_id: null,
-        proof: null,
-        expected_ai_snapshot: input.expected_ai_snapshot
-      });
-    });
-    const status = transaction.immediate();
-    this.tightenFileModes();
-    return status;
-  }
-  recordPersonActWithPasskey(input) {
-    const act = validatePersonAct(input.act);
-    const reason = normalizeActReason(act, input.reason);
-    const assertion = normalizePasskeyAssertion(input.assertion);
-    const transaction = this.db.transaction(() => {
-      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
-      const passkey = this.listPersonPasskeys().find((key) => key.credential_id === assertion.credential_id && key.revoked_at === null);
-      if (!passkey) {
-        throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
-      }
-      const status2 = this.proposalStatusInternal(terms.workspace_id, terms.report_id);
-      const aiSnapshot = aiSnapshotOf(status2);
-      const derived = personActChallenge({
-        act,
-        workspace_id: terms.workspace_id,
-        proposal_report_id: terms.report_id,
-        proposal_sha256: terms.proposal_sha256,
-        prior_person_acts: this.personActCount(terms.report_id),
-        reason,
-        ai_snapshot: aiSnapshot
-      });
-      const { sign_count } = verifyPasskeyAssertion({
-        passkey,
-        assertion,
-        expected_challenge: derived.challenge
-      });
-      this.db.query(`UPDATE person_passkeys SET sign_count = ? WHERE credential_id = ?`).run(sign_count, passkey.credential_id);
-      return this.recordPersonAct({
-        workspace_id: terms.workspace_id,
-        proposal_report_id: terms.report_id,
-        proposal_sha256: terms.proposal_sha256,
-        act,
-        reason,
-        basis: "user_verified_passkey",
-        actor: PERSON_PASSKEY_ACTOR,
-        session_id: null,
-        proof: {
-          ...assertion,
-          public_key_spki: passkey.public_key_spki,
-          rp_id: passkey.rp_id,
-          origin: passkey.origin,
-          challenge_bytes: derived.challenge_bytes,
-          challenge: derived.challenge,
-          sign_count
-        },
-        expected_ai_snapshot: aiSnapshot
-      });
-    });
-    const status = transaction.immediate();
-    this.tightenFileModes();
-    return status;
-  }
-  personSetAsideChallenge(input) {
-    const reason = normalizeSetAsideReason(input.reason);
-    const challengeId = validateId(input.challenge_report_id, "challenge_report_id");
-    return this.db.transaction(() => {
-      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
-      const facts = this.setAsideFacts(terms, challengeId, reason);
-      return {
-        ...facts.bytes,
-        act: "set_aside",
-        objection: { ...facts.challenge, author_basis: "self_declared" },
-        challenger: facts.challenger,
-        ...setAsideChallenge(facts.bytes),
-        passkeys: this.listPersonPasskeys().filter((key) => key.revoked_at === null).map((key) => ({
-          credential_id: key.credential_id,
-          rp_id: key.rp_id,
-          origin: key.origin,
-          label: key.label,
-          fingerprint: key.fingerprint
-        }))
-      };
-    }).deferred();
-  }
-  recordSetAsideAtTerminal(input) {
-    const reason = normalizeSetAsideReason(input.reason);
-    const challengeId = validateId(input.challenge_report_id, "challenge_report_id");
-    const transaction = this.db.transaction(() => {
-      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
-      return this.recordSetAside(terms, challengeId, reason, {
-        basis: "controlling_terminal",
-        actor: PERSON_TERMINAL_ACTOR,
-        proof: null,
-        proposal_sha256: validateSha256(input.proposal_sha256),
-        challenge_sha256: validateSha256(input.challenge_sha256),
-        challenger_last_seen_at: input.challenger_last_seen_at,
-        expected_ai_snapshot: input.expected_ai_snapshot
-      });
-    });
-    const status = transaction.immediate();
-    this.tightenFileModes();
-    return status;
-  }
-  recordSetAsideWithPasskey(input) {
-    const reason = normalizeSetAsideReason(input.reason);
-    const challengeId = validateId(input.challenge_report_id, "challenge_report_id");
-    const assertion = normalizePasskeyAssertion(input.assertion);
-    const transaction = this.db.transaction(() => {
-      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
-      const passkey = this.listPersonPasskeys().find((key) => key.credential_id === assertion.credential_id && key.revoked_at === null);
-      if (!passkey) {
-        throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
-      }
-      const facts = this.setAsideFacts(terms, challengeId, reason);
-      const derived = setAsideChallenge(facts.bytes);
-      const { sign_count } = verifyPasskeyAssertion({ passkey, assertion, expected_challenge: derived.challenge });
-      this.db.query(`UPDATE person_passkeys SET sign_count = ? WHERE credential_id = ?`).run(sign_count, passkey.credential_id);
-      return this.recordSetAside(terms, challengeId, reason, {
-        basis: "user_verified_passkey",
-        actor: PERSON_PASSKEY_ACTOR,
-        proof: {
-          ...assertion,
-          public_key_spki: passkey.public_key_spki,
-          rp_id: passkey.rp_id,
-          origin: passkey.origin,
-          challenge_bytes: derived.challenge_bytes,
-          challenge: derived.challenge,
-          sign_count
-        },
-        proposal_sha256: facts.bytes.proposal_sha256,
-        challenge_sha256: facts.bytes.challenge_sha256,
-        challenger_last_seen_at: facts.bytes.challenger_last_seen_at,
-        expected_ai_snapshot: facts.bytes.ai_snapshot
-      });
-    });
-    const status = transaction.immediate();
-    this.tightenFileModes();
-    return status;
-  }
-  personSetAsideOptions(workspaceId, proposalIds) {
-    this.requireWorkspace(workspaceId);
-    return this.db.transaction(() => {
-      const options = {};
-      for (const proposalId of proposalIds) {
-        const terms = this.requireProposalTerms(workspaceId, validateId(proposalId, "proposal_report_id"));
-        if (terms.rule !== CONSENT_RULE_V2)
-          continue;
-        const status = this.proposalStatusInternal(workspaceId, terms.report_id);
-        options[terms.report_id] = status.ai.unresolved_challenge_report_ids.map((challengeId) => {
-          const challenge = this.requireReport(challengeId);
-          const presence = this.challengerPresence(workspaceId, challenge.from_session_id);
-          let refusal = null;
-          try {
-            this.refuseUnrecordableSetAside(status, challenge, presence);
-          } catch (error51) {
-            if (!(error51 instanceof CollabError))
-              throw error51;
-            refusal = { error: error51.code, message: error51.message };
-          }
-          return {
-            challenge_report_id: challengeId,
-            by: { session: challenge.from_session_id, name: challenge.from_actor, basis: "self_declared" },
-            can_set_aside: refusal === null,
-            refusal,
-            challenger: presence
-          };
-        });
-      }
-      return options;
-    }).deferred();
-  }
-  enrollPersonPasskey(input) {
-    const enrollment = normalizePasskeyEnrollment(input);
-    const transaction = this.db.transaction(() => {
-      if (this.db.query(`SELECT 1 FROM person_passkeys WHERE credential_id = ?`).get(enrollment.credential_id)) {
-        throw new CollabError("passkey_already_enrolled", "This credential id is already enrolled");
-      }
-      this.db.query(`
-        INSERT INTO person_passkeys (
-          credential_id, public_key_spki, algorithm, rp_id, origin, label,
-          fingerprint, sign_count, enrolled_at, revoked_at
-        ) VALUES (?, ?, -7, ?, ?, ?, ?, 0, ?, NULL)
-      `).run(enrollment.credential_id, enrollment.public_key_spki, enrollment.rp_id, enrollment.origin, enrollment.label, passkeyFingerprint(enrollment.public_key_spki), this.timestamp());
-    });
-    transaction.immediate();
-    this.tightenFileModes();
-    return this.listPersonPasskeys().find((key) => key.credential_id === enrollment.credential_id);
-  }
-  listPersonPasskeys() {
-    return this.db.query(`SELECT * FROM person_passkeys ORDER BY enrolled_at, credential_id`).all().map((row) => ({ ...row, algorithm: -7 }));
-  }
-  revokePersonPasskey(credentialId) {
-    const transaction = this.db.transaction(() => {
-      const changed = this.db.query(`
-        UPDATE person_passkeys SET revoked_at = ? WHERE credential_id = ? AND revoked_at IS NULL
-      `).run(this.timestamp(), credentialId);
-      if (changed.changes === 0) {
-        throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
-      }
-    });
-    transaction.immediate();
-    this.tightenFileModes();
-    return this.listPersonPasskeys().find((key) => key.credential_id === credentialId);
-  }
-  appendPersonNote(input) {
-    const normalized = {
-      body: cleanText(input.body, "body", MAX_REPORT_BODY),
-      proposal_report_id: input.proposal_report_id ? validateId(input.proposal_report_id, "proposal_report_id") : null
-    };
-    const idempotencyKey = validateIdempotencyKey(input.idempotency_key);
-    return this.mutate(input.workspace_id, PERSON_DESK_ACTOR, idempotencyKey, "person.note.v1", normalized, () => {
-      let toSessionId = null;
-      if (normalized.proposal_report_id) {
-        const terms = this.requireProposalTerms(input.workspace_id, normalized.proposal_report_id);
-        toSessionId = this.requireReport(terms.report_id).from_session_id;
-      }
-      return this.appendReportInternal({ workspace_id: input.workspace_id, actor: PERSON_DESK_ACTOR, id: null }, {
-        task_id: null,
-        to_session_id: toSessionId,
-        kind: "observation",
-        body: normalized.body,
-        evidence_refs: normalized.proposal_report_id ? [`report:${normalized.proposal_report_id}`] : [],
-        confidence: "unknown",
-        confidence_basis: null,
-        limits: PERSON_DESK_LIMITS,
-        relation: "informs",
-        target_report_id: null,
-        authority_scope: null,
-        authority_basis: null,
-        ...normalized.proposal_report_id ? { about_proposal_id: normalized.proposal_report_id } : {}
-      });
-    });
-  }
-  personInbox(workspaceId) {
-    this.requireWorkspace(workspaceId);
-    const transaction = this.db.transaction(() => {
-      const context = this.proposalReadContext(workspaceId);
-      const settled = new Set(["consented", "split", "lapsed"]);
-      const candidates = this.db.query(`
-        SELECT t.report_id FROM proposal_terms t JOIN reports r ON r.id = t.report_id
-        WHERE t.workspace_id = ?
-          AND NOT EXISTS (SELECT 1 FROM proposal_person_acts a WHERE a.proposal_report_id = t.report_id)
-        ORDER BY r.event_sequence DESC
-        LIMIT ?
-      `).all(workspaceId, MAX_INBOX_SCAN);
-      const awaiting = [];
-      const unreadable = [];
-      for (const row of candidates) {
-        if (awaiting.length >= MAX_INBOX_PROPOSALS)
-          break;
-        const status = this.readProposalStatus(context, row.report_id, unreadable);
-        if (status && settled.has(status.ai.position))
-          awaiting.push(status);
-      }
-      const addressed = this.db.query(`
-        SELECT r.* FROM person_addressed_reports p JOIN reports r ON r.id = p.report_id
-        WHERE p.workspace_id = ? ORDER BY r.event_sequence DESC LIMIT 50
-      `).all(workspaceId).map(reportFromRow);
-      return { workspace_id: workspaceId, awaiting_person: awaiting, addressed_reports: addressed, unreadable };
-    });
-    return transaction.deferred();
-  }
-  personInboxSummary() {
-    return this.listWorkspaces().map((workspace) => {
-      const inbox = this.personInbox(workspace.id);
-      return {
-        workspace_id: workspace.id,
-        awaiting_person: inbox.awaiting_person.length,
-        addressed_reports: inbox.addressed_reports.length,
-        latest_report_id: inbox.addressed_reports[0]?.id ?? null
-      };
-    });
-  }
-  listWorkspaces() {
-    return this.db.query(`SELECT id, name, root_path, created_at FROM workspaces ORDER BY created_at, id`).all();
-  }
-  proposalStatus(workspaceId, proposalReportId) {
-    this.requireWorkspace(workspaceId);
-    const id = validateId(proposalReportId, "proposal_report_id");
-    this.requireProposalTerms(workspaceId, id);
-    return this.db.transaction(() => this.proposalStatusInternal(workspaceId, id)).deferred();
-  }
-  proposalStatusById(proposalReportId) {
-    const terms = this.requireProposalTermsById(validateId(proposalReportId, "proposal_report_id"));
-    return this.db.transaction(() => this.proposalStatusInternal(terms.workspace_id, terms.report_id)).deferred();
-  }
-  listProposalStatuses(workspaceId, options = {}) {
-    this.requireWorkspace(workspaceId);
-    const limit = options.limit ?? 20;
-    if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
-      throw new CollabError("invalid_limit", "Proposal limit must be between 1 and 50");
-    }
-    return this.db.transaction(() => {
-      const context = this.proposalReadContext(workspaceId);
-      const rows = this.db.query(`
-        SELECT t.report_id FROM proposal_terms t
-        JOIN reports r ON r.id = t.report_id
-        WHERE t.workspace_id = ?
-        ORDER BY r.event_sequence DESC
-        LIMIT ?
-      `).all(workspaceId, limit);
-      const unreadable = [];
-      const proposals = rows.map((row) => this.readProposalStatus(context, row.report_id, unreadable)).filter((status) => status !== null);
-      return { proposals, unreadable };
-    }).deferred();
-  }
-  readProposalStatus(context, reportId, unreadable) {
-    try {
-      return this.proposalStatusInternal(context.workspaceId, reportId, context);
-    } catch (error51) {
-      if (!(error51 instanceof CollabError))
-        throw error51;
-      unreadable.push({ proposal_report_id: reportId, error: error51.code });
-      return null;
-    }
-  }
-  refuseUnrecordableAct(status, act, basis) {
-    if (status.ai.position === "withdrawn" || status.ai.position === "superseded") {
-      throw new CollabError("proposal_not_on_table", "A withdrawn or superseded proposal is no longer on the table", { position: status.ai.position, obsoleted_by_report_id: status.ai.obsoleted_by_report_id });
-    }
-    const latest = status.person.acts.at(-1) ?? null;
-    if (act === "agree") {
-      if (basis === "relayed_by_session") {
-        throw new CollabError("consent_not_relayable", "A person's agreement is never recorded through a session");
-      }
-      if (status.ai.position !== "consented") {
-        throw new CollabError("ai_not_consented", "The agents have not consented; a person agrees only after they settle", { position: status.ai.position });
-      }
-      if (latest?.act === "agree") {
-        throw new CollabError("already_agreed", "The latest person act already agrees to these bytes");
-      }
-      return;
-    }
-    if (latest?.act === "reject" && (basis === "relayed_by_session" || latest.basis !== "relayed_by_session")) {
-      throw new CollabError("already_rejected", "The latest person act already rejects these bytes");
-    }
-  }
-  recordPersonAct(input) {
-    const current = this.proposalStatusInternal(input.workspace_id, input.proposal_report_id);
-    if (current.proposal_sha256 !== input.proposal_sha256) {
-      throw new CollabError("proposal_hash_mismatch", "The act names different proposal bytes; read the proposal status again", { proposal_sha256: current.proposal_sha256 });
-    }
-    this.refuseUnrecordableAct(current, input.act, input.basis);
-    const aiSnapshot = aiSnapshotOf(current);
-    if (input.expected_ai_snapshot && canonicalJson(input.expected_ai_snapshot) !== canonicalJson(aiSnapshot)) {
-      throw new CollabError("ai_position_changed", "The agents' position changed since it was shown; read the proposal status again", { ai_snapshot: aiSnapshot });
-    }
-    const id = `person_act_${randomUUID4()}`;
-    const now = this.timestamp();
-    const personAct = {
-      id,
-      proposal_report_id: input.proposal_report_id,
-      proposal_sha256: input.proposal_sha256,
-      act: input.act,
-      party: "person",
-      basis: input.basis,
-      reason: input.reason,
-      relayed_by_session_id: input.basis === "relayed_by_session" ? input.session_id : null,
-      ai_snapshot: aiSnapshot,
-      proof: input.proof
-    };
-    const event = this.appendEvent(input.workspace_id, input.act === "agree" ? "proposal.agreed" : "proposal.rejected", input.proposal_report_id, input.actor, { person_act: personAct }, input.session_id);
-    this.db.query(`
-      INSERT INTO proposal_person_acts (
-        id, workspace_id, proposal_report_id, proposal_sha256, act, party, basis,
-        reason, relayed_by_session_id, ai_snapshot_json, proof_json, created_at, event_sequence
-      ) VALUES (?, ?, ?, ?, ?, 'person', ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, input.workspace_id, input.proposal_report_id, input.proposal_sha256, input.act, input.basis, input.reason, personAct.relayed_by_session_id, canonicalJson(aiSnapshot), input.proof ? canonicalJson(input.proof) : null, now, event.sequence);
-    return this.proposalStatusInternal(input.workspace_id, input.proposal_report_id);
-  }
-  setAsideFacts(terms, challengeId, reason) {
-    const status = this.proposalStatusInternal(terms.workspace_id, terms.report_id);
-    const row = this.db.query(`SELECT * FROM reports WHERE id = ?`).get(challengeId);
-    const challenge = row ? reportFromRow(row) : null;
-    const presence = this.challengerPresence(terms.workspace_id, challenge?.from_session_id ?? null);
-    this.refuseUnrecordableSetAside(status, challenge, presence);
-    return {
-      status,
-      challenge,
-      challenger: { voice_id: presence.voice_id, session_ids: presence.session_ids, last_seen_at: presence.last_seen_at },
-      bytes: {
-        workspace_id: terms.workspace_id,
-        proposal_report_id: terms.report_id,
-        proposal_sha256: terms.proposal_sha256,
-        challenge_report_id: challengeId,
-        challenge_sha256: challengeContentSha256(challenge),
-        challenger_last_seen_at: presence.last_seen_at,
-        reason,
-        prior_person_acts: this.personActCount(terms.report_id),
-        prior_set_asides: this.setAsideCount(terms.workspace_id, terms.report_id),
-        ai_snapshot: aiSnapshotOf(status)
-      }
-    };
-  }
-  refuseUnrecordableSetAside(status, challenge, presence) {
-    const proposalId = status.proposal.id;
-    if (status.rule !== CONSENT_RULE_V2) {
-      throw setAsideRefusal("rule_has_no_set_aside", { proposal_report_id: proposalId, rule: status.rule });
-    }
-    if (status.ai.position === "withdrawn" || status.ai.position === "superseded") {
-      throw setAsideRefusal("proposal_not_on_table", {
-        position: status.ai.position,
-        obsoleted_by_report_id: status.ai.obsoleted_by_report_id
-      });
-    }
-    if (!challenge || challenge.workspace_id !== status.proposal.workspace_id || challenge.relation !== "challenges" || challenge.target_report_id !== proposalId) {
-      throw setAsideRefusal("challenge_not_standing", {
-        challenge_report_id: challenge?.id ?? null,
-        challenge_state: "not_a_challenge_to_this_proposal"
-      }, "That report is not a challenge to this proposal");
-    }
-    const earlier = (status.set_asides ?? []).find((entry) => entry.challenge_report_id === challenge.id);
-    if (earlier) {
-      throw setAsideRefusal("already_set_aside", {
-        challenge_report_id: challenge.id,
-        set_aside_id: earlier.id,
-        set_aside_at: earlier.created_at
-      });
-    }
-    if (!status.ai.unresolved_challenge_report_ids.includes(challenge.id)) {
-      throw setAsideRefusal("challenge_not_standing", {
-        challenge_report_id: challenge.id,
-        challenge_state: "withdrawn_or_lifted_by_its_voice"
-      }, "That challenge no longer stands: it was withdrawn or lifted by its own voice");
-    }
-    if (presence.live_sessions.length > 0) {
-      throw setAsideRefusal("challenger_present", {
-        challenge_report_id: challenge.id,
-        live_sessions: presence.live_sessions
-      });
-    }
-  }
-  recordSetAside(terms, challengeId, reason, act) {
-    if (act.proposal_sha256 !== terms.proposal_sha256) {
-      throw setAsideRefusal("proposal_hash_mismatch", { proposal_sha256: terms.proposal_sha256 });
-    }
-    const facts = this.setAsideFacts(terms, challengeId, reason);
-    if (act.challenge_sha256 !== facts.bytes.challenge_sha256) {
-      throw setAsideRefusal("challenge_hash_mismatch", { challenge_sha256: facts.bytes.challenge_sha256 });
-    }
-    if (act.challenger_last_seen_at !== facts.bytes.challenger_last_seen_at) {
-      throw setAsideRefusal("challenger_changed", {
-        challenge_report_id: challengeId,
-        shown_last_seen_at: act.challenger_last_seen_at,
-        last_seen_at: facts.bytes.challenger_last_seen_at
-      });
-    }
-    if (canonicalJson(act.expected_ai_snapshot) !== canonicalJson(facts.bytes.ai_snapshot)) {
-      throw setAsideRefusal("ai_position_changed", { ai_snapshot: facts.bytes.ai_snapshot });
-    }
-    const record2 = {
-      id: `set_aside_${randomUUID4()}`,
-      proposal_report_id: terms.report_id,
-      proposal_sha256: terms.proposal_sha256,
-      challenge_report_id: challengeId,
-      challenge_sha256: facts.bytes.challenge_sha256,
-      party: "person",
-      basis: act.basis,
-      reason,
-      prior_person_acts: facts.bytes.prior_person_acts,
-      prior_set_asides: facts.bytes.prior_set_asides,
-      ai_snapshot: facts.bytes.ai_snapshot,
-      challenger: facts.challenger,
-      proof: act.proof
-    };
-    const event = this.appendEvent(terms.workspace_id, "proposal.challenge_set_aside", terms.report_id, act.actor, { set_aside: record2 });
-    this.db.query(`
-      INSERT INTO proposal_set_asides (
-        id, workspace_id, proposal_report_id, challenge_report_id, set_aside_json, created_at, event_sequence
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(record2.id, terms.workspace_id, terms.report_id, challengeId, canonicalJson(record2), event.occurred_at, event.sequence);
-    return this.proposalStatusInternal(terms.workspace_id, terms.report_id);
-  }
-  challengerPresence(workspaceId, challengerSessionId) {
-    if (challengerSessionId === null)
-      return { voice_id: null, session_ids: [], last_seen_at: null, live_sessions: [] };
-    const observedAt = this.timestamp();
-    const voice = this.consentVoice(challengerSessionId);
-    const members = this.db.query(`
-      SELECT id, actor, status, last_seen_at FROM coordination_sessions WHERE workspace_id = ? ORDER BY id
-    `).all(workspaceId).filter((row) => this.consentVoice(row.id) === voice);
-    return {
-      voice_id: voice,
-      session_ids: members.map((row) => row.id),
-      last_seen_at: members.map((row) => row.last_seen_at).sort().at(-1) ?? null,
-      live_sessions: members.filter((row) => sessionLiveness(row, observedAt) === "live").map((row) => ({ id: row.id, actor: row.actor, last_seen_at: row.last_seen_at }))
-    };
-  }
-  setAsideCount(workspaceId, proposalReportId) {
-    return this.db.query(`SELECT COUNT(*) AS count FROM proposal_set_asides WHERE workspace_id = ? AND proposal_report_id = ?`).get(workspaceId, proposalReportId).count;
-  }
-  proposalSetAsides(workspaceId, proposalReportId) {
-    return this.db.query(`
-      SELECT s.* FROM proposal_set_asides s
-      JOIN reports r ON r.id = s.challenge_report_id
-        AND r.workspace_id = s.workspace_id AND r.target_report_id = s.proposal_report_id AND r.relation = 'challenges'
-      WHERE s.workspace_id = ? AND s.proposal_report_id = ? ORDER BY s.event_sequence
-    `).all(workspaceId, proposalReportId).map(proposalSetAsideFromRow);
-  }
-  personActCount(proposalReportId) {
-    return this.db.query(`SELECT COUNT(*) AS count FROM proposal_person_acts WHERE proposal_report_id = ?`).get(proposalReportId).count;
-  }
-  requireProposalTermsById(reportId) {
-    const row = this.db.query(`SELECT workspace_id FROM proposal_terms WHERE report_id = ?`).get(reportId);
-    if (!row) {
-      throw new CollabError("proposal_not_found", "No proposal with consent terms has this report id", { proposal_report_id: reportId });
-    }
-    return this.requireProposalTerms(row.workspace_id, reportId);
-  }
-  proposalReadContext(workspaceId) {
-    return { workspaceId, obsoleted: this.activeObsoletionTargets(workspaceId), voices: new Map };
-  }
-  proposalRetirement(workspaceId, reportId) {
-    return this.db.query(`
-      SELECT id, relation, event_sequence FROM reports
-      WHERE workspace_id = ? AND target_report_id = ?
-        AND relation IN ('withdraws', 'corrects', 'supersedes')
-      ORDER BY event_sequence
-      LIMIT 1
-    `).get(workspaceId, reportId);
-  }
-  standingProposalChallenges(context, reportId, setAside = new Set) {
-    const challenges = this.db.query(`
-      SELECT id, from_session_id FROM reports
-      WHERE workspace_id = ? AND target_report_id = ? AND relation = 'challenges'
-      ORDER BY event_sequence
-    `).all(context.workspaceId, reportId);
-    const standing = [];
-    for (const challenge of challenges) {
-      if (context.obsoleted.has(challenge.id))
-        continue;
-      const answers = this.db.query(`
-        SELECT id, relation, from_session_id FROM reports
-        WHERE workspace_id = ? AND target_report_id = ? AND relation = 'resolves'
-      `).all(context.workspaceId, challenge.id);
-      const challengerVoice = challenge.from_session_id ? this.consentVoice(challenge.from_session_id, context) : null;
-      const resolved = challengerVoice !== null && answers.some((answer) => !context.obsoleted.has(answer.id) && answer.from_session_id !== null && this.consentVoice(answer.from_session_id, context) === challengerVoice);
-      if (!resolved && !setAside.has(challenge.id))
-        standing.push(challenge.id);
-    }
-    return standing;
-  }
-  proposalStatusInternal(workspaceId, reportId, context = this.proposalReadContext(workspaceId)) {
-    const proposal = this.requireReport(reportId);
-    const terms = this.requireProposalTerms(workspaceId, reportId);
-    const bytes = proposalBytes({
-      workspace_id: workspaceId,
-      report_id: proposal.id,
-      task_id: proposal.task_id,
-      question: proposal.body,
-      criteria: terms.criteria,
-      extent: terms.extent,
-      relies_on: proposal.evidence_refs,
-      known_conflicts: terms.known_conflicts,
-      limits: proposal.limits,
-      origin: terms.origin,
-      topic: terms.topic,
-      closes_at: terms.closes_at,
-      supersedes_report_id: proposal.relation === "supersedes" ? proposal.target_report_id : null
-    }, terms.rule);
-    if (sha2564(bytes) !== terms.proposal_sha256) {
-      throw new CollabError("proposal_terms_invalid", "Stored proposal bytes no longer match their recorded hash", { proposal_report_id: reportId });
-    }
-    const retirement = this.proposalRetirement(workspaceId, reportId);
-    const supports = this.db.query(`
-      SELECT id, from_session_id FROM reports
-      WHERE workspace_id = ? AND target_report_id = ? AND relation = 'supports'
-      ORDER BY event_sequence
-    `).all(workspaceId, reportId).filter((support) => support.from_session_id !== null && !context.obsoleted.has(support.id));
-    const setAsides = terms.rule === CONSENT_RULE_V2 ? this.proposalSetAsides(workspaceId, reportId) : null;
-    const challengeIds = this.standingProposalChallenges(context, reportId, new Set(setAsides?.map((entry) => entry.challenge_report_id) ?? []));
-    const computed = aiPosition({
-      now: this.timestamp(),
-      closes_at: terms.closes_at,
-      obsoleted: retirement ? retirement.relation === "withdraws" ? "withdrawn" : "superseded" : null,
-      unresolved_challenge: challengeIds.length > 0,
-      author_voice_id: terms.author_voice_id,
-      snapshot_voice_ids: terms.voices.map((voice) => voice.voice_id),
-      support_voice_ids: supports.map((support) => this.consentVoice(support.from_session_id, context))
-    });
-    const acts = this.db.query(`
-      SELECT * FROM proposal_person_acts
-      WHERE workspace_id = ? AND proposal_report_id = ?
-      ORDER BY event_sequence
-    `).all(workspaceId, reportId).map(proposalPersonActFromRow);
-    const latest = acts.at(-1) ?? null;
-    const state = latest === null ? "awaiting" : latest.act === "agree" ? "agreed" : "rejected";
-    const agreement = latest?.act === "agree" ? latest : null;
-    return {
-      rule: terms.rule,
-      proposal,
-      terms,
-      proposal_bytes: bytes,
-      proposal_sha256: terms.proposal_sha256,
-      ai: {
-        position: computed.position,
-        closed: computed.closed,
-        unresolved_challenge_report_ids: challengeIds,
-        qualifying_support_report_ids: computed.qualifying_support_indexes.map((index) => supports[index].id),
-        awaiting_voice_ids: computed.awaiting_voice_ids,
-        obsoleted_by_report_id: retirement?.id ?? null,
-        basis: "computed_from_journal"
-      },
-      person: { state, acts },
-      ...setAsides ? { set_asides: setAsides } : {},
-      agreement,
-      may_proceed: agreement !== null && retirement === null,
-      authority_boundary: "an_agreement_authorises_only_the_proposal_extent"
-    };
-  }
-  requireProposalTerms(workspaceId, reportId) {
-    const row = this.db.query(`
-      SELECT * FROM proposal_terms WHERE workspace_id = ? AND report_id = ?
-    `).get(workspaceId, reportId);
-    if (!row) {
-      throw new CollabError("proposal_not_found", "No proposal with consent terms has this report id in this workspace", { proposal_report_id: reportId });
-    }
-    return proposalTermsFromRow(row);
-  }
-  requireOpenToRevision(workspaceId, reportId) {
-    const terms = this.db.query(`
-      SELECT 1 FROM proposal_terms WHERE workspace_id = ? AND report_id = ?
-    `).get(workspaceId, reportId);
-    if (!terms)
-      return;
-    if (this.proposalRetirement(workspaceId, reportId)) {
-      throw new CollabError("proposal_not_on_table", "This proposal was already withdrawn or superseded", { proposal_report_id: reportId });
-    }
-  }
-  refuseProposalRewrite(input) {
-    if (input.relation !== "corrects" && input.relation !== "supersedes" && input.relation !== "withdraws")
-      return;
-    if (!input.target_report_id)
-      return;
-    const isTermed = (id) => this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(id) !== null;
-    if (input.relation !== "withdraws" && isTermed(input.target_report_id)) {
-      throw new CollabError("proposal_terms_fixed", "A proposal with consent terms is fixed by its hash. Withdraw it, or open a revision with " + "collab_proposal_open and supersedes_report_id");
-    }
-    const target = this.db.query(`SELECT relation, target_report_id FROM reports WHERE id = ?`).get(input.target_report_id);
-    if (target?.target_report_id && ["withdraws", "corrects", "supersedes"].includes(target.relation) && !isTermed(input.target_report_id) && isTermed(target.target_report_id)) {
-      throw new CollabError("proposal_retired", "This report retired a proposal, and a retirement is final; open a new proposal instead");
-    }
-  }
-  tableVoices(workspaceId) {
-    this.requireWorkspace(workspaceId);
-    const now = this.timestamp();
-    const rows = this.db.query(`
-      SELECT id, actor, role, status, last_seen_at FROM coordination_sessions
-      WHERE workspace_id = ? AND status = 'active'
-      ORDER BY last_seen_at DESC, id
-    `).all(workspaceId);
-    const voices = new Map;
-    for (const row of rows) {
-      const voiceId = this.consentVoice(row.id);
-      voices.set(voiceId, [...voices.get(voiceId) ?? [], {
-        id: row.id,
-        actor: row.actor,
-        role: row.role,
-        liveness: sessionLiveness(row, now),
-        last_seen_at: row.last_seen_at
-      }]);
-    }
-    return [...voices.entries()].map(([voice_id, sessions]) => ({ voice_id, sessions }));
-  }
-  liveVoiceSnapshot(workspaceId, observedAt) {
-    const rows = this.db.query(`
-      SELECT id, status, last_seen_at FROM coordination_sessions
-      WHERE workspace_id = ? AND status = 'active'
-      ORDER BY id
-    `).all(workspaceId);
-    const voices = new Map;
-    for (const row of rows) {
-      if (sessionLiveness(row, observedAt) !== "live")
-        continue;
-      const voiceId = this.consentVoice(row.id);
-      voices.set(voiceId, [...voices.get(voiceId) ?? [], row.id]);
-    }
-    return [...voices.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([voice_id, live_session_ids]) => ({ voice_id, live_session_ids: live_session_ids.sort() }));
-  }
-  consentVoice(sessionId, context) {
-    const cached2 = context?.voices.get(sessionId);
-    if (cached2)
-      return cached2;
-    let current = sessionId;
-    for (let depth = 0;depth < 256; depth += 1) {
-      const row = this.db.query(`SELECT parent_session_id FROM session_parent_attestations WHERE session_id = ?`).get(current);
-      if (!row)
-        break;
-      current = row.parent_session_id;
-    }
-    context?.voices.set(sessionId, current);
-    return current;
-  }
-  listReports(workspaceId, options = {}) {
-    this.requireWorkspace(workspaceId);
-    const after = options.after_event_sequence ?? 0;
-    const limit = options.limit ?? 100;
-    if (!Number.isInteger(after) || after < 0) {
-      throw new CollabError("invalid_cursor", "Report cursor must be a non-negative integer");
-    }
-    if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
-      throw new CollabError("invalid_limit", "Report limit must be between 1 and 500");
-    }
-    const taskId = options.task_id ? validateId(options.task_id, "task_id") : null;
-    const toSessionId = options.to_session_id ? validateId(options.to_session_id, "to_session_id") : null;
-    const rows = this.db.query(`
-      SELECT * FROM reports
-      WHERE workspace_id = ?
-        AND event_sequence > ?
-        AND (? IS NULL OR task_id = ?)
-        AND (? IS NULL OR to_session_id = ?)
-      ORDER BY event_sequence
-      LIMIT ?
-    `).all(workspaceId, after, taskId, taskId, toSessionId, toSessionId, limit);
-    return rows.map(reportFromRow);
-  }
-  reviewTaskForSession(input) {
-    const taskId = validateId(input.task_id, "task_id");
-    const expectedVersion = validateExpectedVersion(input.expected_version);
-    const expectedHead = input.expected_head_sequence === undefined ? undefined : validateExpectedHeadSequence(input.expected_head_sequence);
-    if (input.outcome !== "accept" && input.outcome !== "request_changes") {
-      throw new CollabError("invalid_review_outcome", "Review outcome is invalid");
-    }
-    const summary = cleanText(input.summary, "summary", 4000);
-    const evidenceRefs = normalizeEvidenceRefs(input.evidence_refs ?? []);
-    const confidence = validateReportConfidence(input.confidence ?? "unknown");
-    const confidenceBasis = optionalText(input.confidence_basis, "confidence_basis", 2000);
-    const limits = optionalText(input.limits, "limits", 2000);
-    const request = {
-      task_id: taskId,
-      expected_version: expectedVersion,
-      outcome: input.outcome,
-      summary,
-      evidence_refs: evidenceRefs,
-      ...confidence === "unknown" ? {} : { confidence },
-      ...confidenceBasis === null ? {} : { confidence_basis: confidenceBasis },
-      ...limits === null ? {} : { limits },
-      ...expectedHead === undefined ? {} : { expected_head_sequence: expectedHead }
-    };
-    const replay = this.readSessionMutationReceipt(input, input.idempotency_key, "task.review.v2", request);
-    if (replay.found)
-      return replay.value;
-    const preparedCheckpoint = input.outcome === "accept" ? this.captureReviewCheckpoint(input, taskId) : null;
-    return this.mutateAsSession(input, input.idempotency_key, "task.review.v2", request, (session) => {
-      const row = this.requireTaskRow(session.workspace_id, taskId);
-      if (row.completion_policy !== "accepted" || row.review_status !== "pending") {
-        throw this.taskNotPendingReviewError(row, session.id);
-      }
-      this.requireVersion(row, expectedVersion);
-      if (!row.reported_by_session_id || !row.completion_report_id) {
-        throw new CollabError("review_state_invalid", "Task completion review metadata is incomplete");
-      }
-      if (row.reported_by_session_id === session.id) {
-        throw new CollabError("self_review_forbidden", "A distinct session must review reported completion");
-      }
-      for (const reference of evidenceRefs)
-        this.requireEvidenceRef(row.workspace_id, reference);
-      if (input.outcome === "accept" && this.hasObsoletedCompletionReport(row.workspace_id, row.completion_report_id)) {
-        throw new CollabError("completion_report_obsolete", "The reported completion was withdrawn, corrected, or superseded; request changes before a new completion report", { completion_report_id: row.completion_report_id });
-      }
-      if (input.outcome === "accept" && this.hasUnresolvedChallenges(row.workspace_id, row.completion_report_id)) {
-        throw new CollabError("completion_challenged", "Reported completion has an unresolved challenge", { completion_report_id: row.completion_report_id });
-      }
-      let hostCommit = null;
-      if (input.outcome === "accept") {
-        const resultCheckpoint = parseCheckpoint(row.result_checkpoint_json);
-        if (resultCheckpoint?.source === "server_observed") {
-          if (!preparedCheckpoint || checkpointDigest(preparedCheckpoint.result_checkpoint) !== checkpointDigest(resultCheckpoint)) {
-            throw new CollabError("worktree_observation_stale", "The completion checkpoint changed after review preparation");
-          }
-          this.requirePreparedRegisteredWorktree(row.workspace_id, resultCheckpoint.worktree_id, preparedCheckpoint.observed_worktree);
-          const observed = preparedCheckpoint.observed_worktree.checkpoint;
-          requireCompleteGitCheckpoint(resultCheckpoint);
-          requireCompleteGitCheckpoint(observed);
-          if (!checkpointStateMatches(resultCheckpoint, observed)) {
-            const basis = this.hostCommitSuccessorBasis(row, preparedCheckpoint);
-            if ("refusal" in basis) {
-              throw gitCheckpointStaleError(row.id, resultCheckpoint, observed, basis.refusal);
-            }
-            hostCommit = basis;
-          }
-        }
-      }
-      if (expectedHead !== undefined)
-        this.requireJournalHead(session.workspace_id, expectedHead, session.id);
-      const report = this.appendReportInternal(session, {
-        task_id: row.id,
-        to_session_id: row.reported_by_session_id,
-        kind: input.outcome === "accept" ? "observation" : "inference",
-        body: summary,
-        evidence_refs: [
-          `report:${row.completion_report_id}`,
-          ...evidenceRefs.filter((reference) => reference !== `report:${row.completion_report_id}`)
-        ],
-        confidence,
-        confidence_basis: confidenceBasis,
-        limits,
-        relation: input.outcome === "accept" ? "supports" : "challenges",
-        target_report_id: row.completion_report_id,
-        authority_scope: "local_task_coordination_review",
-        authority_basis: "distinct active collaboration session"
-      });
-      const now = this.timestamp();
-      const reviewId = `review_${randomUUID4()}`;
-      const version2 = row.version + 1;
-      const outcome = input.outcome === "accept" ? "accepted" : "changes_requested";
-      if (input.outcome === "accept") {
-        this.db.query(`
-          UPDATE tasks
-          SET review_status = 'accepted', accepted_by = ?, accepted_by_session_id = ?,
-            accepted_at = ?, version = ?, updated_at = ?
-          WHERE workspace_id = ? AND id = ?
-        `).run(session.actor, session.id, now, version2, now, row.workspace_id, row.id);
-      } else {
-        this.db.query(`
-          UPDATE tasks
-          SET status = 'open', review_status = 'changes_requested',
-            accepted_by = NULL, accepted_by_session_id = NULL, accepted_at = NULL,
-            version = ?, updated_at = ?, completed_at = NULL
-          WHERE workspace_id = ? AND id = ?
-        `).run(version2, now, row.workspace_id, row.id);
-      }
-      const event = this.appendEvent(row.workspace_id, input.outcome === "accept" ? "task.accepted" : "task.changes_requested", row.id, session.actor, {
-        review_id: reviewId,
-        review_report_id: report.id,
-        completion_report_id: row.completion_report_id,
-        review_generation: row.review_generation,
-        outcome,
-        summary,
-        version: version2,
-        authority_boundary: "acceptance_is_local_coordination_review_not_merge_deploy_truth_or_external_authority",
-        ...hostCommit ? {
-          checkpoint_basis: "host_commit_successor",
-          host_commit_sha: hostCommit.commit_sha,
-          host_commit_artifact_ids: hostCommit.artifact_ids,
-          checkpoint_boundary: "server_observed_successor_commit_is_local_evidence_not_a_commit_signature_attribution_or_an_atomic_git_sqlite_lock"
-        } : {}
-      }, session.id);
-      this.db.query(`
-        INSERT INTO task_reviews (
-          id, workspace_id, task_id, review_generation, outcome, summary,
-          reviewer_actor, reviewer_session_id, created_at, event_sequence
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(reviewId, row.workspace_id, row.id, row.review_generation, outcome, summary, session.actor, session.id, now, event.sequence);
-      return {
-        task: this.requireTask(row.workspace_id, row.id),
-        review: this.requireReview(reviewId),
-        report
-      };
-    });
-  }
-  offerHandoff(input) {
-    const normalized = {
-      ...normalizeLeaseInput(input),
-      to_actor: validateActor(input.to_actor),
-      summary: cleanText(input.summary, "summary", 4000),
-      ttl_seconds: validateTtl(input.ttl_seconds)
-    };
-    if (normalized.to_actor === normalized.actor) {
-      throw new CollabError("invalid_handoff", "A handoff target must be a different actor");
-    }
-    this.expireElapsedHandoffs(input.workspace_id, normalized.actor, normalized.task_id);
-    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "handoff.offer", normalized, () => {
-      const row = this.requireTaskRow(input.workspace_id, normalized.task_id);
-      this.requireVersion(row, normalized.expected_version);
-      this.requireActiveLease(row, normalized.actor, normalized.lease_id);
-      const pending = this.db.query(`
-        SELECT id FROM handoffs WHERE workspace_id = ? AND task_id = ? AND status = 'pending' AND expires_at > ?
-      `).get(input.workspace_id, normalized.task_id, this.timestamp());
-      if (pending)
-        throw new CollabError("handoff_pending", "Task already has a pending handoff", { handoff_id: pending.id });
-      const now = this.timestamp();
-      const id = `handoff_${randomUUID4()}`;
-      const expiresAt = [addSeconds(now, normalized.ttl_seconds), row.lease_expires_at].sort()[0];
-      this.db.query(`
-        INSERT INTO handoffs
-          (id, workspace_id, task_id, from_actor, to_actor, summary, status, offered_at, expires_at, resolved_at)
-        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, NULL)
-      `).run(id, input.workspace_id, normalized.task_id, normalized.actor, normalized.to_actor, normalized.summary, now, expiresAt);
-      const version2 = row.version + 1;
-      this.db.query(`UPDATE tasks SET version = ?, updated_at = ? WHERE workspace_id = ? AND id = ?`).run(version2, now, input.workspace_id, normalized.task_id);
-      const offer = this.requireHandoff(id);
-      this.appendEvent(input.workspace_id, "handoff.offered", id, normalized.actor, {
-        offer,
-        task_version: version2,
-        note: "An offer is an invitation; the coordination lease remains with the current holder until acceptance."
-      });
-      return { handoff: offer, task: this.requireTask(input.workspace_id, normalized.task_id) };
-    });
-  }
-  respondHandoff(input) {
-    if (input.response !== "accept" && input.response !== "decline") {
-      throw new CollabError("invalid_handoff_response", "Handoff response must be 'accept' or 'decline'");
-    }
-    const normalized = {
-      ...normalizeVersionedMutation(input),
-      workspace_id: input.workspace_id,
-      handoff_id: validateId(input.handoff_id, "handoff_id"),
-      response: input.response,
-      ttl_seconds: validateTtl(input.ttl_seconds)
-    };
-    this.expireElapsedHandoffs(input.workspace_id, "system:clock");
-    return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "handoff.respond", normalized, () => {
-      const offer = this.requireHandoff(normalized.handoff_id);
-      if (offer.workspace_id !== input.workspace_id)
-        throw new CollabError("handoff_not_found", "Handoff was not found in this workspace");
-      if (offer.to_actor !== normalized.actor)
-        throw new CollabError("handoff_not_recipient", "Only the named recipient may respond");
-      if (offer.status === "expired")
-        throw new CollabError("handoff_expired", "The handoff has expired");
-      if (offer.status !== "pending")
-        throw new CollabError("handoff_resolved", "Handoff has already been resolved", { status: offer.status });
-      const row = this.requireTaskRow(input.workspace_id, offer.task_id);
-      this.requireVersion(row, normalized.expected_version);
-      if (this.timestamp() >= offer.expires_at || this.isExpired(row)) {
-        throw new CollabError("handoff_expired", "The handoff or source lease has expired");
-      }
-      this.requireActiveLease(row, offer.from_actor, row.lease_id ?? "");
-      const now = this.timestamp();
-      const version2 = row.version + 1;
-      if (normalized.response === "decline") {
-        this.db.query(`UPDATE handoffs SET status = 'declined', resolved_at = ? WHERE id = ?`).run(now, offer.id);
-        this.db.query(`UPDATE tasks SET version = ?, updated_at = ? WHERE workspace_id = ? AND id = ?`).run(version2, now, input.workspace_id, row.id);
-        this.appendEvent(input.workspace_id, "handoff.declined", offer.id, normalized.actor, {
-          task_id: row.id,
-          task_version: version2
-        });
-      } else {
-        const leaseId = `lease_${randomUUID4()}`;
-        const leaseExpiresAt = addSeconds(now, normalized.ttl_seconds);
-        this.db.query(`UPDATE handoffs SET status = 'accepted', resolved_at = ? WHERE id = ?`).run(now, offer.id);
-        this.db.query(`
-          UPDATE tasks SET assignee = ?, lease_id = ?, lease_expires_at = ?, version = ?, updated_at = ?
-          WHERE workspace_id = ? AND id = ?
-        `).run(normalized.actor, leaseId, leaseExpiresAt, version2, now, input.workspace_id, row.id);
-        this.appendEvent(input.workspace_id, "handoff.accepted", offer.id, normalized.actor, {
-          task_id: row.id,
-          from_actor: offer.from_actor,
-          to_actor: normalized.actor,
-          lease_id: leaseId,
-          lease_expires_at: leaseExpiresAt,
-          task_version: version2
-        });
-      }
-      return { handoff: this.requireHandoff(offer.id), task: this.requireTask(input.workspace_id, row.id) };
-    });
-  }
-  offerHandoffForSession(input) {
-    const normalized = normalizeSessionLeaseInput(input);
-    const toSessionId = validateId(input.to_session_id, "to_session_id");
-    const summary = cleanText(input.summary, "summary", 4000);
-    const ttl = validateTtl(input.ttl_seconds);
-    if (toSessionId === input.session_id) {
-      throw new CollabError("invalid_handoff", "A handoff target must be a different session");
-    }
-    return this.mutateAsSession(input, normalized.idempotency_key, "handoff.offer.v2", { ...normalized.request, to_session_id: toSessionId, summary, ttl_seconds: ttl }, (session) => {
-      const target = this.requireCoordinationSessionRow(toSessionId);
-      if (target.workspace_id !== session.workspace_id || target.status !== "active") {
-        throw new CollabError("handoff_target_unavailable", "The target must be an active session in the same workspace");
-      }
-      const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
-      this.requireVersion(row, normalized.expected_version);
-      this.requireActiveSessionLease(row, session, normalized.lease_id);
-      const now = this.timestamp();
-      const pending = this.db.query(`
-          SELECT id FROM handoffs
-          WHERE workspace_id = ? AND task_id = ? AND status = 'pending' AND expires_at > ?
-        `).get(row.workspace_id, row.id, now);
-      if (pending) {
-        throw new CollabError("handoff_pending", "Task already has a pending handoff", {
-          handoff_id: pending.id
-        });
-      }
-      const id = `handoff_${randomUUID4()}`;
-      const expiresAt = addSeconds(now, ttl);
-      this.db.query(`
-          INSERT INTO handoffs (
-            id, workspace_id, task_id, from_actor, from_session_id,
-            to_actor, to_session_id, summary, status, offered_at, expires_at, resolved_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, NULL)
-        `).run(id, row.workspace_id, row.id, session.actor, session.id, target.actor, target.id, summary, now, expiresAt);
-      const version2 = row.version + 1;
-      this.db.query(`
-          UPDATE tasks SET version = ?, updated_at = ?
-          WHERE workspace_id = ? AND id = ?
-        `).run(version2, now, row.workspace_id, row.id);
-      const handoff = this.requireHandoff(id);
-      this.appendEvent(row.workspace_id, "handoff.offered", id, session.actor, {
-        handoff,
-        task_version: version2,
-        note: "The current session keeps its coordination lease until the target explicitly accepts."
-      }, session.id);
-      return { handoff, task: this.requireTask(row.workspace_id, row.id) };
-    });
-  }
-  respondHandoffForSession(input) {
-    const handoffId = validateId(input.handoff_id, "handoff_id");
-    const expectedVersion = validateExpectedVersion(input.expected_version);
-    if (input.response !== "accept" && input.response !== "decline") {
-      throw new CollabError("invalid_handoff_response", "Handoff response is invalid");
-    }
-    const ttl = validateTtl(input.ttl_seconds);
-    const request = {
-      handoff_id: handoffId,
-      expected_version: expectedVersion,
-      response: input.response,
-      ttl_seconds: ttl
-    };
-    const replay = this.readSessionMutationReceipt(input, input.idempotency_key, "handoff.respond.v2", request);
-    if (replay.found)
-      return replay.value;
-    const preparedCheckpoint = input.response === "accept" ? this.captureSessionWorktree(input) : null;
-    return this.mutateAsSession(input, input.idempotency_key, "handoff.respond.v2", request, (session) => {
-      const offer = this.requireHandoff(handoffId);
-      if (offer.workspace_id !== session.workspace_id || offer.to_session_id !== session.id) {
-        throw new CollabError("handoff_not_recipient", "Only the named target session may respond");
-      }
-      if (offer.status !== "pending") {
-        throw new CollabError(offer.status === "expired" ? "handoff_expired" : "handoff_resolved", "Handoff is no longer pending", { status: offer.status });
-      }
-      const row = this.requireTaskRow(session.workspace_id, offer.task_id);
-      this.requireVersion(row, expectedVersion);
-      if (this.timestamp() >= offer.expires_at || this.isExpired(row)) {
-        throw new CollabError("handoff_expired", "The offer or source lease expired");
-      }
-      if (row.assignee_session_id !== offer.from_session_id || row.lease_id === null) {
-        throw new CollabError("handoff_source_changed", "The source lease changed");
-      }
-      const now = this.timestamp();
-      const version2 = row.version + 1;
-      if (input.response === "decline") {
-        this.db.query(`
-            UPDATE handoffs SET status = 'declined', resolved_at = ? WHERE id = ?
-          `).run(now, offer.id);
-        this.db.query(`
-            UPDATE tasks SET version = ?, updated_at = ?
-            WHERE workspace_id = ? AND id = ?
-          `).run(version2, now, row.workspace_id, row.id);
-        this.appendEvent(row.workspace_id, "handoff.declined", offer.id, session.actor, {
-          task_id: row.id,
-          task_version: version2
-        }, session.id);
-      } else {
-        const worktree = this.requirePreparedWorktree(session, preparedCheckpoint);
-        const checkpoint = preparedCheckpoint.checkpoint;
-        this.requireExpectedBase(row, checkpoint);
-        const leaseId = `lease_${randomUUID4()}`;
-        const leaseExpiresAt = addSeconds(now, ttl);
-        this.db.query(`
-            UPDATE handoffs SET status = 'accepted', resolved_at = ? WHERE id = ?
-          `).run(now, offer.id);
-        this.db.query(`
-            UPDATE tasks
-            SET assignee = ?, assignee_session_id = ?, claim_worktree_id = ?,
-              lease_id = ?, lease_expires_at = ?, base_checkpoint_json = ?,
-              version = ?, updated_at = ?
-            WHERE workspace_id = ? AND id = ?
-          `).run(session.actor, session.id, worktree.id, leaseId, leaseExpiresAt, canonicalJson(checkpoint), version2, now, row.workspace_id, row.id);
-        this.appendEvent(row.workspace_id, "handoff.accepted", offer.id, session.actor, {
-          task_id: row.id,
-          from_session_id: offer.from_session_id,
-          to_session_id: session.id,
-          lease_id: leaseId,
-          lease_expires_at: leaseExpiresAt,
-          base_checkpoint: checkpoint,
-          task_version: version2
-        }, session.id);
-      }
-      return {
-        handoff: this.requireHandoff(offer.id),
-        task: this.requireTask(row.workspace_id, row.id)
-      };
-    });
-  }
-  nextForActor(workspaceId, actorInput, afterSequence = 0, eventLimit = DEFAULT_NEXT_EVENT_LIMIT) {
-    const actor = validateActor(actorInput);
-    const boundedEventLimit = validateNextEventLimit(eventLimit);
-    this.expireElapsedHandoffs(workspaceId, "system:clock");
-    const read = this.db.transaction(() => {
-      const events = this.readEventPage(workspaceId, afterSequence, boundedEventLimit);
-      const tasks = this.listTasks(workspaceId);
-      const offers = this.db.query(`
-        SELECT * FROM handoffs
-        WHERE workspace_id = ? AND to_actor = ? AND status = 'pending' AND expires_at > ?
-        ORDER BY offered_at, id
-      `).all(workspaceId, actor, this.timestamp());
-      const { claimable, conflicted } = this.projectAvailableTasks(workspaceId, tasks, (task) => task.effective_status === "lease_expired" && task.assignee_session_id === null);
-      const reportRows = this.db.query(`
-        SELECT * FROM reports
-        WHERE workspace_id = ? AND event_sequence > ? AND event_sequence <= ?
-        ORDER BY event_sequence
-      `).all(workspaceId, afterSequence, events.next_anchor.sequence);
-      return {
-        actor,
-        session: null,
-        own_claims: tasks.filter((task) => task.effective_status === "claimed" && task.assignee === actor),
-        ready_tasks: claimable,
-        claimable_tasks: claimable,
-        conflicted_tasks: conflicted,
-        handoff_offers: offers.map((row) => ({
-          handoff: handoffFromRow(row),
-          task: this.requireTask(workspaceId, row.task_id)
-        })),
-        recovery_required: recoveryRequiredFirst(tasks, () => false),
-        reports: reportRows.map(reportFromRow),
-        events,
-        projection_scope: "snapshot_head",
-        reports_scope: "event_page"
-      };
-    });
-    return read.deferred();
-  }
-  nextForSession(input) {
-    const authenticatedPoll = this.db.transaction(() => {
-      const authenticated = this.authenticateSession(input);
-      const stored = {
-        epoch_id: authenticated.cursor_epoch_id,
-        sequence: authenticated.cursor_sequence,
-        hash: authenticated.cursor_hash
-      };
-      try {
-        this.validateEventAnchor(authenticated.workspace_id, stored);
-      } catch (error51) {
-        if (error51 instanceof CollabError) {
-          throw new CollabError("cursor_reset_required", "The persisted session cursor no longer matches this journal", { cursor: stored, cause: error51.code });
-        }
-        throw error51;
-      }
-      if (input.known_cursor) {
-        const known = input.known_cursor;
-        try {
-          this.validateEventAnchor(authenticated.workspace_id, known);
-        } catch (error51) {
-          if (error51 instanceof CollabError) {
-            throw new CollabError("cursor_reset_required", "The caller's last-known cursor no longer matches this journal", { cursor: known, cause: error51.code });
-          }
-          throw error51;
-        }
-      }
-      if (input.after_sequence !== undefined) {
-        requireBoundAfterSequence(input.after_sequence, authenticated);
-      }
-      const eventLimit2 = validateNextEventLimit(input.event_limit);
-      this.recordSessionLeaseLapses(authenticated, this.timestamp());
-      const touchedAt = this.timestamp();
-      const away2 = this.awayBeforeTouch(authenticated.id, authenticated.last_seen_at, touchedAt);
-      this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(touchedAt, authenticated.id);
-      return {
-        row: this.requireCoordinationSessionRow(authenticated.id),
-        event_limit: eventLimit2,
-        away: away2
-      };
-    }).immediate();
-    const { row, event_limit: eventLimit } = authenticatedPoll;
-    const away = this.settleAway(row.id, authenticatedPoll.away);
-    this.expireElapsedHandoffs(row.workspace_id, "system:clock");
-    const read = this.db.transaction(() => {
-      const current = this.authenticateSession(input);
-      const events = this.readEventPage(current.workspace_id, current.cursor_sequence, eventLimit);
-      const tasks = this.listTasks(current.workspace_id);
-      const { claimable, conflicted } = this.projectAvailableTasks(current.workspace_id, tasks, () => false);
-      const handoffs = this.db.query(`
-        SELECT * FROM handoffs
-        WHERE workspace_id = ? AND to_session_id = ? AND status = 'pending' AND expires_at > ?
-        ORDER BY offered_at, id
-      `).all(current.workspace_id, current.id, this.timestamp());
-      const reportRows = this.db.query(`
-        SELECT * FROM reports
-        WHERE workspace_id = ? AND event_sequence > ? AND event_sequence <= ?
-          AND (to_session_id IS NULL OR to_session_id = ?)
-        ORDER BY event_sequence
-      `).all(current.workspace_id, current.cursor_sequence, events.next_anchor.sequence, current.id);
-      return {
-        actor: current.actor,
-        session: {
-          ...this.sessionProjection(current),
-          addressed_waiting: this.addressedWaiting(current)
-        },
-        own_claims: tasks.filter((task) => task.effective_status === "claimed" && task.assignee_session_id === current.id),
-        ready_tasks: claimable,
-        claimable_tasks: claimable,
-        conflicted_tasks: conflicted,
-        handoff_offers: handoffs.map((handoff) => ({
-          handoff: handoffFromRow(handoff),
-          task: this.requireTask(current.workspace_id, handoff.task_id)
-        })),
-        recovery_required: recoveryRequiredFirst(tasks, (task) => task.assignee_session_id === current.id),
-        reports: reportRows.map(reportFromRow),
-        events,
-        projection_scope: "snapshot_head",
-        reports_scope: "event_page",
-        away_ms: away.away_ms,
-        away_since: away.away_since
-      };
-    });
-    return read.deferred();
-  }
-  eventsSince(workspaceId, afterSequence = 0, limit = 100) {
-    if (!Number.isInteger(afterSequence) || afterSequence < 0) {
-      throw new CollabError("invalid_cursor", "Event cursor must be a non-negative integer");
-    }
-    if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
-      throw new CollabError("invalid_limit", "Event limit must be between 1 and 500");
-    }
-    const readPage = this.db.transaction(() => this.readEventPage(workspaceId, afterSequence, limit));
-    return readPage.deferred();
-  }
-  eventsAfterAnchorForSession(input) {
-    const limit = validateNextEventLimit(input.event_limit ?? DEFAULT_WAIT_EVENT_LIMIT);
-    try {
-      const db = this.nonblockingEventReader();
-      const authenticateRead = () => {
-        const session = this.authenticateSession(input, {}, db);
-        if (session.workspace_id !== input.workspace_id) {
-          throw new CollabError("session_workspace_mismatch", "The bound session belongs to another workspace");
-        }
-        const stored = {
-          epoch_id: session.cursor_epoch_id,
-          sequence: session.cursor_sequence,
-          hash: session.cursor_hash
-        };
-        try {
-          this.validateEventAnchor(session.workspace_id, stored, db, MAX_WAIT_ANCHOR_BYTES);
-          if (input.last_cursor) {
-            const known = this.validateEventAnchor(session.workspace_id, input.last_cursor, db, MAX_WAIT_ANCHOR_BYTES);
-            if (known.sequence > stored.sequence) {
-              throw new CollabError("cursor_regression", "The persisted cursor is behind the host cursor");
-            }
-          }
-        } catch (error51) {
-          if (!(error51 instanceof CollabError))
-            throw error51;
-          if (error51.code === "event_anchor_too_large")
-            throw error51;
-          throw new CollabError("cursor_reset_required", "The session cursor requires explicit reconciliation", { cause: error51.code });
-        }
-        return session;
-      };
-      const page = db.transaction(() => {
-        const session = authenticateRead();
-        const anchor = this.validateEventAnchor(session.workspace_id, input.after_anchor, db, MAX_WAIT_ANCHOR_BYTES);
-        const page2 = this.readEventPage(session.workspace_id, anchor.sequence, limit, db, MAX_WAIT_PAGE_BYTES);
-        if (!page2.chain_valid || page2.events.some((event) => event.epoch_id !== anchor.epoch_id || event.workspace_id !== session.workspace_id || event.sequence > page2.head_sequence)) {
-          throw new CollabError("database_journal_invalid", "The returned event page failed hash-chain verification");
-        }
-        return page2;
-      }).deferred();
-      db.transaction(() => {
-        const current = authenticateRead();
-        this.validateEventAnchor(current.workspace_id, page.next_anchor, db, MAX_WAIT_ANCHOR_BYTES);
-        const workspace = this.requireWorkspace(current.workspace_id, db);
-        if (workspace.event_head_sequence < page.head_sequence) {
-          throw new CollabError("cursor_ahead", "The journal rolled back during observation");
-        }
-        const observedHead = page.head_sequence === 0 ? { hash: GENESIS_HASH } : db.query("SELECT hash FROM events WHERE workspace_id = ? AND sequence = ?").get(current.workspace_id, page.head_sequence);
-        if (observedHead?.hash !== page.head_hash || workspace.event_head_sequence === page.head_sequence && workspace.event_head_hash !== page.head_hash) {
-          throw new CollabError("cursor_fork_detected", "The observed journal head changed during observation");
-        }
-      }).deferred();
-      return page;
-    } catch (error51) {
-      const code = error51?.code;
-      if (code?.startsWith("SQLITE_BUSY") || code?.startsWith("SQLITE_LOCKED")) {
-        throw new CollabError("event_read_busy", "The journal is busy; no page was returned");
-      }
-      if (error51 instanceof SyntaxError || code === "SQLITE_CORRUPT" || code === "SQLITE_NOTADB") {
-        throw new CollabError("database_journal_invalid", "The journal contains malformed event data");
-      }
-      throw error51;
-    }
-  }
-  requireEventByteBound(db, workspaceId, sequence, maxBytes, purpose = "page") {
-    const row = db.query(`
-      SELECT length(CAST(payload_json AS BLOB)) + length(CAST(actor AS BLOB))
-        + length(CAST(entity_id AS BLOB)) + length(CAST(id AS BLOB))
-        + length(CAST(epoch_id AS BLOB)) + length(CAST(workspace_id AS BLOB))
-        + length(CAST(type AS BLOB)) + length(CAST(protocol AS BLOB))
-        + length(CAST(occurred_at AS BLOB)) + length(CAST(prev_hash AS BLOB))
-        + length(CAST(hash AS BLOB)) + coalesce(length(CAST(session_id AS BLOB)), 0) AS bytes
-      FROM events WHERE workspace_id = ? AND sequence = ?
-    `).get(workspaceId, sequence);
-    if (row && row.bytes > maxBytes) {
-      if (purpose === "anchor") {
-        throw new CollabError("event_anchor_too_large", "An anchor exceeds the bounded validation ceiling; operator reconciliation is required", {
-          sequence,
-          max_anchor_bytes: maxBytes
-        });
-      }
-      throw new CollabError("event_too_large", "An event exceeds the bounded observation page; use an explicit larger-read workflow", {
-        sequence,
-        max_page_bytes: maxBytes
-      });
-    }
-  }
-  readEventPage(workspaceId, afterSequence, limit, db = this.db, maxBytes) {
-    if (!Number.isInteger(afterSequence) || afterSequence < 0) {
-      throw new CollabError("invalid_cursor", "Event cursor must be a non-negative integer");
-    }
-    if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
-      throw new CollabError("invalid_limit", "Event limit must be between 1 and 500");
-    }
-    const workspace = this.requireWorkspace(workspaceId, db);
-    if (afterSequence > workspace.event_head_sequence) {
-      throw new CollabError("invalid_cursor", "Event cursor is ahead of the workspace journal", {
-        after_sequence: afterSequence,
-        head_sequence: workspace.event_head_sequence
-      });
-    }
-    const predecessor = afterSequence === 0 ? { hash: GENESIS_HASH } : db.query(`SELECT hash FROM events WHERE workspace_id = ? AND sequence = ?`).get(workspaceId, afterSequence);
-    if (!predecessor) {
-      throw new CollabError("cursor_mismatch", "The cursor does not resolve to an event in this journal", { after_sequence: afterSequence });
-    }
-    const select = `SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
-      session_id, occurred_at, payload_json, prev_hash, hash FROM events`;
-    let events;
-    if (maxBytes === undefined) {
-      const rows = db.query(`${select} WHERE workspace_id = ? AND sequence > ? ORDER BY sequence LIMIT ?`).all(workspaceId, afterSequence, limit);
-      events = rows.map(eventFromRow);
-    } else {
-      events = [];
-      let bytes = 2048;
-      const sequences = db.query(`SELECT sequence FROM events WHERE workspace_id = ? AND sequence > ? ORDER BY sequence LIMIT ?`).all(workspaceId, afterSequence, limit);
-      for (const { sequence } of sequences) {
-        try {
-          this.requireEventByteBound(db, workspaceId, sequence, maxBytes);
-        } catch (error51) {
-          if (events.length && error51 instanceof CollabError && error51.code === "event_too_large")
-            break;
-          throw error51;
-        }
-        const event = eventFromRow(db.query(`${select} WHERE workspace_id = ? AND sequence = ?`).get(workspaceId, sequence));
-        const size = Buffer.byteLength(JSON.stringify(event)) + 1;
-        if (bytes + size > maxBytes) {
-          if (events.length)
-            break;
-          throw new CollabError("event_too_large", "An event exceeds the bounded observation page", {
-            sequence,
-            max_page_bytes: maxBytes
-          });
-        }
-        events.push(event);
-        bytes += size;
-      }
-    }
-    const chainValid = verifyEventPage(events, afterSequence, predecessor.hash, workspace.event_head_sequence, workspace.event_head_hash);
-    const cursor = {
-      epoch_id: workspace.epoch_id,
-      sequence: afterSequence,
-      hash: predecessor.hash
-    };
-    const last = events.at(-1);
-    const nextAnchor = last ? { epoch_id: last.epoch_id, sequence: last.sequence, hash: last.hash } : cursor;
-    const page = {
-      events,
-      next_cursor: nextAnchor.sequence,
-      cursor,
-      next_anchor: nextAnchor,
-      head_sequence: workspace.event_head_sequence,
-      head_hash: workspace.event_head_hash,
-      has_more: nextAnchor.sequence < workspace.event_head_sequence,
-      chain_valid: chainValid,
-      verification_scope: "returned_page"
-    };
-    if (maxBytes !== undefined && Buffer.byteLength(JSON.stringify(page)) > maxBytes) {
-      throw new CollabError("event_page_too_large", "The observation page exceeds its byte limit");
-    }
-    return page;
-  }
-  eventsAfterAnchor(workspaceId, anchor, limit = 100) {
-    const validated = this.validateEventAnchor(workspaceId, anchor);
-    return this.eventsSince(workspaceId, validated.sequence, limit);
-  }
-  proposalAddressesSession(proposalReportId, sessionId) {
-    const row = this.db.query(`
-      SELECT r.from_session_id, t.voices_json, t.author_voice_id FROM reports r
-      JOIN proposal_terms t ON t.report_id = r.id WHERE r.id = ?
-    `).get(proposalReportId);
-    if (!row)
-      return false;
-    if (row.from_session_id !== null)
-      return row.from_session_id === sessionId;
-    return JSON.parse(row.voices_json).some((voice) => voice.voice_id !== row.author_voice_id && voice.live_session_ids.includes(sessionId));
-  }
-  setAsideAddressesChallenger(challenger, sessionId) {
-    if (challenger === null || typeof challenger !== "object")
-      return false;
-    const { voice_id: voice, session_ids: sessions } = challenger;
-    if (Array.isArray(sessions) && sessions.includes(sessionId))
-      return true;
-    return typeof voice === "string" && this.consentVoice(sessionId) === voice;
-  }
-  eventAddressesSession(event, sessionId) {
-    if (event.session_id === sessionId)
-      return false;
-    const payload = event.payload ?? {};
-    const field = (value, key) => value !== null && typeof value === "object" ? value[key] : undefined;
-    switch (event.type) {
-      case "report.posted": {
-        if (payload.to_session_id === sessionId)
-          return true;
-        if (typeof payload.about_proposal_id === "string") {
-          return this.proposalAddressesSession(payload.about_proposal_id, sessionId);
-        }
-        if (typeof payload.target_report_id !== "string")
-          return false;
-        const target = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`).get(payload.target_report_id);
-        return target?.from_session_id === sessionId && typeof payload.to_session_id !== "string";
-      }
-      case "handoff.offered":
-        return field(payload.handoff, "to_session_id") === sessionId;
-      case "handoff.accepted":
-      case "handoff.declined":
-      case "handoff.expired": {
-        if (event.type === "handoff.expired" && !handoffExpiryIsNewsToOfferer(payload.reason))
-          return false;
-        const offer = this.db.query(`SELECT from_session_id FROM handoffs WHERE id = ?`).get(event.entity_id);
-        return offer?.from_session_id === sessionId;
-      }
-      case "task.reported_complete":
-        return payload.review_requested_session_id === sessionId;
-      case "task.accepted":
-      case "task.changes_requested": {
-        if (typeof payload.completion_report_id === "string") {
-          const completion = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`).get(payload.completion_report_id);
-          return completion?.from_session_id === sessionId;
-        }
-        const task = this.db.query(`SELECT reported_by_session_id FROM tasks WHERE workspace_id = ? AND id = ?`).get(event.workspace_id, event.entity_id);
-        return task?.reported_by_session_id === sessionId;
-      }
-      case "task.recovered":
-        return field(payload.prior_lease, "session_id") === sessionId;
-      case "proposal.opened": {
-        const voices = Array.isArray(payload.voices) ? payload.voices : [];
-        return voices.some((voice) => field(voice, "voice_id") !== payload.author_voice_id && Array.isArray(field(voice, "live_session_ids")) && field(voice, "live_session_ids").includes(sessionId));
-      }
-      case "proposal.agreed":
-      case "proposal.rejected":
-        return this.proposalAddressesSession(event.entity_id, sessionId);
-      case "proposal.challenge_set_aside":
-        return this.proposalAddressesSession(event.entity_id, sessionId) || this.setAsideAddressesChallenger(field(payload.set_aside, "challenger"), sessionId);
-      case "ballot.opened": {
-        const electorate = Array.isArray(payload.electorate) ? payload.electorate : [];
-        const listed = (key, value) => electorate.some((unit) => Array.isArray(field(unit, key)) && field(unit, key).includes(value));
-        return listed("session_ids", sessionId) || listed("voice_ids", this.consentVoice(sessionId));
-      }
-      case "ballot.closed": {
-        const opener = this.db.query(`
-          SELECT json_extract(payload_json, '$.opener_session_id') AS opener FROM events
-          WHERE workspace_id = ? AND type = 'ballot.opened' AND entity_id = ?
-        `).get(event.workspace_id, event.entity_id);
-        if (opener?.opener === sessionId)
-          return true;
-        return this.db.query(`
-          SELECT 1 FROM events WHERE workspace_id = ? AND type = 'ballot.cast' AND entity_id = ? AND session_id = ? LIMIT 1
-        `).get(event.workspace_id, event.entity_id, sessionId) !== null;
-      }
-      default:
-        return false;
-    }
-  }
-  verifyJournal(workspaceId) {
-    const audit = this.db.transaction(() => {
-      this.requireWorkspace(workspaceId);
-      return this.verifyJournalRows(workspaceId);
-    });
-    return audit.deferred();
-  }
-  verifyJournalDetails(workspaceId, expected = {}) {
-    if (expected.expected_root !== undefined && !/^[0-9a-f]{64}$/.test(expected.expected_root)) {
-      throw new CollabError("invalid_expected_root", "expected_root must be 64 lowercase hexadecimal characters");
-    }
-    if (expected.expected_tree_size !== undefined && (!Number.isSafeInteger(expected.expected_tree_size) || expected.expected_tree_size < 0)) {
-      throw new CollabError("invalid_expected_tree_size", "expected_tree_size must be a non-negative safe integer");
-    }
-    const audit = this.db.transaction(() => {
-      const workspace = this.requireWorkspace(workspaceId);
-      const rows = this.db.query(`
-        SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
-          session_id, occurred_at, payload_json, prev_hash, hash
-        FROM events WHERE workspace_id = ? ORDER BY sequence
-      `).all(workspaceId);
-      let expectedSequence = 1;
-      let previous = GENESIS_HASH;
-      let chainValid = true;
-      const eventHashes = [];
-      try {
-        for (const row of rows) {
-          const event = eventFromRow(row);
-          if (event.epoch_id !== workspace.epoch_id || event.sequence !== expectedSequence || event.prev_hash !== previous || event.hash !== eventHash(event)) {
-            chainValid = false;
-            break;
-          }
-          eventHashes.push(event.hash);
-          previous = event.hash;
-          expectedSequence += 1;
-        }
-      } catch {
-        chainValid = false;
-      }
-      if (chainValid && (workspace.event_head_sequence !== rows.length || workspace.event_head_hash !== previous)) {
-        chainValid = false;
-      }
-      const merkleRoot = chainValid ? journalMerkleRoot(workspace.epoch_id, eventHashes) : null;
-      const result = {
-        workspace_id: workspace.id,
-        chain_valid: chainValid,
-        verification_scope: "full_journal",
-        epoch_id: workspace.epoch_id,
-        tree_size: rows.length,
-        merkle_root: merkleRoot
-      };
-      if (expected.expected_root !== undefined) {
-        result.expected_root = expected.expected_root;
-        result.root_matches = chainValid && merkleRoot === expected.expected_root;
-      }
-      if (expected.expected_tree_size !== undefined) {
-        result.expected_tree_size = expected.expected_tree_size;
-        result.tree_size_matches = chainValid && rows.length === expected.expected_tree_size;
-      }
-      return result;
-    });
-    return audit.deferred();
-  }
-  journalProof(input) {
-    const read = this.db.transaction(() => {
-      const workspace = this.requireWorkspace(input.workspace_id);
-      const headSeq = workspace.event_head_sequence;
-      let targetSize;
-      let sequence = null;
-      let fromSize = null;
-      if (input.kind === "root") {
-        if (input.sequence !== undefined || input.from_size !== undefined || input.to_size !== undefined) {
-          throw new CollabError("invalid_proof_request", "kind 'root' accepts only workspace_id and optional tree_size");
-        }
-        targetSize = input.tree_size ?? headSeq;
-        if (!Number.isSafeInteger(targetSize) || targetSize < 0 || targetSize > headSeq) {
-          throw new CollabError("tree_size_out_of_range", `tree_size must be an integer between 0 and head_sequence (${headSeq})`, { head_sequence: headSeq });
-        }
-      } else if (input.kind === "inclusion") {
-        if (input.from_size !== undefined || input.to_size !== undefined) {
-          throw new CollabError("invalid_proof_request", "kind 'inclusion' accepts workspace_id, sequence, and optional tree_size");
-        }
-        targetSize = input.tree_size ?? headSeq;
-        if (!Number.isSafeInteger(targetSize) || targetSize < 1 || targetSize > headSeq) {
-          throw new CollabError("tree_size_out_of_range", `tree_size for inclusion must be an integer between 1 and head_sequence (${headSeq})`, { head_sequence: headSeq });
-        }
-        if (input.sequence === undefined || !Number.isSafeInteger(input.sequence) || input.sequence < 1 || input.sequence > targetSize) {
-          throw new CollabError("sequence_out_of_range", `sequence must be an integer between 1 and tree_size (${targetSize})`, { tree_size: targetSize, head_sequence: headSeq });
-        }
-        sequence = input.sequence;
-      } else if (input.kind === "consistency") {
-        if (input.sequence !== undefined || input.tree_size !== undefined) {
-          throw new CollabError("invalid_proof_request", "kind 'consistency' accepts workspace_id, from_size, and optional to_size");
-        }
-        targetSize = input.to_size ?? headSeq;
-        if (!Number.isSafeInteger(targetSize) || targetSize < 0 || targetSize > headSeq) {
-          throw new CollabError("tree_size_out_of_range", `to_size must be an integer between 0 and head_sequence (${headSeq})`, { head_sequence: headSeq });
-        }
-        if (input.from_size === undefined || !Number.isSafeInteger(input.from_size) || input.from_size < 0 || input.from_size > targetSize) {
-          throw new CollabError("invalid_proof_request", `from_size must be an integer between 0 and to_size (${targetSize})`, { to_size: targetSize, head_sequence: headSeq });
-        }
-        fromSize = input.from_size;
-      } else {
-        throw new CollabError("invalid_proof_request", `Unsupported proof kind: ${String(input.kind)}`);
-      }
-      const rows = targetSize === 0 ? [] : this.db.query(`
-            SELECT epoch_id, sequence, hash
-            FROM events
-            WHERE workspace_id = ? AND sequence <= ?
-            ORDER BY sequence
-          `).all(workspace.id, targetSize);
-      if (rows.length !== targetSize) {
-        throw new CollabError("database_journal_invalid", "Workspace event sequence is not contiguous up to requested tree_size", { workspace_id: workspace.id, expected: targetSize, found: rows.length });
-      }
-      const eventHashes = new Array(targetSize);
-      for (let i = 0;i < targetSize; i += 1) {
-        const row = rows[i];
-        if (row.sequence !== i + 1 || row.epoch_id !== workspace.epoch_id || !/^[0-9a-f]{64}$/.test(row.hash)) {
-          throw new CollabError("database_journal_invalid", "Workspace event row failed epoch, sequence, or hash invariant", { workspace_id: workspace.id, sequence: i + 1 });
-        }
-        eventHashes[i] = row.hash;
-      }
-      const headHash = targetSize === 0 ? GENESIS_HASH : eventHashes[targetSize - 1];
-      if (targetSize === headSeq && headHash !== workspace.event_head_hash) {
-        throw new CollabError("database_journal_invalid", "Workspace head hash does not match the last stored event hash", { workspace_id: workspace.id });
-      }
-      if (input.kind === "root") {
-        return {
-          workspace_id: workspace.id,
-          kind: "root",
-          epoch_id: workspace.epoch_id,
-          tree_size: targetSize,
-          root: journalMerkleRoot(workspace.epoch_id, eventHashes),
-          head_hash: headHash,
-          head_sequence: headSeq
-        };
-      }
-      if (input.kind === "inclusion") {
-        const proof2 = proveJournalInclusion(workspace.epoch_id, eventHashes, sequence, targetSize);
-        return {
-          workspace_id: workspace.id,
-          kind: "inclusion",
-          ...proof2,
-          head_hash: headHash,
-          head_sequence: headSeq
-        };
-      }
-      const proof = proveJournalConsistency(workspace.epoch_id, eventHashes, fromSize, targetSize);
-      return {
-        workspace_id: workspace.id,
-        kind: "consistency",
-        ...proof,
-        tree_size: targetSize,
-        root: proof.to_root,
-        head_hash: headHash,
-        head_sequence: headSeq
-      };
-    });
-    return read.deferred();
-  }
-  verifyJournalRows(workspaceId) {
-    const workspace = this.getWorkspace(workspaceId);
-    if (!workspace)
-      return false;
-    const rows = this.db.query(`
-      SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
-        session_id, occurred_at, payload_json, prev_hash, hash
-      FROM events WHERE workspace_id = ? ORDER BY sequence
-    `).all(workspaceId);
-    let expectedSequence = 1;
-    let previous = GENESIS_HASH;
-    try {
-      for (const row of rows) {
-        const event = eventFromRow(row);
-        if (event.sequence !== expectedSequence || event.prev_hash !== previous)
-          return false;
-        if (event.hash !== eventHash(event))
-          return false;
-        previous = event.hash;
-        expectedSequence += 1;
-      }
-    } catch {
-      return false;
-    }
-    return workspace.event_head_sequence === rows.length && workspace.event_head_hash === previous;
-  }
-  mutate(workspaceId, actor, idempotencyKey, operation, request, apply) {
-    this.requireWorkspace(workspaceId);
-    const requestHash = sha2564(canonicalJson({ operation, request }));
-    const transaction = this.db.transaction(() => {
-      const existing = this.db.query(`
-        SELECT operation, request_hash, response_json FROM mutations
-        WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
-      `).get(workspaceId, actor, idempotencyKey);
-      if (existing) {
-        if (existing.operation !== operation || existing.request_hash !== requestHash) {
-          throw new CollabError("idempotency_conflict", "Idempotency key was already used for a different mutation", {
-            operation: existing.operation
-          });
-        }
-        return hydrateLegacyMutationResponse(JSON.parse(existing.response_json), this.timestamp());
-      }
-      const response2 = apply();
-      this.db.query(`
-        INSERT INTO mutations
-          (workspace_id, actor, idempotency_key, operation, request_hash, response_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(workspaceId, actor, idempotencyKey, operation, requestHash, JSON.stringify(response2), this.timestamp());
-      return response2;
-    });
-    const response = transaction.immediate();
-    this.tightenFileModes();
-    return response;
-  }
-  readSessionMutationReceipt(credential, idempotencyKeyInput, operation, request) {
-    const session = this.authenticateSession(credential);
-    const idempotencyKey = validateIdempotencyKey(idempotencyKeyInput);
-    const requestHash = sha2564(canonicalJson({ operation, request }));
-    const existing = this.db.query(`
-      SELECT operation, request_hash, response_json FROM mutations
-      WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
-    `).get(session.workspace_id, `session:${session.id}`, idempotencyKey);
-    if (!existing)
-      return { found: false };
-    if (existing.operation !== operation || existing.request_hash !== requestHash) {
-      throw new CollabError("idempotency_conflict", "Idempotency key was already used for a different session mutation", { operation: existing.operation });
-    }
-    return {
-      found: true,
-      value: JSON.parse(existing.response_json)
-    };
-  }
-  mutateAsSession(credential, idempotencyKeyInput, operation, request, apply, options = {}) {
-    const idempotencyKey = validateIdempotencyKey(idempotencyKeyInput);
-    const transaction = this.db.transaction(() => {
-      const session = this.authenticateSession(credential, options);
-      this.recordSessionLeaseLapses(session, this.timestamp());
-      const mutationActor = `session:${session.id}`;
-      const requestHash = sha2564(canonicalJson({ operation, request }));
-      const existing = this.db.query(`
-        SELECT operation, request_hash, response_json FROM mutations
-        WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
-      `).get(session.workspace_id, mutationActor, idempotencyKey);
-      if (existing) {
-        if (existing.operation !== operation || existing.request_hash !== requestHash) {
-          throw new CollabError("idempotency_conflict", "Idempotency key was already used for a different session mutation", { operation: existing.operation });
-        }
-        this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
-        return JSON.parse(existing.response_json);
-      }
-      const receiptPlan = options.receipt_plan ?? this.ambientPlanFor(idempotencyKey);
-      if (receiptPlan)
-        this.requireReceiptPlan(session, receiptPlan);
-      this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
-      const guardNonce = `guard_${randomUUID4()}`;
-      this.db.query(`INSERT INTO v2_write_guard (nonce, enabled) VALUES (?, 1)`).run(guardNonce);
-      try {
-        const response2 = apply(session);
-        this.db.query(`
-          INSERT INTO mutations (
-            workspace_id, actor, idempotency_key, operation,
-            request_hash, response_json, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(session.workspace_id, mutationActor, idempotencyKey, operation, requestHash, JSON.stringify(response2), this.timestamp());
-        return response2;
-      } finally {
-        this.db.query(`DELETE FROM v2_write_guard WHERE nonce = ?`).run(guardNonce);
-      }
-    });
-    const response = transaction.immediate();
-    this.tightenFileModes();
-    return response;
-  }
-  authenticateSession(input, options = {}, db = this.db) {
-    let id;
-    try {
-      id = validateId(input.session_id, "session_id");
-    } catch {
-      throw new CollabError("session_auth_failed", "Session credentials are invalid");
-    }
-    const row = db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(id);
-    const suppliedHash = hashSessionToken(typeof input.session_token === "string" ? input.session_token : "");
-    const expectedHash = row?.token_hash ?? "0".repeat(64);
-    const tokenMatches = safeDigestEqual(suppliedHash, expectedHash);
-    const generationMatches = Number.isInteger(input.generation) && row !== null && input.generation === row.generation;
-    if (!row || !tokenMatches || !generationMatches || row.status !== "active") {
-      throw new CollabError("session_auth_failed", "Session credentials are invalid");
-    }
-    if (row.cursor_recovery_required !== 0 && !options.allow_cursor_recovery) {
-      throw new CollabError("cursor_recovery_required", "Reset this session to an exact journal anchor before further mutations", {
-        persisted_cursor: {
-          epoch_id: row.cursor_epoch_id,
-          sequence: row.cursor_sequence,
-          hash: row.cursor_hash
-        },
-        expected_cursor_version: row.cursor_version
-      });
-    }
-    return row;
-  }
-  authenticateResumeToken(sessionId, token) {
-    const row = this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(sessionId);
-    const suppliedHash = hashSessionToken(typeof token === "string" ? token : "");
-    const expectedHash = row?.token_hash ?? "0".repeat(64);
-    if (!row || !safeDigestEqual(suppliedHash, expectedHash) || row.status !== "active") {
-      throw new CollabError("session_auth_failed", "Session credentials are invalid");
-    }
-    return row;
-  }
-  captureSessionWorktree(input) {
-    const session = this.authenticateSession(input);
-    const worktree = this.requireWorktreeRow(session.worktree_id);
-    return this.captureRegisteredWorktree(session, worktree);
-  }
-  captureReviewCheckpoint(input, taskId) {
-    const session = this.authenticateSession(input);
-    const task = this.requireTaskRow(session.workspace_id, taskId);
-    if (task.completion_policy !== "accepted" || task.review_status !== "pending")
-      return null;
-    const resultCheckpoint = parseCheckpoint(task.result_checkpoint_json);
-    if (resultCheckpoint?.source !== "server_observed")
-      return null;
-    const worktree = this.requireWorktreeRow(resultCheckpoint.worktree_id);
-    if (worktree.workspace_id !== session.workspace_id) {
-      throw new CollabError("checkpoint_workspace_mismatch", "The completion checkpoint belongs to another workspace");
-    }
-    const observedWorktree = this.captureRegisteredWorktree(session, worktree);
-    const resultHead = resultCheckpoint.head_sha;
-    const observedHead = observedWorktree.checkpoint.head_sha;
-    return {
-      workspace_id: session.workspace_id,
-      task_id: taskId,
-      result_checkpoint: resultCheckpoint,
-      observed_worktree: observedWorktree,
-      host_commit: resultHead && observedHead && observedHead !== resultHead ? inspectSuccessorCommit(worktree.root_path, observedHead, resultHead) : null
-    };
-  }
-  hostCommitSuccessorBasis(row, prepared) {
-    const result = prepared.result_checkpoint;
-    const observed = prepared.observed_worktree.checkpoint;
-    const inspected = prepared.host_commit;
-    if (observed.head_sha === result.head_sha) {
-      return {
-        refusal: "HEAD has not moved since the result checkpoint, so only an exact checkpoint match is accepted"
-      };
-    }
-    if (observed.worktree_id !== result.worktree_id) {
-      return { refusal: "The observed worktree is not the result checkpoint's worktree" };
-    }
-    if (!result.branch) {
-      return {
-        refusal: "The result checkpoint was captured on a detached HEAD, so no branch can carry a host commit"
-      };
-    }
-    if (observed.branch !== result.branch) {
-      const where = observed.branch ? `branch "${observed.branch}"` : "a detached HEAD";
-      return {
-        refusal: `HEAD is on ${where}, not the result checkpoint's branch "${result.branch}"`
-      };
-    }
-    if (observed.dirty !== false) {
-      return { refusal: "The observed worktree is not clean" };
-    }
-    if (!inspected || inspected.commit_sha !== observed.head_sha) {
-      return { refusal: "The server did not inspect the observed HEAD commit" };
-    }
-    if (!inspected.ok)
-      return { refusal: inspected.reason };
-    const commit = inspected.commit_sha;
-    if (inspected.parent_sha !== result.head_sha) {
-      return { refusal: `Commit ${commit} does not follow the result checkpoint HEAD` };
-    }
-    if (inspected.changes.length === 0) {
-      return { refusal: `Commit ${commit} changes no path` };
-    }
-    const scopes = parseStringArray(row.path_scopes_json);
-    const rejectedThrough = this.db.query(`
-      SELECT COALESCE(MAX(sequence), 0) AS sequence FROM events
-      WHERE workspace_id = ? AND entity_id = ? AND type = 'task.changes_requested'
-    `).get(row.workspace_id, row.id).sequence;
-    const artifacts = this.db.query(`
-      SELECT a.id, a.uri, a.sha256 FROM artifacts a
-      JOIN events e
-        ON e.workspace_id = a.workspace_id AND e.entity_id = a.task_id
-        AND e.type = 'artifact.attached' AND json_extract(e.payload_json, '$.artifact.id') = a.id
-      WHERE a.workspace_id = ? AND a.task_id = ? AND a.kind = 'file' AND e.sequence > ?
-      ORDER BY e.sequence
-    `).all(row.workspace_id, row.id, rejectedThrough);
-    const newest = new Map;
-    for (const artifact of artifacts) {
-      const path = artifactRepositoryPath(artifact.uri, prepared.observed_worktree.root_path);
-      if (path !== null)
-        newest.set(path, artifact);
-    }
-    const artifactIds = [];
-    for (const change of inspected.changes) {
-      if (!pathWithinScopes(change.path, scopes)) {
-        return { refusal: `Commit ${commit} changes ${change.path}, outside the task's path_scopes` };
-      }
-      if (change.blob_sha256 === null) {
-        return {
-          refusal: `Commit ${commit} deletes ${change.path} or commits it as something other than a regular file`
-        };
-      }
-      const artifact = newest.get(change.path);
-      if (!artifact) {
-        const since = rejectedThrough > 0 ? " since its latest request_changes" : "";
-        return { refusal: `No file artifact attached to this task${since} names ${change.path}` };
-      }
-      if (!artifact.sha256) {
-        return {
-          refusal: `The newest file artifact for ${change.path} (${artifact.id}) has no sha256`
-        };
-      }
-      if (artifact.sha256 !== change.blob_sha256) {
-        return {
-          refusal: `The committed bytes of ${change.path} differ from its newest file artifact ${artifact.id}`
-        };
-      }
-      artifactIds.push(artifact.id);
-    }
-    return { commit_sha: commit, artifact_ids: artifactIds };
-  }
-  captureRegisteredWorktree(session, worktree) {
-    let identity;
-    try {
-      identity = inspectRepository(worktree.root_path);
-    } catch (error51) {
-      throw new CollabError("worktree_unavailable", "The registered worktree could not be inspected", {
-        worktree_id: worktree.id,
-        cause: error51 instanceof CollabError ? error51.code : "repository_inspection_failed"
-      });
-    }
-    if (identity.root_path !== worktree.root_path || identity.checkpoint.worktree_id !== worktree.id || identity.worktree_fingerprint !== worktree.fingerprint || identity.git_common_dir_hash !== worktree.git_common_dir_hash) {
-      throw new CollabError("worktree_identity_changed", "The registered path now resolves to a different worktree identity", { worktree_id: worktree.id });
-    }
-    return {
-      session_id: session.id,
-      workspace_id: session.workspace_id,
-      worktree_id: worktree.id,
-      root_path: worktree.root_path,
-      fingerprint: worktree.fingerprint,
-      git_common_dir_hash: worktree.git_common_dir_hash,
-      checkpoint: identity.checkpoint
-    };
-  }
-  requirePreparedWorktree(session, prepared) {
-    if (prepared.session_id !== session.id || prepared.worktree_id !== session.worktree_id) {
-      throw new CollabError("worktree_observation_stale", "The prepared worktree observation belongs to another session");
-    }
-    return this.requirePreparedRegisteredWorktree(session.workspace_id, session.worktree_id, prepared);
-  }
-  requirePreparedRegisteredWorktree(workspaceId, worktreeId2, prepared) {
-    const row = this.requireWorktreeRow(worktreeId2);
-    if (prepared.workspace_id !== workspaceId || prepared.worktree_id !== row.id || prepared.root_path !== row.root_path || prepared.fingerprint !== row.fingerprint || prepared.git_common_dir_hash !== row.git_common_dir_hash || row.workspace_id !== workspaceId) {
-      throw new CollabError("worktree_observation_stale", "The registered worktree changed after it was inspected", { worktree_id: worktreeId2 });
-    }
-    this.touchWorktree(row, prepared.checkpoint, this.timestamp());
-    return row;
-  }
-  requireExpectedBase(row, checkpoint) {
-    if (row.expected_base_sha && checkpoint.head_sha !== row.expected_base_sha) {
-      throw new CollabError("expected_base_mismatch", "The worktree HEAD does not match the task's required base", {
-        expected_base_sha: row.expected_base_sha,
-        observed_head_sha: checkpoint.head_sha,
-        worktree_id: checkpoint.worktree_id
-      });
-    }
-  }
-  sessionHandle(row, token, workspace, worktreeRow) {
-    return {
-      workspace,
-      worktree: worktreeFromRow(worktreeRow),
-      session: this.sessionProjection(row),
-      credential: {
-        session_id: row.id,
-        session_token: token,
-        generation: row.generation,
-        last_cursor: {
-          epoch_id: row.cursor_epoch_id,
-          sequence: row.cursor_sequence,
-          hash: row.cursor_hash
-        }
-      },
-      identity_boundary: "session_credentials_fence_cooperating_local_clients_but_do_not_authenticate_a_person_or_model"
-    };
-  }
-  registerWorktree(workspaceId, identity, now, actor, emitEvent) {
-    this.db.query(`INSERT OR IGNORE INTO repositories (key, created_at) VALUES (?, ?)`).run(identity.repository_key, now);
-    this.db.query(`
-      INSERT INTO worktrees (
-        id, workspace_id, repository_key, root_path, git_common_dir_hash, fingerprint,
-        branch, head_sha, dirty, registered_at, last_seen_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(identity.checkpoint.worktree_id, workspaceId, identity.repository_key, identity.root_path, identity.git_common_dir_hash, identity.worktree_fingerprint, identity.checkpoint.branch, identity.checkpoint.head_sha, booleanToSql(identity.checkpoint.dirty), now, now);
-    const row = this.requireWorktreeRow(identity.checkpoint.worktree_id);
-    if (emitEvent) {
-      this.appendEvent(workspaceId, "worktree.registered", row.id, actor, {
-        root_path: row.root_path,
-        repository_key: row.repository_key,
-        checkpoint: checkpointFromWorktreeRow(row, now)
-      });
-    }
-    return row;
-  }
-  touchWorktree(row, checkpoint, now) {
-    this.db.query(`
-      UPDATE worktrees
-      SET branch = ?, head_sha = ?, dirty = ?, last_seen_at = ?
-      WHERE id = ?
-    `).run(checkpoint.branch, checkpoint.head_sha, booleanToSql(checkpoint.dirty), now, row.id);
-  }
-  requireWorktreeRow(id) {
-    const row = this.db.query(`SELECT * FROM worktrees WHERE id = ?`).get(id);
-    if (!row)
-      throw new CollabError("worktree_not_found", `Worktree '${id}' was not found`);
-    return row;
-  }
-  validateEventAnchor(workspaceId, input, db = this.db, maxBytes) {
-    const workspace = this.requireWorkspace(workspaceId, db);
-    if (!input || input.epoch_id !== workspace.epoch_id || !Number.isInteger(input.sequence) || input.sequence < 0 || typeof input.hash !== "string") {
-      throw new CollabError("cursor_mismatch", "The cursor does not belong to this journal");
-    }
-    if (input.sequence === 0) {
-      if (input.hash !== GENESIS_HASH) {
-        throw new CollabError("cursor_fork_detected", "The genesis cursor hash is invalid");
-      }
-      return { ...input };
-    }
-    if (input.sequence > workspace.event_head_sequence) {
-      throw new CollabError("cursor_ahead", "The cursor is ahead of the journal", {
-        head_sequence: workspace.event_head_sequence
-      });
-    }
-    if (maxBytes !== undefined)
-      this.requireEventByteBound(db, workspaceId, input.sequence, maxBytes, "anchor");
-    const row = db.query(`
-      SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
-        session_id, occurred_at, payload_json, prev_hash, hash
-      FROM events
-      WHERE workspace_id = ? AND sequence = ?
-    `).get(workspaceId, input.sequence);
-    const event = row ? eventFromRow(row) : null;
-    if (!event || event.epoch_id !== input.epoch_id || event.hash !== input.hash || event.hash !== eventHash(event)) {
-      throw new CollabError("cursor_fork_detected", "The cursor sequence resolves to a different journal hash");
-    }
-    return {
-      epoch_id: event.epoch_id,
-      sequence: event.sequence,
-      hash: event.hash
-    };
-  }
-  projectAvailableTasks(workspaceId, tasks, allowExpired) {
-    const claimable = [];
-    const conflicted = [];
-    for (const task of tasks) {
-      const available = task.effective_status === "open" || task.effective_status === "lease_expired" && allowExpired(task);
-      if (!available || !this.dependenciesSatisfied(workspaceId, task.dependencies))
-        continue;
-      const conflicts = this.taskPathConflicts(task);
-      if (conflicts.length > 0) {
-        conflicted.push({ task, conflicts });
-      } else {
-        claimable.push(task);
-      }
-    }
-    return { claimable, conflicted };
-  }
-  dependenciesSatisfied(workspaceId, dependencies) {
-    return dependencies.every((id) => {
-      const dependency = this.requireTask(workspaceId, id);
-      if (dependency.status !== "completed")
-        return false;
-      return dependency.completion_policy !== "accepted" || dependency.review_status === "accepted";
-    });
-  }
-  taskPathConflicts(task) {
-    if (task.path_scopes.length === 0 || task.work_mode === "read_only")
-      return [];
-    const workspace = this.requireWorkspace(task.workspace_id);
-    const rows = this.db.query(`
-      SELECT t.*
-      FROM tasks t
-      JOIN workspaces w ON w.id = t.workspace_id
-      WHERE (w.repository_key = ? OR w.id IN (
-        SELECT other.workspace_id FROM worktrees own
-        JOIN repository_aliases a ON a.worktree_id = own.id
-        JOIN repository_aliases b ON b.portable_key = a.portable_key
-        JOIN worktrees other ON other.id = b.worktree_id
-        WHERE own.workspace_id = ?
-      ))
-        AND NOT (t.workspace_id = ? AND t.id = ?)
-        AND (
-          (t.status = 'claimed' AND (t.lease_expires_at > ? OR t.assignee_session_id IS NOT NULL))
-          OR (t.status = 'completed' AND t.completion_policy = 'accepted'
-              AND t.review_status = 'pending')
-        )
-    `).all(workspace.repository_key, task.workspace_id, task.workspace_id, task.id, this.timestamp());
-    const result = [];
-    for (const row of rows) {
-      if (row.work_mode === "read_only")
-        continue;
-      const pairs = pathConflicts(task.path_scopes, parseStringArray(row.path_scopes_json));
-      if (pairs.length > 0) {
-        result.push({
-          active_task_id: row.id,
-          active_workspace_id: row.workspace_id,
-          assignee: row.assignee,
-          assignee_session_id: row.assignee_session_id,
-          lease_expires_at: row.lease_expires_at,
-          path_pairs: pairs
-        });
-      }
-    }
-    return result;
-  }
-  requireActiveSessionLease(row, session, leaseId) {
-    if (row.status !== "claimed" || !row.lease_id || !row.lease_expires_at) {
-      throw new CollabError("lease_not_active", "Task does not have an active lease");
-    }
-    if (this.isExpired(row, row.assignee_session_id === session.id ? session : undefined)) {
-      throw new CollabError("lease_expired", "Task lease has expired", {
-        lease_expires_at: row.lease_expires_at
-      });
-    }
-    if (row.assignee_session_id !== session.id || row.lease_id !== leaseId) {
-      throw new CollabError("lease_not_holder", "Mutation requires the current session lease", {
-        assignee: row.assignee,
-        assignee_session_id: row.assignee_session_id
-      });
-    }
-  }
-  clearSessionClaim(row, session, type, payload) {
-    const now = this.timestamp();
-    const version2 = row.version + 1;
-    this.db.query(`
-      UPDATE tasks
-      SET status = 'open', assignee = NULL, assignee_session_id = NULL,
-        claim_worktree_id = NULL, lease_id = NULL, lease_expires_at = NULL,
-        version = ?, updated_at = ?
-      WHERE workspace_id = ? AND id = ?
-    `).run(version2, now, row.workspace_id, row.id);
-    this.expirePendingHandoffs(row.workspace_id, row.id, now, session.actor, "task_released");
-    this.appendEvent(row.workspace_id, type, row.id, session.actor, {
-      ...payload,
-      version: version2
-    }, session.id);
-    return this.requireTask(row.workspace_id, row.id);
-  }
-  liveLeaseRefusal(workspaceId, sessionId, now, holderWillResume = false) {
-    const live = this.db.query(`
-      SELECT * FROM tasks
-      WHERE workspace_id = ? AND assignee_session_id = ?
-        AND status = 'claimed'
-      ORDER BY id
-    `).all(workspaceId, sessionId);
-    const active = live.filter((task) => holderWillResume || !this.isExpired(task, undefined, now));
-    if (active.length === 0)
-      return null;
-    return new CollabError("session_has_active_leases", "Release, complete, or hand off active task leases before ending the session, or end with release_leases: true. " + "A handoff counts once it is accepted; release_leases also expires this session's pending outgoing offers", {
-      task_ids: active.map((task) => task.id),
-      leases: active.map((task) => ({
-        task_id: task.id,
-        lease_id: task.lease_id,
-        expires_at: task.lease_expires_at
-      })),
-      required_action: "resolve_active_task_leases",
-      remedy: "Call collab_session_end again with release_leases: true (optionally release_summary) to release every lease this session holds and end in one step, or release, complete, or hand off each lease first. A handoff counts once it is accepted: ending with release_leases expires any offer still pending."
-    });
-  }
-  expireSessionLeaseForRecovery(row, session, now) {
-    const holder = row.assignee_session_id === session.id ? session : this.requireCoordinationSessionRow(row.assignee_session_id);
-    const staleAt = holder.status === "ended" ? Date.parse(holder.ended_at ?? now) : Date.parse(holder.last_seen_at) + SESSION_STALE_AFTER_MS + 1;
-    const lapse = this.db.query(`SELECT effective_at FROM session_lease_lapses WHERE lease_id = ?`).get(row.lease_id);
-    const effectiveAt = lapse?.effective_at ?? (Number.isFinite(staleAt) ? new Date(Math.max(Date.parse(row.lease_expires_at), staleAt)).toISOString() : now);
-    const prior = {
-      assignee: row.assignee,
-      session_id: row.assignee_session_id,
-      lease_id: row.lease_id,
-      lease_expires_at: row.lease_expires_at,
-      checkpoint: parseCheckpoint(row.base_checkpoint_json)
-    };
-    const expiryVersion = row.version + 1;
-    this.db.query(`
-      UPDATE tasks
-      SET status = 'open', assignee = NULL, assignee_session_id = NULL,
-        claim_worktree_id = NULL, lease_id = NULL, lease_expires_at = NULL,
-        version = ?, updated_at = ?
-      WHERE workspace_id = ? AND id = ?
-    `).run(expiryVersion, now, row.workspace_id, row.id);
-    this.expirePendingHandoffs(row.workspace_id, row.id, now, "system:clock", "source_lease_expired");
-    this.appendEvent(row.workspace_id, "task.claim_expired", row.id, "system:clock", {
-      ...prior,
-      effective_at: effectiveAt,
-      lease_lifetime_basis: "session_liveness",
-      observed_by_session_id: session.id,
-      version: expiryVersion
-    });
-    return { prior, expiryVersion };
-  }
-  recordRecoveryWithoutTakeover(row, session, input) {
-    const version2 = input.expiry_version + 1;
-    this.db.query(`
-      UPDATE tasks
-      SET status = ?, blocker = ?, version = ?, updated_at = ?
-      WHERE workspace_id = ? AND id = ?
-    `).run(input.action === "block" ? "blocked" : "open", input.action === "block" ? input.blocker : null, version2, input.now, row.workspace_id, row.id);
-    const event = this.appendEvent(row.workspace_id, "task.recovered", row.id, session.actor, {
-      prior_lease: input.prior,
-      action: input.action,
-      recovery_note: input.recovery_note,
-      recovery_checkpoint: null,
-      version: version2,
-      note: "Recovery acknowledges an expired coordination lease; it does not accept or attribute prior work."
-    }, session.id);
-    this.db.query(`
-      INSERT INTO task_recoveries (
-        id, workspace_id, task_id, prior_lease_id, prior_session_id,
-        recovered_by_session_id, action, note, prior_checkpoint_json,
-        new_lease_id, recovered_at, event_sequence
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
-    `).run(`recovery_${randomUUID4()}`, row.workspace_id, row.id, input.prior.lease_id, input.prior.session_id, session.id, input.action, input.recovery_note, input.prior.checkpoint ? canonicalJson(input.prior.checkpoint) : null, input.now, event.sequence);
-    return this.requireTask(row.workspace_id, row.id);
-  }
-  recoveryBundle(row) {
-    return {
-      task_id: row.id,
-      prior_assignee: row.assignee,
-      prior_session_id: row.assignee_session_id,
-      prior_lease_id: row.lease_id,
-      lease_expires_at: row.lease_expires_at,
-      base_checkpoint: parseCheckpoint(row.base_checkpoint_json),
-      latest_progress: row.latest_progress,
-      required_action: "collab_task_recover"
-    };
-  }
-  validateReportInput(session, input) {
-    if (input.task_id)
-      this.requireTaskRow(session.workspace_id, input.task_id);
-    if (input.to_session_id) {
-      const targetSession = this.requireCoordinationSessionRow(input.to_session_id);
-      if (targetSession.workspace_id !== session.workspace_id) {
-        throw new CollabError("report_target_mismatch", "Report target is in another workspace");
-      }
-    }
-    if (input.relation === "informs" && input.target_report_id) {
-      throw new CollabError("invalid_report_relation", "An informing report does not target another report. To agree with or answer a report, use " + 'relation "supports" (or "challenges" to disagree) with target_report_id; ' + "to address a session, use to_session_id");
-    }
-    if (input.relation !== "informs" && !input.target_report_id) {
-      throw new CollabError("report_target_required", "This report relation requires an earlier target report");
-    }
-    if (input.target_report_id) {
-      const target = this.requireReport(input.target_report_id);
-      if (target.workspace_id !== session.workspace_id) {
-        throw new CollabError("report_target_mismatch", "Target report is in another workspace");
-      }
-      if (target.task_id !== input.task_id) {
-        throw new CollabError("report_task_mismatch", "Related reports must use the same task scope as their target", { target_task_id: target.task_id, report_task_id: input.task_id });
-      }
-      if (["corrects", "withdraws", "supersedes"].includes(input.relation) && target.from_session_id !== session.id) {
-        throw new CollabError("report_author_mismatch", "Only the original author session may correct, withdraw, or supersede its report; other sessions should challenge it");
-      }
-      if (input.relation === "resolves" && target.relation !== "challenges") {
-        throw new CollabError("invalid_report_relation", "A resolving report must target a challenge. To agree with or confirm a proposal, use " + 'relation "supports" with target_report_id');
-      }
-    }
-    if (input.kind === "decision" && (!input.authority_scope || !input.authority_basis)) {
-      throw new CollabError("decision_authority_required", "Decision reports require an explicit authority scope and basis");
-    }
-    for (const reference of input.evidence_refs) {
-      this.requireEvidenceRef(session.workspace_id, reference);
-    }
-  }
-  appendReportInternal(session, input) {
-    const id = `report_${randomUUID4()}`;
-    const now = this.timestamp();
-    const event = this.appendEvent(session.workspace_id, "report.posted", id, session.actor, {
-      ...input.to_person ? { to_person: true } : {},
-      ...input.about_proposal_id ? { about_proposal_id: input.about_proposal_id } : {},
-      ...input.note ? { note: input.note } : {},
-      task_id: input.task_id,
-      to_session_id: input.to_session_id,
-      kind: input.kind,
-      body: input.body,
-      evidence_refs: input.evidence_refs,
-      confidence: input.confidence,
-      confidence_basis: input.confidence_basis,
-      limits: input.limits,
-      relation: input.relation,
-      target_report_id: input.target_report_id,
-      authority_scope: input.authority_scope,
-      authority_basis: input.authority_basis
-    }, session.id);
-    this.db.query(`
-      INSERT INTO reports (
-        id, workspace_id, task_id, from_session_id, from_actor, to_session_id,
-        kind, body, evidence_refs_json, confidence, confidence_basis, limits,
-        relation, target_report_id, authority_scope, authority_basis,
-        created_at, event_sequence
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, session.workspace_id, input.task_id, session.id, session.actor, input.to_session_id, input.kind, input.body, canonicalJson(input.evidence_refs), input.confidence, input.confidence_basis, input.limits, input.relation, input.target_report_id, input.authority_scope, input.authority_basis, now, event.sequence);
-    if (input.to_person) {
-      this.db.query(`INSERT INTO person_addressed_reports (report_id, workspace_id) VALUES (?, ?)`).run(id, session.workspace_id);
-    }
-    return this.requireReport(id);
-  }
-  requireReport(id) {
-    const row = this.db.query(`SELECT * FROM reports WHERE id = ?`).get(id);
-    if (!row)
-      throw new CollabError("report_not_found", `Report '${id}' was not found`);
-    return reportFromRow(row);
-  }
-  requireReview(id) {
-    const row = this.db.query(`SELECT * FROM task_reviews WHERE id = ?`).get(id);
-    if (!row)
-      throw new CollabError("review_not_found", `Review '${id}' was not found`);
-    return reviewFromRow(row);
-  }
-  taskNotPendingReviewError(row, callerSessionId) {
-    const plain = new CollabError("task_not_pending_review", "Task does not have a pending acceptance review", { review_status: row.review_status });
-    if (row.completion_policy !== "accepted" || row.review_status !== "accepted" || !row.accepted_by_session_id || row.reported_by_session_id === callerSessionId || row.accepted_by_session_id === callerSessionId) {
-      return plain;
-    }
-    const acceptance = this.db.query(`
-      SELECT e.type AS type, e.payload_json AS payload_json
-      FROM task_reviews r
-      JOIN events e ON e.workspace_id = r.workspace_id AND e.sequence = r.event_sequence
-      WHERE r.workspace_id = ? AND r.task_id = ? AND r.review_generation = ?
-        AND r.outcome = 'accepted'
-    `).get(row.workspace_id, row.id, row.review_generation);
-    if (!acceptance || acceptance.type !== "task.accepted")
-      return plain;
-    const payload = JSON.parse(acceptance.payload_json);
-    if (typeof payload.review_report_id !== "string")
-      return plain;
-    const reviewReportId = payload.review_report_id;
-    const remedy = `Record a late concurring or dissenting review with collab_report_append: task_id "${row.id}", ` + `relation "supports" or "challenges", target_report_id "${reviewReportId}". ` + "A challenge records disagreement; it does not reopen the accepted task.";
-    return new CollabError("task_not_pending_review", `Task was already accepted by session '${row.accepted_by_session_id}'. ${remedy}`, {
-      review_status: row.review_status,
-      review_report_id: reviewReportId,
-      accepted_by_session_id: row.accepted_by_session_id,
-      remedy
-    });
-  }
-  requireRequestedReviewer(row, session, requestedSessionId) {
-    if (row.completion_policy !== "accepted") {
-      throw new CollabError("review_request_not_applicable", 'Only tasks with completion_policy "accepted" wait for review; omit review_requested_session_id', { completion_policy: row.completion_policy });
-    }
-    if (requestedSessionId === session.id) {
-      throw new CollabError("review_request_self", "A requested reviewer must be a session distinct from the reporter");
-    }
-    const requested = this.db.query(`
-      SELECT workspace_id, status FROM coordination_sessions WHERE id = ?
-    `).get(requestedSessionId);
-    if (!requested || requested.workspace_id !== session.workspace_id || requested.status !== "active") {
-      throw new CollabError("review_requested_session_unavailable", "The requested reviewer must be an active session in this workspace; collab_workspace_status lists active_sessions", { review_requested_session_id: requestedSessionId });
-    }
-  }
-  reviewRequestedSessionId(row) {
-    if (row.status !== "completed" || row.completion_policy !== "accepted" || !row.completion_report_id) {
-      return null;
-    }
-    const completion = this.db.query(`SELECT event_sequence FROM reports WHERE id = ?`).get(row.completion_report_id);
-    if (!completion)
-      return null;
-    const event = this.db.query(`
-      SELECT payload_json FROM events
-      WHERE workspace_id = ? AND sequence > ? AND entity_id = ? AND type = 'task.reported_complete'
-      ORDER BY sequence
-      LIMIT 1
-    `).get(row.workspace_id, completion.event_sequence, row.id);
-    if (!event)
-      return null;
-    const payload = JSON.parse(event.payload_json);
-    return payload.completion_report_id === row.completion_report_id && typeof payload.review_requested_session_id === "string" ? payload.review_requested_session_id : null;
-  }
-  hasUnresolvedChallenges(workspaceId, reportId) {
-    return this.unresolvedChallengeIds(workspaceId, reportId).length > 0;
-  }
-  unresolvedChallengeIds(workspaceId, reportId) {
-    const challenges = this.db.query(`
-      SELECT id FROM reports
-      WHERE workspace_id = ? AND target_report_id = ? AND relation = 'challenges'
-      ORDER BY event_sequence
-    `).all(workspaceId, reportId);
-    return challenges.filter((challenge) => !this.hasActiveReportRelation(workspaceId, challenge.id, new Set(["withdraws"])) && !this.hasActiveReportRelation(workspaceId, challenge.id, new Set(["resolves"]))).map((challenge) => challenge.id);
-  }
-  hasObsoletedCompletionReport(workspaceId, reportId) {
-    return this.hasActiveReportRelation(workspaceId, reportId, new Set(["withdraws", "corrects", "supersedes"]));
-  }
-  hasActiveReportRelation(workspaceId, reportId, relations) {
-    const rows = this.db.query(`
-      SELECT id, relation FROM reports
-      WHERE workspace_id = ? AND target_report_id = ?
-      ORDER BY event_sequence
-    `).all(workspaceId, reportId);
-    const obsoleted = this.activeObsoletionTargets(workspaceId);
-    return rows.some((row) => relations.has(row.relation) && !obsoleted.has(row.id));
-  }
-  activeObsoletionTargets(workspaceId) {
-    const rows = this.db.query(`
-      SELECT id, target_report_id FROM reports
-      WHERE workspace_id = ? AND target_report_id IS NOT NULL
-        AND relation IN ('withdraws', 'corrects', 'supersedes')
-      ORDER BY event_sequence DESC, id DESC
-    `).all(workspaceId);
-    const obsoleted = new Set;
-    for (const row of rows) {
-      if (!obsoleted.has(row.id))
-        obsoleted.add(row.target_report_id);
-    }
-    return obsoleted;
-  }
-  requireEvidenceRef(workspaceId, reference) {
-    const separator = reference.indexOf(":");
-    if (separator < 1)
-      throw invalidEvidenceRef("Evidence reference needs a kind prefix");
-    const kind = reference.slice(0, separator);
-    const id = reference.slice(separator + 1);
-    if (!id)
-      throw invalidEvidenceRef("Evidence reference ID is empty");
-    let exists = false;
-    if (kind === "artifact") {
-      exists = this.db.query(`
-        SELECT 1 FROM artifacts WHERE workspace_id = ? AND id = ?
-      `).get(workspaceId, id) !== null;
-    } else if (kind === "event") {
-      exists = this.db.query(`
-        SELECT 1 FROM events WHERE workspace_id = ? AND id = ?
-      `).get(workspaceId, id) !== null;
-    } else if (kind === "report") {
-      exists = this.db.query(`
-        SELECT 1 FROM reports WHERE workspace_id = ? AND id = ?
-      `).get(workspaceId, id) !== null;
-    } else if (kind === "checkpoint") {
-      const tasks = this.db.query(`
-        SELECT base_checkpoint_json, result_checkpoint_json
-        FROM tasks WHERE workspace_id = ?
-      `).all(workspaceId);
-      exists = tasks.some((task) => {
-        const checkpoints = [
-          parseCheckpoint(task.base_checkpoint_json),
-          parseCheckpoint(task.result_checkpoint_json)
-        ];
-        return checkpoints.some((checkpoint) => checkpoint !== null && checkpointDigest(checkpoint) === id);
-      });
-    } else {
-      throw invalidEvidenceRef("Unsupported evidence reference kind");
-    }
-    if (!exists) {
-      throw new CollabError("evidence_not_found", `Evidence reference was not found in this workspace. ${EVIDENCE_REFS_DESCRIPTION}`, { reference, allowed_prefixes: [...EVIDENCE_REF_PREFIXES] });
-    }
-  }
-  appendEvent(workspaceId, type, entityId, actor, payload, sessionId = null) {
-    const workspace = this.requireWorkspace(workspaceId);
-    const event = {
-      protocol: COLLAB_COORDINATION_PROTOCOL,
-      workspace_id: workspaceId,
-      epoch_id: workspace.epoch_id,
-      sequence: workspace.event_head_sequence + 1,
-      id: `event_${randomUUID4()}`,
-      type,
-      entity_id: entityId,
-      actor,
-      session_id: sessionId,
-      occurred_at: this.timestamp(),
-      payload,
-      prev_hash: workspace.event_head_hash,
-      hash: ""
-    };
-    event.hash = eventHash(event);
-    this.db.query(`
-      INSERT INTO events
-        (workspace_id, epoch_id, sequence, id, protocol, type, entity_id, actor,
-          session_id, occurred_at, payload_json, prev_hash, hash)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(event.workspace_id, event.epoch_id, event.sequence, event.id, event.protocol, event.type, event.entity_id, event.actor, event.session_id ?? null, event.occurred_at, canonicalJson(event.payload), event.prev_hash, event.hash);
-    this.db.query(`
-      UPDATE workspaces SET event_head_sequence = ?, event_head_hash = ? WHERE id = ?
-    `).run(event.sequence, event.hash, workspaceId);
-    return event;
-  }
-  expireClaim(row, actor) {
-    if (!this.isExpired(row))
-      return row;
-    const now = this.timestamp();
-    const version2 = row.version + 1;
-    const prior = { assignee: row.assignee, lease_id: row.lease_id, lease_expires_at: row.lease_expires_at };
-    this.db.query(`
-      UPDATE tasks SET status = 'open', assignee = NULL, lease_id = NULL, lease_expires_at = NULL,
-        version = ?, updated_at = ? WHERE workspace_id = ? AND id = ?
-    `).run(version2, now, row.workspace_id, row.id);
-    this.expirePendingHandoffs(row.workspace_id, row.id, now, actor, "source_lease_expired");
-    this.appendEvent(row.workspace_id, "task.claim_expired", row.id, actor, { ...prior, version: version2 });
-    return this.requireTaskRow(row.workspace_id, row.id);
-  }
-  clearClaim(row, actor, type, payload) {
-    const now = this.timestamp();
-    const version2 = row.version + 1;
-    this.db.query(`
-      UPDATE tasks SET status = 'open', assignee = NULL, lease_id = NULL,
-        lease_expires_at = NULL, version = ?, updated_at = ?
-      WHERE workspace_id = ? AND id = ?
-    `).run(version2, now, row.workspace_id, row.id);
-    this.expirePendingHandoffs(row.workspace_id, row.id, now, actor, "task_released");
-    this.appendEvent(row.workspace_id, type, row.id, actor, { ...payload, version: version2 });
-    return this.requireTask(row.workspace_id, row.id);
-  }
-  expirePendingHandoffs(workspaceId, taskId, now, actor, reason) {
-    const rows = this.db.query(`
-      SELECT * FROM handoffs WHERE workspace_id = ? AND task_id = ? AND status = 'pending'
-    `).all(workspaceId, taskId);
-    for (const row of rows) {
-      this.db.query(`UPDATE handoffs SET status = 'expired', resolved_at = ? WHERE id = ?`).run(now, row.id);
-      this.appendEvent(workspaceId, "handoff.expired", row.id, actor, { task_id: taskId, reason });
-    }
-  }
-  expireElapsedHandoffs(workspaceId, actor, taskId) {
-    this.requireWorkspace(workspaceId);
-    const reap = this.db.transaction(() => {
-      const now = this.timestamp();
-      const rows = taskId ? this.db.query(`
-            SELECT * FROM handoffs
-            WHERE workspace_id = ? AND task_id = ? AND status = 'pending' AND expires_at <= ?
-          `).all(workspaceId, taskId, now) : this.db.query(`
-            SELECT * FROM handoffs
-            WHERE workspace_id = ? AND status = 'pending' AND expires_at <= ?
-          `).all(workspaceId, now);
-      for (const row of rows) {
-        this.db.query(`UPDATE handoffs SET status = 'expired', resolved_at = ? WHERE id = ?`).run(now, row.id);
-        this.appendEvent(workspaceId, "handoff.expired", row.id, actor, {
-          task_id: row.task_id,
-          reason: "offer_deadline_elapsed"
-        });
-      }
-    });
-    reap.immediate();
-    this.tightenFileModes();
-  }
-  requireDependenciesComplete(row) {
-    const dependencies = parseStringArray(row.dependencies_json);
-    const incomplete = dependencies.filter((id) => !this.dependenciesSatisfied(row.workspace_id, [id]));
-    if (incomplete.length > 0) {
-      throw new CollabError("dependencies_incomplete", "Task dependencies are not complete", { dependencies: incomplete });
-    }
-  }
-  requirePathsAvailable(row) {
-    const conflicts = this.taskPathConflicts(this.taskFromRow(row));
-    if (conflicts.length > 0) {
-      const first = conflicts[0];
-      throw new CollabError("path_scope_conflict", "Task paths overlap reserved work", {
-        conflicting_task_id: first.active_task_id,
-        conflicting_workspace_id: first.active_workspace_id,
-        assignee: first.assignee,
-        assignee_session_id: first.assignee_session_id,
-        lease_expires_at: first.lease_expires_at,
-        conflicts: first.path_pairs
-      });
-    }
-  }
-  requireActiveLease(row, actor, leaseId) {
-    if (row.status !== "claimed" || !row.lease_id || !row.lease_expires_at) {
-      throw new CollabError("lease_not_active", "Task does not have an active lease");
-    }
-    if (this.isExpired(row)) {
-      throw new CollabError("lease_expired", "Task lease has expired", { lease_expires_at: row.lease_expires_at });
-    }
-    if (row.assignee !== actor || row.lease_id !== leaseId) {
-      throw new CollabError("lease_not_holder", "Mutation requires the current lease holder", {
-        assignee: row.assignee
-      });
-    }
-  }
-  requireVersion(row, expected) {
-    if (row.version !== expected) {
-      throw new CollabError("version_conflict", "Task changed since it was read", {
-        expected_version: expected,
-        current_version: row.version
-      });
-    }
-  }
-  recordSessionLeaseLapses(session, now) {
-    if (leaseHolderPresent(session, now))
-      return;
-    const staleAt = new Date(Date.parse(session.last_seen_at) + SESSION_STALE_AFTER_MS + 1).toISOString();
-    this.db.query(`INSERT OR IGNORE INTO session_lease_lapses (lease_id, effective_at)
-      SELECT lease_id, MAX(lease_expires_at, ?) FROM tasks
-      WHERE assignee_session_id = ? AND status = 'claimed' AND lease_expires_at <= ?`).run(staleAt, session.id, now);
-  }
-  isExpired(row, priorHolder, observedAt = this.timestamp()) {
-    if (row.status !== "claimed" || row.lease_expires_at === null || observedAt < row.lease_expires_at)
-      return false;
-    if (!row.assignee_session_id)
-      return true;
-    if (this.db.query(`SELECT 1 FROM session_lease_lapses WHERE lease_id = ?`).get(row.lease_id))
-      return true;
-    const holder = priorHolder ?? this.leaseHolderRow(row.assignee_session_id);
-    return !holder || !leaseHolderPresent(holder, observedAt);
-  }
-  taskFromRow(row) {
-    let effectiveStatus = row.status;
-    if (this.isExpired(row)) {
-      effectiveStatus = row.assignee_session_id ? "recovery_required" : "lease_expired";
-    } else if (row.status === "completed" && row.review_status === "pending") {
-      effectiveStatus = "reported_complete";
-    } else if (row.status === "completed" && row.review_status === "accepted") {
-      effectiveStatus = "accepted";
-    }
-    const baseCheckpoint = parseCheckpoint(row.base_checkpoint_json);
-    const resultCheckpoint = parseCheckpoint(row.result_checkpoint_json);
-    return {
-      id: row.id,
-      workspace_id: row.workspace_id,
-      title: row.title,
-      description: row.description,
-      status: row.status,
-      effective_status: effectiveStatus,
-      dependencies: parseStringArray(row.dependencies_json),
-      path_scopes: parseStringArray(row.path_scopes_json),
-      work_mode: row.work_mode,
-      completion_policy: row.completion_policy,
-      review_status: row.review_status,
-      expected_base_sha: row.expected_base_sha,
-      base_checkpoint: baseCheckpoint,
-      base_checkpoint_digest: baseCheckpoint ? checkpointDigest(baseCheckpoint) : null,
-      result_checkpoint: resultCheckpoint,
-      result_checkpoint_digest: resultCheckpoint ? checkpointDigest(resultCheckpoint) : null,
-      completion_report_id: row.completion_report_id,
-      assignee: row.assignee,
-      assignee_session_id: row.assignee_session_id,
-      assignee_liveness: this.assigneeLiveness(row.assignee_session_id),
-      claim_worktree_id: row.claim_worktree_id,
-      lease_id: row.lease_id,
-      lease_expires_at: row.lease_expires_at,
-      blocker: row.blocker,
-      latest_progress: row.latest_progress,
-      reported_by: row.reported_by,
-      reported_by_session_id: row.reported_by_session_id,
-      reported_at: row.reported_at,
-      accepted_by: row.accepted_by,
-      accepted_by_session_id: row.accepted_by_session_id,
-      accepted_at: row.accepted_at,
-      review_requested_session_id: this.reviewRequestedSessionId(row),
-      version: row.version,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-      completed_at: row.completed_at
-    };
-  }
-  sessionProjection(row, observedAt = this.timestamp()) {
-    const rest = row.status === "active" ? this.latestRest(row.id, observedAt) : null;
-    return coordinationSessionFromRow(row, observedAt, rest);
-  }
-  assigneeLiveness(sessionId, observedAt = this.timestamp()) {
-    if (!sessionId)
-      return null;
-    const holder = this.leaseHolderRow(sessionId);
-    if (!holder)
-      return null;
-    const rest = holder.status === "active" ? this.latestRest(sessionId, observedAt) : null;
-    return sessionLivenessWithRest(holder, observedAt, rest);
-  }
-  leaseHolderRow(sessionId) {
-    return this.db.query(`
-      SELECT status, last_seen_at FROM coordination_sessions WHERE id = ?
-    `).get(sessionId);
-  }
-  latestRestDeclaration(sessionId) {
-    return this.db.query(`
-      SELECT type, sequence, occurred_at, payload_json FROM events
-      WHERE workspace_id = (
-          SELECT workspace_id FROM coordination_sessions WHERE id = ?1 AND status = 'active'
-        )
-        AND entity_id = ?1
-        AND type IN ('session.rested', 'session.returned')
-      ORDER BY sequence DESC
-      LIMIT 1
-    `).get(sessionId);
-  }
-  latestRest(sessionId, observedAt) {
-    const declaration = this.latestRestDeclaration(sessionId);
-    return declaration ? restFromDeclaration(declaration, observedAt) : null;
-  }
-  addressedWaiting(session) {
-    const rows = this.db.query(`
-      SELECT type, session_id, payload_json FROM events
-      WHERE workspace_id = ? AND sequence > ?
-        AND type IN ('report.posted', 'handoff.offered')
-      ORDER BY sequence
-    `).all(session.workspace_id, knockReadThrough(this.db, session.workspace_id, session.id, session.cursor_sequence));
-    return rows.filter((row) => isAddressedTo(row, session.id)).length;
-  }
-  requireWorkspace(workspaceId, db = this.db) {
-    const workspace = this.getWorkspace(workspaceId, db);
-    if (!workspace)
-      throw new CollabError("workspace_not_found", `Workspace '${workspaceId}' was not found`);
-    return workspace;
-  }
-  readPresenceSessionByClient(workspaceId, clientInstanceId) {
-    return this.db.query(`
-      SELECT * FROM sessions
-      WHERE workspace_id = ? AND client_instance_id = ?
-    `).get(workspaceId, clientInstanceId);
-  }
-  requirePresenceSessionRow(sessionId) {
-    const row = this.db.query(`SELECT * FROM sessions WHERE id = ?`).get(sessionId);
-    if (!row) {
-      throw new CollabError("session_not_found", `Presence session '${sessionId}' was not found`);
-    }
-    return row;
-  }
-  requireCoordinationSessionRow(sessionId) {
-    const row = this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(sessionId);
-    if (!row)
-      throw new CollabError("session_not_found", `Session '${sessionId}' was not found`);
-    return row;
-  }
-  readTaskRow(workspaceId, taskId) {
-    return this.db.query(`SELECT * FROM tasks WHERE workspace_id = ? AND id = ?`).get(workspaceId, taskId);
-  }
-  requireTaskRow(workspaceId, taskId) {
-    const row = this.readTaskRow(workspaceId, taskId);
-    if (!row)
-      throw new CollabError("task_not_found", `Task '${taskId}' was not found`, { task_id: taskId });
-    return row;
-  }
-  requireTask(workspaceId, taskId) {
-    return this.taskFromRow(this.requireTaskRow(workspaceId, taskId));
-  }
-  listArtifacts(workspaceId, taskId) {
-    const rows = this.db.query(`
-      SELECT id, task_id, kind, uri, sha256, media_type, label, attached_by, attached_at
-        , attached_by_session_id
-      FROM artifacts WHERE workspace_id = ? AND task_id = ? ORDER BY attached_at, id
-    `).all(workspaceId, taskId);
-    return rows.map(artifactFromRow);
-  }
-  requireArtifact(id) {
-    const row = this.db.query(`
-      SELECT id, task_id, kind, uri, sha256, media_type, label, attached_by, attached_at
-        , attached_by_session_id
-      FROM artifacts WHERE id = ?
-    `).get(id);
-    if (!row)
-      throw new CollabError("artifact_not_found", `Artifact '${id}' was not found`);
-    return artifactFromRow(row);
-  }
-  requireDecision(id) {
-    const row = this.db.query(`
-      SELECT id, workspace_id, topic, decision, rationale, recorded_by, recorded_at
-      FROM decisions WHERE id = ?
-    `).get(id);
-    if (!row)
-      throw new CollabError("decision_not_found", `Decision '${id}' was not found`);
-    return decisionFromRow(row);
-  }
-  requireHandoff(id) {
-    const row = this.db.query(`SELECT * FROM handoffs WHERE id = ?`).get(id);
-    if (!row)
-      throw new CollabError("handoff_not_found", `Handoff '${id}' was not found`);
-    return handoffFromRow(row);
-  }
-  latestReceiptKeyForSession(credential, prefix2) {
-    return this.latestReceiptKey(this.authenticateSession(credential), prefix2);
-  }
-  latestReceiptKey(session, prefix2) {
-    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*:$/.test(prefix2) || prefix2.length > 100) {
-      throw new CollabError("invalid_receipt_prefix", "A receipt prefix is a key prefix ending in ':'");
-    }
-    const upper = `${prefix2.slice(0, -1)};`;
-    const row = this.db.query(`
-      SELECT idempotency_key FROM mutations
-      WHERE workspace_id = ? AND actor = ? AND idempotency_key >= ? AND idempotency_key < ?
-      ORDER BY idempotency_key DESC
-      LIMIT 1
-    `).get(session.workspace_id, `session:${session.id}`, prefix2, upper);
-    return row?.idempotency_key ?? null;
-  }
-  withReceiptPlan(plan, run) {
-    if (!plan)
-      return run();
-    if (this.ambientReceiptPlan)
-      throw new CollabError("receipt_plan_nested", "A receipt plan is already in force");
-    this.ambientReceiptPlan = plan;
-    try {
-      return run();
-    } finally {
-      this.ambientReceiptPlan = null;
-    }
-  }
-  ambientPlanFor(idempotencyKey) {
-    const plan = this.ambientReceiptPlan;
-    if (!plan)
-      return;
-    return idempotencyKey === plan.key || idempotencyKey.startsWith(`${plan.key}:`) ? plan : undefined;
-  }
-  requireReceiptPlan(session, plan) {
-    const latest = this.latestReceiptKey(session, plan.prefix);
-    if (latest === plan.latest || latest === plan.key || latest !== null && latest.startsWith(`${plan.key}:`))
-      return;
-    throw new CollabError("receipt_plan_stale", "Another call by this session acted on the same entity after this call chose its key; nothing was written");
-  }
-  timestamp() {
-    return this.now().toISOString();
-  }
-  requireJournalHead(workspaceId, expected, callerSessionId) {
-    const head = this.requireWorkspace(workspaceId).event_head_sequence;
-    if (expected > head) {
-      throw new CollabError("head_moved", "The expected sequence is ahead of the journal; read the journal, then send again", {
-        expected_head_sequence: expected,
-        head_sequence: head,
-        reports_since: 0,
-        missed_report_ids: [],
-        remedy: "Call collab_report_list (or collab_next) to read the current sequence, then send again with the event_sequence of the last report you read."
-      });
-    }
-    const { count } = this.db.query(`SELECT COUNT(*) AS count FROM reports WHERE workspace_id = ? AND event_sequence > ? AND from_session_id IS NOT ?`).get(workspaceId, expected, callerSessionId);
-    if (count === 0)
-      return;
-    const missed = this.db.query(`SELECT id FROM reports WHERE workspace_id = ? AND event_sequence > ? AND from_session_id IS NOT ? ORDER BY event_sequence ASC LIMIT ?`).all(workspaceId, expected, callerSessionId, MAX_MISSED_REPORT_IDS);
-    const missedReportIds = missed.map((row) => row.id);
-    throw new CollabError("head_moved", "Other sessions or the person desk posted reports after the sequence you last read; read them, then send again", {
-      expected_head_sequence: expected,
-      head_sequence: head,
-      reports_since: count,
-      missed_report_ids: missedReportIds,
-      ...count > missedReportIds.length ? { missed_report_ids_truncated: true } : {},
-      remedy: `Call collab_report_list with after_event_sequence: ${expected} (note: collab_report_list also returns your own reports), read what is new, then send again with the event_sequence of the last report you read.`
-    });
-  }
-  observedAt() {
-    return this.timestamp();
-  }
-  awayBeforeTouch(sessionId, lastSeenAt, now) {
-    const carried = this.resumeAwaySince.get(sessionId);
-    const since = carried !== undefined && carried < lastSeenAt ? carried : lastSeenAt;
-    const elapsed = Date.parse(now) - Date.parse(since);
-    return {
-      away_ms: Number.isFinite(elapsed) && elapsed > 0 ? elapsed : 0,
-      away_since: since,
-      carried: carried !== undefined
-    };
-  }
-  settleAway(sessionId, away) {
-    if (away.carried)
-      this.resumeAwaySince.delete(sessionId);
-    return { away_ms: away.away_ms, away_since: away.away_since };
-  }
-}
-function normalizeMutation(input) {
-  return { ...input, actor: validateActor(input.actor), idempotency_key: validateIdempotencyKey(input.idempotency_key) };
-}
-function normalizeVersionedMutation(input) {
-  validateExpectedVersion(input.expected_version);
-  return normalizeMutation(input);
-}
-function normalizeLeaseInput(input) {
-  return {
-    ...normalizeVersionedMutation(input),
-    task_id: validateId(input.task_id, "task_id"),
-    lease_id: validateId(input.lease_id, "lease_id")
-  };
-}
-function validateActor(value) {
-  const actor = cleanText(value, "actor", 200);
-  if (/^person:/i.test(actor)) {
-    throw new CollabError("invalid_actor", "Actor labels beginning with person: are reserved for the person desk");
-  }
-  return actor;
-}
-function derivedActor(prefix2, sessionId) {
-  if (prefix2 === undefined) {
-    throw new CollabError("actor_required", "Supply actor, or actor_prefix to derive one from the new session id");
-  }
-  if (typeof prefix2 !== "string" || !/^[a-z][a-z0-9-]{0,39}$/.test(prefix2)) {
-    throw new CollabError("invalid_actor_prefix", "actor_prefix is 1 to 40 lower-case letters, digits or dashes");
-  }
-  return validateActor(`${prefix2}-${sessionId.slice("session_".length, "session_".length + 6)}`);
-}
-var MAX_MODEL_LABEL = 200;
-function validateModelLabel(value) {
-  const model = cleanText(value, "model", MAX_MODEL_LABEL);
-  if (/[\u0000-\u001f\u007f]/.test(model)) {
-    throw new CollabError("invalid_model", "model must be one line of text");
-  }
-  return model;
-}
-function validateExpectedVersion(value) {
-  if (!Number.isInteger(value) || value < 1) {
-    throw new CollabError("invalid_expected_version", "expected_version must be a positive integer");
-  }
-  return value;
-}
-function validateRuntimeKind(value) {
-  const runtime = cleanText(value, "runtime_kind", 64).toLowerCase();
-  if (!/^[a-z0-9][a-z0-9._:-]*$/.test(runtime)) {
-    throw new CollabError("invalid_runtime_kind", "runtime_kind contains unsupported characters");
-  }
-  return runtime;
-}
-function normalizeSessionCapabilities(values) {
-  if (!Array.isArray(values) || values.length > MAX_SESSION_CAPABILITIES) {
-    throw new CollabError("invalid_declared_capabilities", `A session may declare at most ${MAX_SESSION_CAPABILITIES} capabilities`);
-  }
-  const normalized = values.map((value) => {
-    const capability = cleanText(value, "declared_capability", MAX_SESSION_CAPABILITY_LENGTH).toLowerCase();
-    if (!/^[a-z0-9][a-z0-9._:-]*$/.test(capability)) {
-      throw new CollabError("invalid_declared_capability", "Declared capabilities must be symbolic names, not free-form content");
-    }
-    return capability;
-  });
-  return uniqueSorted(normalized);
-}
-function validatePresenceTtl(value) {
-  const ttl = value ?? DEFAULT_PRESENCE_SECONDS;
-  if (!Number.isInteger(ttl) || ttl < 30 || ttl > MAX_PRESENCE_SECONDS) {
-    throw new CollabError("invalid_presence_ttl", `ttl_seconds must be an integer between 30 and ${MAX_PRESENCE_SECONDS}`);
-  }
-  return ttl;
-}
-function validateSessionListLimit(value) {
-  const limit = value ?? DEFAULT_SESSION_LIST_LIMIT;
-  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_SESSION_LIST_LIMIT) {
-    throw new CollabError("invalid_session_list_limit", `limit must be an integer between 1 and ${MAX_SESSION_LIST_LIMIT}`);
-  }
-  return limit;
-}
-function validateNextEventLimit(value) {
-  const limit = value ?? DEFAULT_NEXT_EVENT_LIMIT;
-  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_NEXT_EVENT_LIMIT) {
-    throw new CollabError("invalid_event_limit", `event_limit must be an integer between 1 and ${MAX_NEXT_EVENT_LIMIT}`);
-  }
-  return limit;
-}
-var BOUND_AFTER_SEQUENCE_REMEDY = "A bound collab_next always pages from the acknowledged session cursor. Advance it with " + "collab_cursor_ack (next_anchor of the page you processed), or read from any position " + "without acknowledging with collab_events_since (after_sequence or after_anchor).";
-function requireBoundAfterSequence(afterSequence, session) {
-  if (!Number.isInteger(afterSequence) || afterSequence < 0) {
-    throw new CollabError("invalid_cursor", "Event cursor must be a non-negative integer");
-  }
-  if (afterSequence === session.cursor_sequence)
-    return;
-  throw new CollabError("after_sequence_unsupported_in_bound_session", `after_sequence ${afterSequence} differs from this session's acknowledged cursor ` + `(sequence ${session.cursor_sequence}). ${BOUND_AFTER_SEQUENCE_REMEDY}`, {
-    after_sequence: afterSequence,
-    cursor: {
-      epoch_id: session.cursor_epoch_id,
-      sequence: session.cursor_sequence,
-      hash: session.cursor_hash
-    },
-    cursor_version: session.cursor_version,
-    remedy: BOUND_AFTER_SEQUENCE_REMEDY
-  });
-}
-function normalizeSessionRenewInput(input) {
-  if (input.expected_version !== undefined)
-    validateExpectedVersion(input.expected_version);
-  const request = {
-    task_id: validateId(input.task_id, "task_id"),
-    lease_id: validateId(input.lease_id, "lease_id"),
-    ...input.expected_version === undefined ? {} : { expected_version: input.expected_version }
-  };
-  return { ...request, request, idempotency_key: validateIdempotencyKey(input.idempotency_key) };
-}
-function normalizeSessionLeaseInput(input) {
-  const normalized = {
-    idempotency_key: validateIdempotencyKey(input.idempotency_key),
-    task_id: validateId(input.task_id, "task_id"),
-    lease_id: validateId(input.lease_id, "lease_id"),
-    expected_version: validateExpectedVersion(input.expected_version)
-  };
-  return {
-    ...normalized,
-    request: {
-      task_id: normalized.task_id,
-      lease_id: normalized.lease_id,
-      expected_version: normalized.expected_version
-    }
-  };
-}
-function validateIdempotencyKey(value) {
-  const key = cleanText(value, "idempotency_key", 200);
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(key)) {
-    throw new CollabError("invalid_idempotency_key", "Idempotency key contains unsupported characters");
-  }
-  return key;
-}
-function validateId(value, field) {
-  const id = cleanText(value, field, 200);
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(id)) {
-    throw new CollabError(`invalid_${field}`, `${field} contains unsupported characters`);
-  }
-  return id;
-}
-function cleanText(value, field, max) {
-  const text = value.trim();
-  if (!text)
-    throw new CollabError(`invalid_${field}`, `${field} must not be empty`);
-  if (text.length > max)
-    throw new CollabError(`invalid_${field}`, `${field} exceeds ${max} characters`);
-  if (text.includes("\x00"))
-    throw new CollabError(`invalid_${field}`, `${field} must not contain NUL bytes`);
-  return text;
-}
-function optionalText(value, field, max) {
-  if (value === undefined || value.trim() === "")
-    return null;
-  return cleanText(value, field, max);
-}
-var REST_UNTIL_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
-var MAX_MISSED_REPORT_IDS = 20;
-function validateExpectedHeadSequence(value) {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
-    throw new CollabError("invalid_expected_head_sequence", "expected_head_sequence must be a non-negative integer");
-  }
-  return value;
-}
-function validateRestMode(value) {
-  if (value !== "resting" && value !== "ready") {
-    throw new CollabError("invalid_mode", 'mode must be "resting" or "ready"');
-  }
-  return value;
-}
-function validateRestUntil(value) {
-  const text = typeof value === "string" ? value.trim() : "";
-  const match = REST_UNTIL_PATTERN.exec(text);
-  if (match) {
-    const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number);
-    const offsetHours = Number(match[7] ?? 0);
-    const offsetMinutes = Number(match[8] ?? 0);
-    const calendar = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
-    const parsed = Date.parse(text);
-    if (year >= 1970 && calendar.getUTCFullYear() === year && calendar.getUTCMonth() === month - 1 && calendar.getUTCDate() === day && calendar.getUTCHours() === hour && calendar.getUTCMinutes() === minute && calendar.getUTCSeconds() === second && offsetHours <= 23 && offsetMinutes <= 59 && Number.isFinite(parsed)) {
-      return new Date(parsed).toISOString();
-    }
-  }
-  throw new CollabError("invalid_until", "until must be an ISO-8601 instant with seconds and a time zone, for example 2026-10-09T18:00:00Z");
-}
-function validateRestWakeOn(value) {
-  if (value === undefined)
-    return [];
-  if (!Array.isArray(value) || value.length > 1 || value.length === 1 && value[0] !== "addressed") {
-    throw new CollabError("invalid_wake_on", 'wake_on accepts [] or ["addressed"] in this version');
-  }
-  return value.length === 1 ? ["addressed"] : [];
-}
-function validateTtl(value) {
-  const ttl = value ?? DEFAULT_LEASE_SECONDS;
-  if (!Number.isInteger(ttl) || ttl < 30 || ttl > MAX_LEASE_SECONDS) {
-    throw new CollabError("invalid_ttl", `ttl_seconds must be an integer between 30 and ${MAX_LEASE_SECONDS}`);
-  }
-  return ttl;
-}
-function validateSha256(value) {
-  const digest = value.toLowerCase();
-  if (!/^[a-f0-9]{64}$/.test(digest))
-    throw new CollabError("invalid_sha256", "sha256 must be 64 hexadecimal characters");
-  return digest;
-}
-function validateGitObjectId(value) {
-  const oid = value.toLowerCase();
-  if (!/^[a-f0-9]{40,64}$/.test(oid)) {
-    throw new CollabError("invalid_git_object_id", "Git object IDs must contain 40 to 64 hexadecimal characters");
-  }
-  return oid;
-}
-function validateArtifactKind(value) {
-  if (!["file", "commit", "test", "data", "url", "other"].includes(value)) {
-    throw new CollabError("invalid_artifact_kind", "Unsupported artifact kind");
-  }
-  return value;
-}
-function validateReportKind(value) {
-  if (!["observation", "inference", "proposal", "decision"].includes(value)) {
-    throw new CollabError("invalid_report_kind", "Unsupported report kind");
-  }
-  return value;
-}
-function validateReportConfidence(value) {
-  if (!["high", "medium", "low", "unknown"].includes(value)) {
-    throw new CollabError("invalid_report_confidence", "Unsupported report confidence");
-  }
-  return value;
-}
-function validateReportRelation(value) {
-  if (![
-    "informs",
-    "supports",
-    "challenges",
-    "corrects",
-    "withdraws",
-    "supersedes",
-    "resolves"
-  ].includes(value)) {
-    throw new CollabError("invalid_report_relation", "Unsupported report relation");
-  }
-  return value;
-}
-function normalizeEvidenceRefs(references) {
-  if (!Array.isArray(references) || references.length > MAX_REPORT_REFS) {
-    throw new CollabError("invalid_evidence_refs", `A report may contain at most ${MAX_REPORT_REFS} evidence references`);
-  }
-  return uniqueSorted(references.map((reference) => {
-    if (typeof reference !== "string") {
-      throw invalidEvidenceRef("Evidence references must be strings");
-    }
-    try {
-      return cleanText(reference, "evidence_ref", MAX_REPORT_REF_LENGTH);
-    } catch (error51) {
-      if (error51 instanceof CollabError)
-        throw invalidEvidenceRef(error51.message);
-      throw error51;
-    }
-  }));
-}
-function invalidEvidenceRef(reason) {
-  return new CollabError("invalid_evidence_ref", `${reason}. ${EVIDENCE_REFS_DESCRIPTION}`, { allowed_prefixes: [...EVIDENCE_REF_PREFIXES] });
-}
-function normalizePathScopes(scopes) {
-  if (!Array.isArray(scopes) || scopes.length > MAX_PATH_SCOPES) {
-    throw new CollabError("invalid_path_scopes", `A task may have at most ${MAX_PATH_SCOPES} path scopes`);
-  }
-  let totalLength = 0;
-  const normalized = scopes.map((scope) => {
-    if (typeof scope !== "string" || !scope || scope.length > MAX_PATH_SCOPE_LENGTH || scope.includes("\x00") || scope.includes("\\") || isAbsolute4(scope)) {
-      throw new CollabError("invalid_path_scope", "Path scopes must be non-empty repository-relative POSIX paths", { scope });
-    }
-    totalLength += scope.length;
-    if (totalLength > MAX_PATH_SCOPES_TOTAL) {
-      throw new CollabError("invalid_path_scopes", `Combined path scopes may not exceed ${MAX_PATH_SCOPES_TOTAL} characters`);
-    }
-    const clean = posix.normalize(scope.replace(/^\.\//, "")).replace(/\/$/, "");
-    if (!clean || clean === "." || clean === ".." || clean.startsWith("../")) {
-      throw new CollabError("invalid_path_scope", "Root-wide and parent path scopes are not allowed", { scope });
-    }
-    return clean;
-  });
-  return uniqueSorted(normalized);
-}
-function normalizeDependencies(dependencies) {
-  if (!Array.isArray(dependencies) || dependencies.length > MAX_DEPENDENCIES) {
-    throw new CollabError("invalid_dependencies", `A task may have at most ${MAX_DEPENDENCIES} dependencies`);
-  }
-  return uniqueSorted(dependencies.map((id) => validateId(id, "dependency")));
-}
-function pathConflicts(left, right) {
-  const conflicts = [];
-  for (const a of left) {
-    for (const b of right) {
-      const leftKey = a.normalize("NFC").toLowerCase();
-      const rightKey = b.normalize("NFC").toLowerCase();
-      if (leftKey === rightKey || leftKey.startsWith(`${rightKey}/`) || rightKey.startsWith(`${leftKey}/`))
-        conflicts.push([a, b]);
-    }
-  }
-  return conflicts;
-}
-function uniqueSorted(values) {
-  return [...new Set(values)].sort();
-}
-function parseStringArray(json2) {
-  return JSON.parse(json2);
-}
-function artifactFromRow(row) {
-  return { ...row };
-}
-function decisionFromRow(row) {
-  return { ...row };
-}
-function handoffFromRow(row) {
-  return { ...row };
-}
-function eventFromRow(row) {
-  const base = {
-    protocol: row.protocol,
-    workspace_id: row.workspace_id,
-    epoch_id: row.epoch_id,
-    sequence: row.sequence,
-    id: row.id,
-    type: row.type,
-    entity_id: row.entity_id,
-    actor: row.actor,
-    occurred_at: row.occurred_at,
-    payload: JSON.parse(row.payload_json),
-    prev_hash: row.prev_hash,
-    hash: row.hash
-  };
-  return row.protocol === LEGACY_COLLAB_PROTOCOL ? base : { ...base, session_id: row.session_id };
-}
-function eventHash(event) {
-  if (event.protocol === LEGACY_COLLAB_PROTOCOL) {
-    const { hash: _hash2, session_id: _sessionId, ...body2 } = event;
-    return sha2564(canonicalJson(body2));
-  }
-  const { hash: _hash, ...body } = event;
-  return sha2564(canonicalJson(body));
-}
-function verifyEventPage(events, afterSequence, predecessorHash, headSequence, headHash) {
-  if (predecessorHash === null)
-    return false;
-  if (events.length === 0) {
-    return afterSequence === headSequence && predecessorHash === headHash;
-  }
-  let expectedSequence = afterSequence + 1;
-  let previous = predecessorHash;
-  for (const event of events) {
-    if (event.sequence !== expectedSequence || event.prev_hash !== previous)
-      return false;
-    if (event.hash !== eventHash(event))
-      return false;
-    previous = event.hash;
-    expectedSequence += 1;
-  }
-  const lastSequence = events.at(-1)?.sequence ?? afterSequence;
-  return lastSequence !== headSequence || previous === headHash;
-}
-function presenceSessionFromRow(row, observedAt) {
-  const presence = row.left_at ? "left" : observedAt < row.presence_expires_at ? "live" : "stale";
-  return {
-    protocol: COLLAB_SESSION_PROTOCOL,
-    id: row.id,
-    workspace_id: row.workspace_id,
-    epoch_id: row.epoch_id,
-    client_instance_id: row.client_instance_id,
-    actor_label: row.actor_label,
-    actor_key: row.actor_key,
-    runtime_kind: row.runtime_kind,
-    provider_label: row.provider_label,
-    model_label: row.model_label,
-    declared_capabilities: parseStringArray(row.declared_capabilities_json),
-    capability_basis: "self_declared",
-    version: row.version,
-    joined_at: row.joined_at,
-    last_seen_at: row.last_seen_at,
-    presence_expires_at: row.presence_expires_at,
-    presence,
-    left_at: row.left_at
-  };
-}
-function requirePresenceSessionVersion(row, expectedVersion) {
-  if (row.version !== expectedVersion) {
-    throw new CollabError("session_version_conflict", "Presence session version changed", {
-      session_id: row.id,
-      expected_version: expectedVersion,
-      actual_version: row.version
-    });
-  }
-}
-function requireMatchingPresenceSessionJoin(row, input) {
-  const same = row.actor_label === input.actor_label && row.runtime_kind === input.runtime_kind && row.provider_label === input.provider_label && row.model_label === input.model_label && canonicalJson(parseStringArray(row.declared_capabilities_json)) === canonicalJson(input.declared_capabilities);
-  if (!same) {
-    throw new CollabError("session_instance_conflict", "client_instance_id was already joined with different self-declared metadata", { session_id: row.id });
-  }
-}
-function restFromDeclaration(row, observedAt) {
-  if (row.type !== "session.rested")
-    return null;
-  let payload;
-  try {
-    payload = JSON.parse(row.payload_json);
-  } catch {
-    return null;
-  }
-  if (!isRecordValue(payload) || payload.mode !== "resting")
-    return null;
-  const until = typeof payload.until === "string" ? payload.until : payload.until === null ? null : undefined;
-  const reason = typeof payload.reason === "string" ? payload.reason : payload.reason === null ? null : undefined;
-  const wakeOn = payload.wake_on;
-  if (until === undefined || reason === undefined)
-    return null;
-  if (!Array.isArray(wakeOn) || wakeOn.length > 1 || !wakeOn.every((item) => item === "addressed")) {
-    return null;
-  }
-  if (until !== null && !(Date.parse(observedAt) < Date.parse(until)))
-    return null;
-  return {
-    mode: "resting",
-    since: row.occurred_at,
-    until,
-    reason,
-    wake_on: wakeOn.length === 1 ? ["addressed"] : []
-  };
-}
-function leaseHolderPresent(row, observedAt) {
-  return sessionLiveness(row, observedAt) === "live";
-}
-function sessionLiveness(row, observedAt) {
-  if (row.status !== "active")
-    return "stale";
-  const age = Date.parse(observedAt) - Date.parse(row.last_seen_at);
-  return age <= SESSION_STALE_AFTER_MS ? "live" : "stale";
-}
-function sessionLivenessWithRest(row, observedAt, rest) {
-  if (row.status !== "active")
-    return "ended";
-  if (rest)
-    return "resting";
-  return sessionLiveness(row, observedAt);
-}
-var HANDOFF_EXPIRY_IS_NEWS_TO_OFFERER = {
-  target_session_ended: true,
-  offer_deadline_elapsed: true,
-  task_released: false,
-  task_reported_complete: false,
-  task_blocked: false,
-  task_completed: false,
-  source_lease_expired: false
-};
-function handoffExpiryIsNewsToOfferer(reason) {
-  return typeof reason === "string" && Object.hasOwn(HANDOFF_EXPIRY_IS_NEWS_TO_OFFERER, reason) && HANDOFF_EXPIRY_IS_NEWS_TO_OFFERER[reason];
-}
-function isAddressedTo(event, sessionId) {
-  if (event.session_id === sessionId)
-    return false;
-  if (event.type !== "report.posted" && event.type !== "handoff.offered")
-    return false;
-  let payload;
-  try {
-    payload = JSON.parse(event.payload_json);
-  } catch {
-    return false;
-  }
-  if (!isRecordValue(payload))
-    return false;
-  if (event.type === "report.posted")
-    return payload.to_session_id === sessionId;
-  return isRecordValue(payload.handoff) && payload.handoff.to_session_id === sessionId;
-}
-function knockReadThrough(db, workspaceId, sessionId, cursorSequence) {
-  try {
-    const row = db.query(`
-      SELECT m.shown_through_sequence AS mark, w.event_head_sequence AS head
-      FROM note_marks m JOIN workspaces w ON w.id = m.workspace_id
-      WHERE m.workspace_id = ? AND m.session_id = ?
-    `).get(workspaceId, sessionId);
-    if (row && Number.isInteger(row.mark) && Number.isInteger(row.head) && row.mark <= row.head) {
-      return Math.max(cursorSequence, row.mark);
-    }
-  } catch {}
-  return cursorSequence;
-}
-function knockDelivery(liveness, rest) {
-  if (liveness === "live")
-    return "tap";
-  if (liveness === "ended")
-    return "none";
-  if (liveness === "resting" && rest?.wake_on.includes("addressed"))
-    return "wake";
-  return "held";
-}
-function recoveryRequiredFirst(tasks, isOwn) {
-  const byExpiry = (left, right) => (left.lease_expires_at ?? "").localeCompare(right.lease_expires_at ?? "") || left.id.localeCompare(right.id);
-  const pending = tasks.filter((task) => task.effective_status === "recovery_required");
-  return [
-    ...pending.filter(isOwn).sort(byExpiry),
-    ...pending.filter((task) => !isOwn(task)).sort(byExpiry)
-  ];
-}
-function coordinationSessionFromRow(row, observedAt, rest) {
-  return {
-    id: row.id,
-    workspace_id: row.workspace_id,
-    worktree_id: row.worktree_id,
-    actor: row.actor,
-    role: row.role,
-    parent_session_id: row.parent_session_id,
-    status: row.status,
-    generation: row.generation,
-    joined_at: row.joined_at,
-    last_seen_at: row.last_seen_at,
-    ended_at: row.ended_at,
-    cursor: {
-      epoch_id: row.cursor_epoch_id,
-      sequence: row.cursor_sequence,
-      hash: row.cursor_hash
-    },
-    cursor_version: row.cursor_version,
-    reset_generation: row.reset_generation,
-    cursor_recovery_required: row.cursor_recovery_required !== 0,
-    liveness: sessionLivenessWithRest(row, observedAt, rest),
-    rest
-  };
-}
-function worktreeFromRow(row) {
-  return {
-    id: row.id,
-    workspace_id: row.workspace_id,
-    root_path: row.root_path,
-    repository_key: row.repository_key,
-    git_common_dir_hash: row.git_common_dir_hash,
-    branch: row.branch,
-    head_sha: row.head_sha,
-    dirty: sqlToBoolean(row.dirty),
-    registered_at: row.registered_at,
-    last_seen_at: row.last_seen_at
-  };
-}
-function checkpointFromWorktreeRow(row, capturedAt) {
-  return {
-    worktree_id: row.id,
-    head_sha: row.head_sha,
-    branch: row.branch,
-    dirty: sqlToBoolean(row.dirty),
-    captured_at: capturedAt
-  };
-}
-function reportFromRow(row) {
-  return {
-    id: row.id,
-    workspace_id: row.workspace_id,
-    task_id: row.task_id,
-    from_session_id: row.from_session_id,
-    from_actor: row.from_actor,
-    to_session_id: row.to_session_id,
-    kind: row.kind,
-    body: row.body,
-    evidence_refs: parseStringArray(row.evidence_refs_json),
-    confidence: row.confidence,
-    confidence_basis: row.confidence_basis,
-    limits: row.limits,
-    relation: row.relation,
-    target_report_id: row.target_report_id,
-    authority_scope: row.authority_scope,
-    authority_basis: row.authority_basis,
-    created_at: row.created_at,
-    event_sequence: row.event_sequence
-  };
-}
-function reviewFromRow(row) {
-  return { ...row };
-}
-function proposalTermsFromRow(row) {
-  if (!isConsentRule(row.rule)) {
-    throw new CollabError("proposal_rule_unsupported", "This proposal was opened under a consent rule this package does not implement", { proposal_report_id: row.report_id, rule: row.rule });
-  }
-  return {
-    report_id: row.report_id,
-    workspace_id: row.workspace_id,
-    rule: row.rule,
-    criteria: row.criteria,
-    extent: row.extent,
-    known_conflicts: row.known_conflicts,
-    origin: row.origin,
-    topic: row.topic,
-    closes_at: row.closes_at,
-    voices: JSON.parse(row.voices_json),
-    author_voice_id: row.author_voice_id,
-    proposal_sha256: row.proposal_sha256,
-    opened_event_id: row.opened_event_id,
-    created_at: row.created_at
-  };
-}
-function proposalPersonActFromRow(row) {
-  const { ai_snapshot_json, proof_json, ...rest } = row;
-  return {
-    ...rest,
-    ai_snapshot: JSON.parse(ai_snapshot_json),
-    proof: proof_json ? JSON.parse(proof_json) : null
-  };
-}
-function proposalSetAsideFromRow(row) {
-  const record2 = JSON.parse(row.set_aside_json);
-  return {
-    ...record2,
-    id: row.id,
-    workspace_id: row.workspace_id,
-    proposal_report_id: row.proposal_report_id,
-    challenge_report_id: row.challenge_report_id,
-    created_at: row.created_at,
-    event_sequence: row.event_sequence
-  };
-}
-var MAX_INBOX_SCAN = 500;
-var MAX_INBOX_PROPOSALS = 50;
-function aiSnapshotOf(status) {
-  const snapshot = {
-    position: status.ai.position,
-    closed: status.ai.closed,
-    qualifying_support_report_ids: status.ai.qualifying_support_report_ids,
-    unresolved_challenge_report_ids: status.ai.unresolved_challenge_report_ids
-  };
-  if (status.rule === CONSENT_RULE_V2) {
-    snapshot.set_aside_challenge_report_ids = (status.set_asides ?? []).map((entry) => entry.challenge_report_id).sort();
-  }
-  return snapshot;
-}
-function normalizeActReason(act, reason) {
-  if (act === "agree") {
-    if (reason !== undefined && reason.trim() !== "") {
-      throw new CollabError("invalid_reason", "An agreement takes no reason");
-    }
-    return null;
-  }
-  return cleanText(reason ?? "", "reason", 2000);
-}
-var PERSON_DESK_ACTOR = "person:desk";
-var PERSON_TERMINAL_ACTOR = "person:terminal";
-var PERSON_PASSKEY_ACTOR = "person:passkey";
-var PERSON_VOICE_ID = "person";
-var PERSON_DESK_LIMITS = "Written at the person desk, which does not authenticate the person.";
-function validatePersonAct(value) {
-  if (value !== "agree" && value !== "reject") {
-    throw new CollabError("invalid_act", "act must be agree or reject");
-  }
-  return value;
-}
-function normalizeProposalTerms(input) {
-  return {
-    question: cleanText(input.question, "question", MAX_REPORT_BODY),
-    criteria: cleanText(input.criteria, "criteria", 4000),
-    extent: cleanText(input.extent, "extent", 1000),
-    known_conflicts: optionalText(input.known_conflicts, "known_conflicts", 4000),
-    evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
-    topic: optionalText(input.topic, "topic", 200),
-    consult_seconds: validateConsultSeconds(input.consult_seconds)
-  };
-}
-function ruleRequestField(rule) {
-  const value = validateConsentRule(rule ?? CONSENT_RULE);
-  return value === CONSENT_RULE ? {} : { rule: value };
-}
-function validateProposalOrigin(value) {
-  if (value !== "ai" && value !== "person_relayed") {
-    throw new CollabError("invalid_origin", "origin must be ai or person_relayed");
-  }
-  return value;
-}
-function validateConsultSeconds(value) {
-  const seconds = value ?? DEFAULT_PROPOSAL_CONSULT_SECONDS;
-  if (!Number.isInteger(seconds) || seconds < MIN_PROPOSAL_CONSULT_SECONDS || seconds > MAX_PROPOSAL_CONSULT_SECONDS) {
-    throw new CollabError("invalid_consult_seconds", `consult_seconds must be an integer between ${MIN_PROPOSAL_CONSULT_SECONDS} and ${MAX_PROPOSAL_CONSULT_SECONDS}`);
-  }
-  return seconds;
-}
-function parseCheckpoint(json2) {
-  return json2 ? JSON.parse(json2) : null;
-}
-function checkpointDigest(checkpoint) {
-  return sha2564(canonicalJson(checkpoint));
-}
-function checkpointStateMatches(left, right) {
-  return left.worktree_id === right.worktree_id && left.head_sha === right.head_sha && left.branch === right.branch && left.algorithm === right.algorithm && left.index_sha256 === right.index_sha256 && left.state_sha256 === right.state_sha256 && left.dirty === right.dirty;
-}
-function requireCompleteGitCheckpoint(checkpoint) {
-  if (checkpoint.source !== "server_observed" || checkpoint.algorithm !== "git-state/v1" || checkpoint.head_sha === null || checkpoint.dirty === null || typeof checkpoint.index_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(checkpoint.index_sha256) || typeof checkpoint.state_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(checkpoint.state_sha256)) {
-    throw new CollabError("git_checkpoint_incomplete", "Acceptance requires a complete server-observed Git checkpoint", { worktree_id: checkpoint.worktree_id });
-  }
-}
-function artifactRepositoryPath(uri, rootPath) {
-  let value = uri;
-  if (value.startsWith("file:")) {
-    try {
-      const url2 = new URL(value);
-      if (url2.protocol !== "file:" || url2.hostname !== "" && url2.hostname !== "localhost") {
-        return null;
-      }
-      value = decodeURIComponent(url2.pathname);
-    } catch {
-      return null;
-    }
-  }
-  if (!value || value.includes("\x00") || value.includes("\\"))
-    return null;
-  let relative2;
-  if (isAbsolute4(value)) {
-    const absolute = posix.normalize(value);
-    if (!absolute.startsWith(`${rootPath}/`))
-      return null;
-    relative2 = absolute.slice(rootPath.length + 1);
-  } else {
-    relative2 = posix.normalize(value);
-  }
-  if (!relative2 || relative2 === "." || relative2 === ".." || relative2.startsWith("../") || relative2.endsWith("/") || relative2 === ".git" || relative2.startsWith(".git/"))
-    return null;
-  return relative2;
-}
-function pathWithinScopes(path, scopes) {
-  return scopes.some((scope) => path === scope || path.startsWith(`${scope}/`));
-}
-function gitCheckpointStaleError(taskId, result, observed, refusal) {
-  const branch = result.branch ? `"${result.branch}"` : "(none: its HEAD was detached)";
-  const remedy = `Two ways forward. (1) Host commit: exactly one commit on branch ${branch} whose only parent ` + `is the result checkpoint HEAD ${result.head_sha}, changing only paths inside the task's ` + "path_scopes, each byte-equal to the newest file artifact this task attached for that uri " + "(since its latest request_changes), with the worktree left clean; then review again. " + `(2) Re-completion: review task "${taskId}" with outcome "request_changes"; once it is ` + "claimed again, collab_task_complete captures a fresh result checkpoint for a new review. " + "Never amend, reset or rewrite a shared branch to meet (1): if other commits already sit " + "on it, use (2).";
-  return new CollabError("git_checkpoint_stale", `The completion worktree changed after its result checkpoint was captured: ${refusal}. ${remedy}`, {
-    result_checkpoint: result,
-    observed_checkpoint: observed,
-    boundary: "checkpoint_validation_is_a_local_observation_not_an_atomic_git_sqlite_lock",
-    host_commit_refusal: refusal,
-    remedy
-  });
-}
-function hydrateLegacyMutationResponse(value, now) {
-  if (Array.isArray(value)) {
-    return value.map((item) => hydrateLegacyMutationResponse(item, now));
-  }
-  if (!isRecordValue(value))
-    return value;
-  const hydratedEntries = Object.entries(value).map(([key, item]) => [
-    key,
-    hydrateLegacyMutationResponse(item, now)
-  ]);
-  const hydrated = Object.fromEntries(hydratedEntries);
-  if (typeof hydrated.id !== "string" || typeof hydrated.workspace_id !== "string" || !["open", "claimed", "blocked", "completed"].includes(typeof hydrated.status === "string" ? hydrated.status : "") || !Array.isArray(hydrated.dependencies) || !Array.isArray(hydrated.path_scopes) || !Number.isInteger(hydrated.version)) {
-    return hydrated;
-  }
-  const expired = hydrated.status === "claimed" && typeof hydrated.lease_expires_at === "string" && now >= hydrated.lease_expires_at;
-  return {
-    ...hydrated,
-    effective_status: typeof hydrated.effective_status === "string" ? hydrated.effective_status : expired ? "lease_expired" : hydrated.status,
-    work_mode: typeof hydrated.work_mode === "string" ? hydrated.work_mode : "coordination",
-    completion_policy: typeof hydrated.completion_policy === "string" ? hydrated.completion_policy : "reported",
-    review_status: typeof hydrated.review_status === "string" ? hydrated.review_status : "legacy_unreviewed",
-    expected_base_sha: hydrated.expected_base_sha ?? null,
-    base_checkpoint: hydrated.base_checkpoint ?? null,
-    base_checkpoint_digest: hydratedCheckpointDigest(hydrated.base_checkpoint_digest, hydrated.base_checkpoint),
-    result_checkpoint: hydrated.result_checkpoint ?? null,
-    result_checkpoint_digest: hydratedCheckpointDigest(hydrated.result_checkpoint_digest, hydrated.result_checkpoint),
-    completion_report_id: hydrated.completion_report_id ?? null,
-    assignee_session_id: hydrated.assignee_session_id ?? null,
-    assignee_liveness: hydrated.assignee_liveness ?? null,
-    claim_worktree_id: hydrated.claim_worktree_id ?? null,
-    reported_by: hydrated.reported_by ?? null,
-    reported_by_session_id: hydrated.reported_by_session_id ?? null,
-    reported_at: hydrated.reported_at ?? null,
-    accepted_by: hydrated.accepted_by ?? null,
-    accepted_by_session_id: hydrated.accepted_by_session_id ?? null,
-    accepted_at: hydrated.accepted_at ?? null,
-    review_requested_session_id: hydrated.review_requested_session_id ?? null
-  };
-}
-function hydratedCheckpointDigest(stored, checkpoint) {
-  if (typeof stored === "string")
-    return stored;
-  return isRecordValue(checkpoint) ? checkpointDigest(checkpoint) : null;
-}
-function isRecordValue(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function booleanToSql(value) {
-  return value === null ? null : value ? 1 : 0;
-}
-function sqlToBoolean(value) {
-  return value === null ? null : value !== 0;
-}
-function hashSessionToken(token) {
-  return sha2564(`agenttool.collab/session-token/v1\x00${token}`);
-}
-function safeDigestEqual(left, right) {
-  const leftBuffer = Buffer.from(left, "hex");
-  const rightBuffer = Buffer.from(right, "hex");
-  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
-}
-function pragmaNumber(db, name) {
-  const row = db.query(`PRAGMA ${name}`).get();
-  const value = row?.[name];
-  if (!Number.isInteger(value)) {
-    throw new CollabError("database_pragma_unavailable", `Could not read PRAGMA ${name}`);
-  }
-  return value;
-}
-function retrySqliteBusy(operation) {
-  const deadline = Date.now() + SQLITE_BUSY_RETRY_MS;
-  let delay = 10;
-  while (true) {
-    try {
-      operation();
-      return;
-    } catch (error51) {
-      const code = error51.code;
-      const busy = code === "SQLITE_BUSY" || error51 instanceof Error && /database is (?:locked|busy)/i.test(error51.message);
-      if (!busy || Date.now() >= deadline)
-        throw error51;
-      const remaining = deadline - Date.now();
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(delay, remaining));
-      delay = Math.min(delay * 2, 100);
-    }
-  }
-}
-function assertSafeDatabaseFile(path) {
-  const stat = lstatSync5(path);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || typeof process.getuid === "function" && stat.uid !== process.getuid()) {
-    throw new CollabError("database_file_unsafe", "The collaboration database path must be a non-linked regular file owned by this user", { path });
-  }
-}
-function quoteIdentifier(value) {
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
-    throw new CollabError("invalid_sql_identifier", "Invalid internal SQL identifier");
-  }
-  return `"${value}"`;
-}
-function assertDistinctLegacyWorktreeIdentities(workspaces) {
-  const selectors = [
-    {
-      field: "worktrees.root_path",
-      value: (workspace) => workspace.identity.root_path
-    },
-    {
-      field: "worktrees.id",
-      value: (workspace) => workspace.identity.checkpoint.worktree_id
-    },
-    {
-      field: "worktrees.fingerprint",
-      value: (workspace) => workspace.identity.worktree_fingerprint
-    }
-  ];
-  const collisions = [];
-  for (const selector of selectors) {
-    const groups = new Map;
-    for (const workspace of workspaces) {
-      const value = selector.value(workspace);
-      const workspaceIds2 = groups.get(value) ?? [];
-      workspaceIds2.push(workspace.id);
-      groups.set(value, workspaceIds2);
-    }
-    for (const workspaceIds2 of groups.values()) {
-      if (workspaceIds2.length < 2)
-        continue;
-      collisions.push({
-        field: selector.field,
-        workspace_ids: workspaceIds2.sort()
-      });
-    }
-  }
-  if (collisions.length === 0)
-    return;
-  collisions.sort((left, right) => {
-    const fieldOrder = left.field < right.field ? -1 : left.field > right.field ? 1 : 0;
-    if (fieldOrder !== 0)
-      return fieldOrder;
-    const leftIds = left.workspace_ids.join("\x00");
-    const rightIds = right.workspace_ids.join("\x00");
-    return leftIds < rightIds ? -1 : leftIds > rightIds ? 1 : 0;
-  });
-  const workspaceIds = [
-    ...new Set(collisions.flatMap((collision) => collision.workspace_ids))
-  ].sort();
-  throw new CollabError("migration_identity_collision", "Legacy workspaces resolve to the same worktree identity; migration will not merge distinct journals", {
-    workspace_ids: workspaceIds,
-    collisions,
-    boundary: "v0_3_will_not_merge_distinct_legacy_journals_that_resolve_to_one_worktree",
-    required_action: "keep_the_original_audit_database_and_use_a_compatible_v0_2_client_or_choose_a_fresh_v0_3_database"
-  });
-}
-function safeRepositoryIdentity(rootPath) {
-  try {
-    return inspectRepository(rootPath);
-  } catch {
-    const root = resolve5(rootPath);
-    const repositoryKey = `local-path:${sha2564(root)}`;
-    const worktreeId2 = `wt_${sha2564(`${root}\x00path:${root}`).slice(0, 24)}`;
-    return {
-      requested_root_path: root,
-      root_path: root,
-      repository_key: repositoryKey,
-      git_common_dir_hash: null,
-      worktree_fingerprint: `path:${sha2564(root)}`,
-      checkpoint: {
-        worktree_id: worktreeId2,
-        head_sha: null,
-        branch: null,
-        dirty: null,
-        captured_at: new Date().toISOString()
-      }
-    };
-  }
-}
-function sha2564(value) {
-  return createHash6("sha256").update(value).digest("hex");
-}
-function addSeconds(iso, seconds) {
-  return new Date(new Date(iso).getTime() + seconds * 1000).toISOString();
 }
 
 // src/store-notes.ts
@@ -39381,12 +39485,12 @@ class CollabStore extends CollabStoreCore {
     if (!Number.isInteger(limit) || limit < 1 || limit > NOTE_INBOX_MAX_LIMIT) {
       throw new CollabError("invalid_limit", `limit must be an integer from 1 to ${NOTE_INBOX_MAX_LIMIT}`);
     }
-    if (input.include !== "for_me" && input.include !== "all") {
-      throw new CollabError("invalid_include", "include must be for_me or all");
+    if (input.include !== "for_me" && input.include !== "open" && input.include !== "all") {
+      throw new CollabError("invalid_include", "include must be for_me, open, or all");
     }
     const plan = (session, mark, record2) => {
       const scan = this.scanNoteEvents(session, mark.sequence);
-      const shaped = input.include === "all" ? noteLines(scan.events.filter((event) => !event.own), true) : { lines: scan.events.filter((event) => event.for_me), dropped: [] };
+      const shaped = input.include === "all" ? noteLines(scan.events.filter((event) => !event.own), true) : input.include === "open" ? { lines: scan.events.filter((event) => event.for_me || event.open_report), dropped: [] } : { lines: scan.events.filter((event) => event.for_me), dropped: [] };
       const listed = shaped.lines;
       let through = scan.last_sequence;
       let more = scan.capped;
@@ -39468,8 +39572,8 @@ class CollabStore extends CollabStoreCore {
     if (!Number.isInteger(limit) || limit < 1 || limit > NOTE_INBOX_MAX_LIMIT) {
       throw new CollabError("invalid_limit", `limit must be an integer from 1 to ${NOTE_INBOX_MAX_LIMIT}`);
     }
-    if (input.include !== "for_me" && input.include !== "all") {
-      throw new CollabError("invalid_include", "include must be for_me or all");
+    if (input.include !== "for_me" && input.include !== "open" && input.include !== "all") {
+      throw new CollabError("invalid_include", "include must be for_me, open, or all");
     }
     if (!Number.isSafeInteger(input.since) || input.since < 0) {
       throw new CollabError("invalid_since", "since must be a whole number, 0 or more");
@@ -39480,7 +39584,7 @@ class CollabStore extends CollabStoreCore {
       const mark = this.readNoteMarkState(session);
       const after = Math.min(input.since, workspace.event_head_sequence);
       const scan = this.scanNoteEvents(session, after, this.endedNamesakes(session));
-      const shaped = noteLines(scan.events.filter((event) => input.include === "all" ? !event.own : event.for_me || event.for_name !== null), false);
+      const shaped = noteLines(scan.events.filter((event) => input.include === "all" ? !event.own : input.include === "open" ? event.for_me || event.for_name !== null || event.open_report : event.for_me || event.for_name !== null), false);
       const listed = shaped.lines;
       let through = scan.last_sequence;
       let more = scan.capped;
@@ -39944,11 +40048,13 @@ class CollabStore extends CollabStoreCore {
       const event = eventFromRow(row);
       const own = event.session_id === session.id;
       const forMe = !own && this.eventAddressesSession(event, session.id);
+      const openReport = !own && isOpenTableReport(event, session.id);
       return {
         sequence: event.sequence,
         type: event.type,
         own,
         for_me: forMe,
+        open_report: openReport,
         for_name: own || forMe ? null : this.namesakeAddressed(event, namesakes),
         thing: noteThingOf(event),
         attached: event.type === "evidence.cited" || event.type === "artifact.attached",
@@ -40061,7 +40167,7 @@ class CollabStore extends CollabStoreCore {
     const payload = event.payload ?? {};
     switch (event.type) {
       case "report.posted":
-        if (payload.to_session_id === sessionId)
+        if (payload.to_session_id === sessionId || Array.isArray(payload.also_to_session_ids) && payload.also_to_session_ids.includes(sessionId))
           return "addressed";
         if (typeof payload.about_proposal_id === "string")
           return "about_your_proposal";
@@ -42359,13 +42465,14 @@ function shellQuote(value) {
 function listenHow(ctx, sessionId) {
   const inboxWait = ctx.slot_key ? `collab_inbox {wait_seconds: 30, binding_key: "${ctx.slot_key}"}` : "collab_inbox {wait_seconds: 30}";
   const database = ctx.store.db.filename;
-  if (!ctx.environment.CLAUDE_CODE_MESSAGING_SOCKET || !database || database === ":memory:")
+  const inClaudeCode = Boolean(ctx.environment.CLAUDE_CODE_MESSAGING_SOCKET || ctx.environment.CLAUDE_CODE_SESSION_ID);
+  if (!inClaudeCode || !database || database === ":memory:")
     return inboxWait;
   const watcher = resolve6(import.meta.dir, "..", "integrations", "claude-code", "collab-doorbell-watch.ts");
   const host = resolve6(import.meta.dir, "..", "dist", "agenttool-collab-host.js");
   if (!existsSync6(watcher) || !existsSync6(host))
     return inboxWait;
-  return `nohup ${shellQuote(process.execPath)} ${shellQuote(watcher)} --session ${sessionId} ` + `--db ${shellQuote(database)} --host-bin ${shellQuote(host)} >/dev/null 2>&1 &`;
+  return `${shellQuote(process.execPath)} ${shellQuote(watcher)} --session ${sessionId} ` + `--db ${shellQuote(database)} --host-bin ${shellQuote(host)} --stdout`;
 }
 var RELATION_ACTS = {
   informs: "note",
@@ -42524,6 +42631,7 @@ function formatEntry(entry, byId, me, recheck) {
       }
     }
     const to = report.to_session_id ? sessionRef(report.to_session_id, report.to_session_id, byId) : entry.to_person ? "person" : "all";
+    const alsoToIds = Array.isArray(payload.also_to_session_ids) ? payload.also_to_session_ids.filter((id) => typeof id === "string") : [];
     const aboutProposal = typeof payload.about_proposal_id === "string" ? payload.about_proposal_id : null;
     const re = report.target_report_id ? { id: report.target_report_id, handle: handleOf("report", report.target_report_id) } : aboutProposal ? { id: aboutProposal, handle: handleOf("proposal", aboutProposal) } : report.task_id ? { id: report.task_id, handle: handleOf("task", report.task_id) } : null;
     return {
@@ -42533,6 +42641,7 @@ function formatEntry(entry, byId, me, recheck) {
       ...act === "corrects" || act === "supersedes" ? { relation: report.relation } : {},
       from: sessionShown(report.from_session_id, report.from_actor, byId),
       to,
+      ...alsoToIds.length > 0 ? { also_to: alsoToIds.map((id) => sessionRef(id, id, byId)) } : {},
       re,
       ...base,
       statement,
@@ -42739,9 +42848,11 @@ function validInboxInput(ctx, input) {
     });
   }
   const include = input.include ?? "for_me";
-  if (include !== "for_me" && include !== "all") {
-    throw new CollabError("invalid_include", "include must be for_me or all", {
-      remedy: { say: "include is for_me (the default: items for you) or all (also every other new item, as subject lines)." }
+  if (include !== "for_me" && include !== "open" && include !== "all") {
+    throw new CollabError("invalid_include", "include must be for_me, open, or all", {
+      remedy: {
+        say: "include is for_me (the default: items for you), open (also open table broadcasts), or all (every other new item, as subject lines)."
+      }
     });
   }
   const format = input.format ?? "json";
@@ -42789,18 +42900,19 @@ async function inboxVerb(ctx, input) {
   }
   if (waits)
     ctx.waits.active += 1;
-  const paging = { ...include === "all" ? { include } : {}, ...input.limit !== undefined ? { limit } : {} };
+  const paging = { ...include !== "for_me" ? { include } : {}, ...input.limit !== undefined ? { limit } : {} };
   try {
     const first = ctx.store.inboxForSession({ ...credential, limit, include });
     const passes = [first];
     let waited = null;
     let waitError = null;
     const extras = [];
-    if (waits && !first.entries.some((entry) => entry.for_me) && !first.more) {
+    const hasMatchingItem = first.entries.some((entry) => entry.for_me || include === "open" && isOpenTableReport(entry.event, binding.handle.session.id));
+    if (waits && !hasMatchingItem && !first.more) {
       const started = performance.now();
       const seconds = () => Math.round((performance.now() - started) / 100) / 10;
       try {
-        const woke = await waitForMe(ctx, binding, first.mark.anchor, waitSeconds * 1000);
+        const woke = await waitForMe(ctx, binding, first.mark.anchor, waitSeconds * 1000, include === "open");
         waited = woke === null ? { seconds: seconds(), ended_by: "timeout" } : woke.ended_by === "item" ? { seconds: seconds(), ended_by: "item" } : { seconds: seconds(), ended_by: "ballot_closed", ballot: { id: woke.ballot_id, handle: handleOf("ballot", woke.ballot_id) } };
         if (woke)
           passes.push(ctx.store.inboxForSession({ ...credential, limit, include }));
@@ -42934,7 +43046,7 @@ function entryRef(entry) {
     return exactRef("task", event.entity_id);
   return entry.task ? exactRef("task", entry.task.id) : null;
 }
-async function waitForMe(ctx, binding, anchor, durationMs) {
+async function waitForMe(ctx, binding, anchor, durationMs, includeOpen = false) {
   const sessionId = binding.handle.session.id;
   const workspaceId = binding.handle.workspace.id;
   let after = { ...anchor };
@@ -42971,7 +43083,7 @@ async function waitForMe(ctx, binding, anchor, durationMs) {
         event_limit: 50
       });
       for (const event of page.events) {
-        if (event.session_id !== sessionId && ctx.store.eventAddressesSession(event, sessionId))
+        if (event.session_id !== sessionId && (ctx.store.eventAddressesSession(event, sessionId) || includeOpen && isOpenTableReport(event, sessionId)))
           return { ended_by: "item" };
         if ((event.type === "ballot.cast" || event.type === "ballot.closed") && watchedIds.has(event.entity_id)) {
           const state = ctx.store.noteBallotState(workspaceId, event.entity_id);
@@ -47340,7 +47452,7 @@ Legacy session tools: ${legacyInstructions}`
       about: exports_external.string().optional().describe("One thread: a report, proposal, ballot or task id or handle (at most 300 characters); not a session."),
       since: exports_external.number().optional().describe("A whole number, 0 or more: read back from just after this journal sequence, oldest first, without moving your mark; with include all, every item."),
       wait_seconds: exports_external.number().optional().describe("A whole number from 0 to 30: with nothing new for you, wait up to this long for an item or a ballot's close; default 0. Ignored with about or since."),
-      include: exports_external.string().optional().describe("for_me (the default), or all to add unaddressed items as subject lines."),
+      include: exports_external.string().optional().describe("for_me (the default), open (also open table broadcasts), or all to add unaddressed items as subject lines."),
       limit: exports_external.number().optional().describe("Items per call, a whole number from 1 to 50; default 20."),
       format: exports_external.string().optional().describe("json (the default), or note: with about, the thread root and its state as one collab-note/1 text of at most 800 characters, for a person to carry.")
     }
@@ -47603,8 +47715,14 @@ Legacy session tools: ${legacyInstructions}`
     title: "Read collaboration status",
     description: "Return task counts, active sessions (with derived liveness) and claims, blockers, pending reviews, reports, and decisions.",
     annotations: localReadOnly,
-    inputSchema: { workspace_id: workspaceId }
-  }, async ({ workspace_id }) => call(() => store2.workspaceStatus(workspace_id)));
+    inputSchema: {
+      workspace_id: workspaceId,
+      fields: exports_external.enum(["full", "headers"]).optional().describe('Optional projection for recent_reports: "full" (the default) returns full report bodies; ' + '"headers" returns compact report headers (first-line summary and body_chars) without bodies.')
+    }
+  }, async ({ workspace_id, fields }) => call(() => {
+    const status = store2.workspaceStatus(workspace_id);
+    return fields === "headers" ? { ...status, recent_reports: status.recent_reports.map(toReportHeader) } : status;
+  }));
   server.registerTool("collab_next", {
     title: "Poll the next useful collaboration state",
     description: "Poll without acknowledging, with 1\u201350 events per page and a default of 10. Routed reports are bounded to the exact event page; task, conflict, and handoff projections describe the same snapshot head. A bound session always pages from its acknowledged cursor: advance with collab_cursor_ack, or read elsewhere with collab_events_since. " + "recovery_required lists expired session leases awaiting collab_task_recover, the caller's own first. " + "A bound session's addressed_waiting counts notes addressed to it that it has not read (addressed reports, " + "review requests and results, session handoff offers; never its own); it falls as collab_cursor_ack advances, " + "or as collab_inbox shows them. " + "Session liveness and task assignee_liveness are a derived view, never a status change: ended, else resting " + "while a declared rest is unexpired, else stale after 6 hours unseen, else live.",
@@ -47915,7 +48033,8 @@ Legacy session tools: ${legacyInstructions}`
       authority_scope: exports_external.string().max(1000).optional(),
       authority_basis: exports_external.string().max(2000).optional(),
       to_person: exports_external.boolean().optional().describe("Also place this report in the person's inbox at the person desk, for example to ask them something. " + "Routing, not access control or authority."),
-      expected_head_sequence: exports_external.number().int().nonnegative().optional().describe("Optional compare-and-swap: the event_sequence of the last report you read (from collab_report_list, " + "events.next_anchor.sequence, or collab_inbox with include all; not head_sequence). If another session or " + "the person desk posted any report after it (notes, reports, task completion summaries, review requests or " + "verdicts, proposals or ballots, whoever addressed), nothing is written and head_moved returns reports_since " + "and missed_report_ids; read them with collab_report_list, then send again. Your own reports and non-report " + "events (sessions, claims, leases, task creation/progress/blockers, handoff offers, person proposal acts) do " + "not count. On success, compared_at_sequence echoes the checked value.")
+      expected_head_sequence: exports_external.number().int().nonnegative().optional().describe("Optional compare-and-swap: the event_sequence of the last report you read (from collab_report_list, " + "events.next_anchor.sequence, or collab_inbox with include all; not head_sequence). If another session or " + "the person desk posted any report after it (notes, reports, task completion summaries, review requests or " + "verdicts, proposals or ballots, whoever addressed), nothing is written and head_moved returns reports_since " + "and missed_report_ids; read them with collab_report_list, then send again. Your own reports and non-report " + "events (sessions, claims, leases, task creation/progress/blockers, handoff offers, person proposal acts) do " + "not count. On success, compared_at_sequence echoes the checked value."),
+      also_to_session_ids: exports_external.array(exports_external.string().min(1)).max(MAX_ALSO_TO_SESSIONS).optional().describe(`Optional additional session IDs (at most ${MAX_ALSO_TO_SESSIONS}) to route this report to alongside to_session_id; ` + "payload-only routing, not access control.")
     }
   }, async ({ workspace_id, ...input }) => call(() => {
     requireWorkspace(workspace_id);
@@ -47931,11 +48050,15 @@ Legacy session tools: ${legacyInstructions}`
       after_event_sequence: exports_external.number().int().nonnegative().optional(),
       limit: exports_external.number().int().min(1).max(500).optional(),
       task_id: exports_external.string().min(1).optional(),
-      to_session_id: exports_external.string().min(1).optional()
+      to_session_id: exports_external.string().min(1).optional(),
+      fields: exports_external.enum(["full", "headers"]).optional().describe('Optional report projection: "full" (the default) returns full report bodies; ' + '"headers" returns compact headers (first-line summary and body_chars) without bodies.')
     }
-  }, async ({ workspace_id, ...options2 }) => call(() => ({
-    reports: store2.listReports(workspace_id, options2)
-  })));
+  }, async ({ workspace_id, fields, ...options2 }) => call(() => {
+    const reports = store2.listReports(workspace_id, options2);
+    return {
+      reports: fields === "headers" ? reports.map(toReportHeader) : reports
+    };
+  }));
   server.registerTool("collab_proposal_open", {
     title: "Open a direction-level proposal for consent",
     description: `Open a proposal the agents settle by lazy consensus (${consentRule}) before a person decides. ` + "Answer it with collab_report_append supports, challenges and resolves. The agents' position is " + "computed from the journal and authorises nothing alone; a person consents only at the controlling " + "terminal or with an enrolled passkey through the person desk, never through MCP. A challenge stands " + "until its own voice resolves or withdraws it" + (consentRule === CONSENT_RULE_V2 ? ", or until the person sets it aside while no session of that voice is live, giving a reason" : "") + ". Use it for design direction, criteria and extent, " + "conflicting context and the reading of principles, not for every edit.",

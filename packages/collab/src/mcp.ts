@@ -12,6 +12,7 @@ import {
   DEFAULT_PROPOSAL_CONSULT_SECONDS,
   DEFAULT_WAIT_EVENT_LIMIT,
   EVIDENCE_REFS_DESCRIPTION,
+  MAX_ALSO_TO_SESSIONS,
   MAX_PROPOSAL_CONSULT_SECONDS,
   MAX_REST_REASON_LENGTH,
   MIN_PROPOSAL_CONSULT_SECONDS,
@@ -28,6 +29,7 @@ import {
   writeSessionCredentialFile,
 } from "./session-file.js";
 import { CollabStore } from "./store-notes.js";
+import { toReportHeader } from "./store.js";
 import { doneVerb, noteVerb, takeVerb } from "./note-verbs.js";
 import { proposeVerb } from "./propose-verb.js";
 import { pollVerb, voteVerb } from "./ballot-verbs.js";
@@ -409,7 +411,7 @@ export function buildCollabMcpServer(
         wait_seconds: z.number().optional()
           .describe("A whole number from 0 to 30: with nothing new for you, wait up to this long for an item or a ballot's close; default 0. Ignored with about or since."),
         include: z.string().optional()
-          .describe("for_me (the default), or all to add unaddressed items as subject lines."),
+          .describe("for_me (the default), open (also open table broadcasts), or all to add unaddressed items as subject lines."),
         limit: z.number().optional().describe("Items per call, a whole number from 1 to 50; default 20."),
         format: z.string().optional()
           .describe("json (the default), or note: with about, the thread root and its state as one collab-note/1 text of at most 800 characters, for a person to carry."),
@@ -846,9 +848,20 @@ export function buildCollabMcpServer(
       description:
         "Return task counts, active sessions (with derived liveness) and claims, blockers, pending reviews, reports, and decisions.",
       annotations: localReadOnly,
-      inputSchema: { workspace_id: workspaceId },
+      inputSchema: {
+        workspace_id: workspaceId,
+        fields: z.enum(["full", "headers"]).optional().describe(
+          'Optional projection for recent_reports: "full" (the default) returns full report bodies; '
+          + '"headers" returns compact report headers (first-line summary and body_chars) without bodies.',
+        ),
+      },
     },
-    async ({ workspace_id }) => call(() => store.workspaceStatus(workspace_id)),
+    async ({ workspace_id, fields }) => call(() => {
+      const status = store.workspaceStatus(workspace_id);
+      return fields === "headers"
+        ? { ...status, recent_reports: status.recent_reports.map(toReportHeader) }
+        : status;
+    }),
   );
 
   server.registerTool(
@@ -1339,6 +1352,10 @@ export function buildCollabMcpServer(
           + "events (sessions, claims, leases, task creation/progress/blockers, handoff offers, person proposal acts) do "
           + "not count. On success, compared_at_sequence echoes the checked value.",
         ),
+        also_to_session_ids: z.array(z.string().min(1)).max(MAX_ALSO_TO_SESSIONS).optional().describe(
+          `Optional additional session IDs (at most ${MAX_ALSO_TO_SESSIONS}) to route this report to alongside to_session_id; `
+          + "payload-only routing, not access control.",
+        ),
       },
     },
     async ({ workspace_id, ...input }) => call(() => {
@@ -1367,11 +1384,18 @@ export function buildCollabMcpServer(
         limit: z.number().int().min(1).max(500).optional(),
         task_id: z.string().min(1).optional(),
         to_session_id: z.string().min(1).optional(),
+        fields: z.enum(["full", "headers"]).optional().describe(
+          'Optional report projection: "full" (the default) returns full report bodies; '
+          + '"headers" returns compact headers (first-line summary and body_chars) without bodies.',
+        ),
       },
     },
-    async ({ workspace_id, ...options }) => call(() => ({
-      reports: store.listReports(workspace_id, options),
-    })),
+    async ({ workspace_id, fields, ...options }) => call(() => {
+      const reports = store.listReports(workspace_id, options);
+      return {
+        reports: fields === "headers" ? reports.map(toReportHeader) : reports,
+      };
+    }),
   );
 
   server.registerTool(

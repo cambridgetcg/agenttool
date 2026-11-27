@@ -267,6 +267,7 @@ var SESSION_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
 var MAX_REST_REASON_LENGTH = 200;
 var EVIDENCE_REF_PREFIXES = ["artifact:", "event:", "report:", "checkpoint:"];
 var EVIDENCE_REFS_DESCRIPTION = "Evidence references point inside this workspace's journal and start with artifact:, event:, " + "report:, or checkpoint: (a task's base_checkpoint_digest or result_checkpoint_digest), " + 'for example "artifact:artifact_<id>".';
+var MAX_ALSO_TO_SESSIONS = 8;
 var CONSENT_RULE = "consent/v1";
 var CONSENT_RULE_V2 = "consent/v2";
 var CONSENT_RULES = [CONSENT_RULE, CONSENT_RULE_V2];
@@ -5201,9 +5202,11 @@ class CollabStoreCore {
   }
   appendReportForSession(input) {
     const expectedHead = input.expected_head_sequence === undefined ? undefined : validateExpectedHeadSequence(input.expected_head_sequence);
+    const toSessionId = input.to_session_id ? validateId(input.to_session_id, "to_session_id") : null;
+    const alsoToSessionIds = normalizeAlsoToSessionIds(input.also_to_session_ids, toSessionId);
     const normalized = {
       task_id: input.task_id ? validateId(input.task_id, "task_id") : null,
-      to_session_id: input.to_session_id ? validateId(input.to_session_id, "to_session_id") : null,
+      to_session_id: toSessionId,
       kind: validateReportKind(input.kind),
       body: cleanText(input.body, "body", MAX_REPORT_BODY),
       evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
@@ -5214,7 +5217,8 @@ class CollabStoreCore {
       target_report_id: input.target_report_id ? validateId(input.target_report_id, "target_report_id") : null,
       authority_scope: optionalText(input.authority_scope, "authority_scope", 1000),
       authority_basis: optionalText(input.authority_basis, "authority_basis", 2000),
-      ...input.to_person === true ? { to_person: true } : {}
+      ...input.to_person === true ? { to_person: true } : {},
+      ...alsoToSessionIds.length > 0 ? { also_to_session_ids: alsoToSessionIds } : {}
     };
     return this.mutateAsSession(input, input.idempotency_key, "report.append.v2", expectedHead === undefined ? normalized : { ...normalized, expected_head_sequence: expectedHead }, (session) => {
       this.validateReportInput(session, normalized);
@@ -5637,9 +5641,11 @@ class CollabStoreCore {
     return this.listPersonPasskeys().find((key) => key.credential_id === credentialId);
   }
   appendPersonNote(input) {
+    const explicitTo = input.to_session_id ? validateId(input.to_session_id, "to_session_id") : undefined;
     const normalized = {
       body: cleanText(input.body, "body", MAX_REPORT_BODY),
-      proposal_report_id: input.proposal_report_id ? validateId(input.proposal_report_id, "proposal_report_id") : null
+      proposal_report_id: input.proposal_report_id ? validateId(input.proposal_report_id, "proposal_report_id") : null,
+      ...explicitTo !== undefined ? { to_session_id: explicitTo } : {}
     };
     const idempotencyKey = validateIdempotencyKey(input.idempotency_key);
     return this.mutate(input.workspace_id, PERSON_DESK_ACTOR, idempotencyKey, "person.note.v1", normalized, () => {
@@ -5647,6 +5653,13 @@ class CollabStoreCore {
       if (normalized.proposal_report_id) {
         const terms = this.requireProposalTerms(input.workspace_id, normalized.proposal_report_id);
         toSessionId = this.requireReport(terms.report_id).from_session_id;
+      }
+      if (explicitTo !== undefined) {
+        const target = this.requireCoordinationSessionRow(explicitTo);
+        if (target.workspace_id !== input.workspace_id) {
+          throw new CollabError("report_target_mismatch", "Report target is in another workspace");
+        }
+        toSessionId = explicitTo;
       }
       return this.appendReportInternal({ workspace_id: input.workspace_id, actor: PERSON_DESK_ACTOR, id: null }, {
         task_id: null,
@@ -6598,12 +6611,22 @@ class CollabStoreCore {
         WHERE workspace_id = ? AND to_session_id = ? AND status = 'pending' AND expires_at > ?
         ORDER BY offered_at, id
       `).all(current.workspace_id, current.id, this.timestamp());
+      const alsoToBySequence = new Map;
+      for (const event of events.events) {
+        if (event.type !== "report.posted")
+          continue;
+        const rawAlso = event.payload.also_to_session_ids;
+        if (Array.isArray(rawAlso)) {
+          const ids = rawAlso.filter((item) => typeof item === "string");
+          if (ids.length > 0)
+            alsoToBySequence.set(event.sequence, ids);
+        }
+      }
       const reportRows = this.db.query(`
         SELECT * FROM reports
         WHERE workspace_id = ? AND event_sequence > ? AND event_sequence <= ?
-          AND (to_session_id IS NULL OR to_session_id = ?)
         ORDER BY event_sequence
-      `).all(current.workspace_id, current.cursor_sequence, events.next_anchor.sequence, current.id);
+      `).all(current.workspace_id, current.cursor_sequence, events.next_anchor.sequence).filter((row2) => row2.to_session_id === null || row2.to_session_id === current.id || (alsoToBySequence.get(row2.event_sequence)?.includes(current.id) ?? false));
       return {
         actor: current.actor,
         session: {
@@ -6832,13 +6855,17 @@ class CollabStoreCore {
       case "report.posted": {
         if (payload.to_session_id === sessionId)
           return true;
+        if (Array.isArray(payload.also_to_session_ids) && payload.also_to_session_ids.includes(sessionId)) {
+          return true;
+        }
         if (typeof payload.about_proposal_id === "string") {
           return this.proposalAddressesSession(payload.about_proposal_id, sessionId);
         }
         if (typeof payload.target_report_id !== "string")
           return false;
         const target = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`).get(payload.target_report_id);
-        return target?.from_session_id === sessionId && typeof payload.to_session_id !== "string";
+        const hasAlsoTo = Array.isArray(payload.also_to_session_ids) && payload.also_to_session_ids.length > 0;
+        return target?.from_session_id === sessionId && typeof payload.to_session_id !== "string" && !hasAlsoTo;
       }
       case "handoff.offered":
         return field(payload.handoff, "to_session_id") === sessionId;
@@ -7637,6 +7664,12 @@ class CollabStoreCore {
         throw new CollabError("report_target_mismatch", "Report target is in another workspace");
       }
     }
+    for (const extraSessionId of input.also_to_session_ids ?? []) {
+      const targetSession = this.requireCoordinationSessionRow(extraSessionId);
+      if (targetSession.workspace_id !== session.workspace_id) {
+        throw new CollabError("report_target_mismatch", "Report target is in another workspace");
+      }
+    }
     if (input.relation === "informs" && input.target_report_id) {
       throw new CollabError("invalid_report_relation", "An informing report does not target another report. To agree with or answer a report, use " + 'relation "supports" (or "challenges" to disagree) with target_report_id; ' + "to address a session, use to_session_id");
     }
@@ -7668,9 +7701,11 @@ class CollabStoreCore {
   appendReportInternal(session, input) {
     const id = `report_${randomUUID()}`;
     const now = this.timestamp();
+    const alsoTo = input.also_to_session_ids && input.also_to_session_ids.length > 0 ? input.also_to_session_ids : undefined;
     const event = this.appendEvent(session.workspace_id, "report.posted", id, session.actor, {
       ...input.to_person ? { to_person: true } : {},
       ...input.about_proposal_id ? { about_proposal_id: input.about_proposal_id } : {},
+      ...alsoTo ? { also_to_session_ids: alsoTo } : {},
       ...input.note ? { note: input.note } : {},
       task_id: input.task_id,
       to_session_id: input.to_session_id,
@@ -7696,7 +7731,8 @@ class CollabStoreCore {
     if (input.to_person) {
       this.db.query(`INSERT INTO person_addressed_reports (report_id, workspace_id) VALUES (?, ?)`).run(id, session.workspace_id);
     }
-    return this.requireReport(id);
+    const stored = this.requireReport(id);
+    return alsoTo ? { ...stored, also_to_session_ids: alsoTo } : stored;
   }
   requireReport(id) {
     const row = this.db.query(`SELECT * FROM reports WHERE id = ?`).get(id);
@@ -8714,9 +8750,45 @@ function isAddressedTo(event, sessionId) {
   }
   if (!isRecordValue(payload))
     return false;
-  if (event.type === "report.posted")
-    return payload.to_session_id === sessionId;
+  if (event.type === "report.posted") {
+    return payload.to_session_id === sessionId || Array.isArray(payload.also_to_session_ids) && payload.also_to_session_ids.includes(sessionId);
+  }
   return isRecordValue(payload.handoff) && payload.handoff.to_session_id === sessionId;
+}
+function isOpenTableReport(event, sessionId) {
+  if (event.type !== "report.posted")
+    return false;
+  if (sessionId !== undefined && event.session_id === sessionId)
+    return false;
+  const payload = event.payload ?? {};
+  if (typeof payload.to_session_id === "string" && payload.to_session_id.length > 0)
+    return false;
+  if (Array.isArray(payload.also_to_session_ids) && payload.also_to_session_ids.length > 0)
+    return false;
+  if (typeof payload.target_report_id === "string" && payload.target_report_id.length > 0)
+    return false;
+  if (typeof payload.about_proposal_id === "string" && payload.about_proposal_id.length > 0)
+    return false;
+  if (payload.to_person === true)
+    return false;
+  return true;
+}
+function normalizeAlsoToSessionIds(ids, primaryTo) {
+  if (ids === undefined)
+    return [];
+  if (!Array.isArray(ids) || ids.length > MAX_ALSO_TO_SESSIONS) {
+    throw new CollabError("invalid_also_to_session_ids", `also_to_session_ids must be an array of at most ${MAX_ALSO_TO_SESSIONS} session IDs`);
+  }
+  const seen = new Set;
+  const out = [];
+  for (const raw of ids) {
+    const id = validateId(raw, "also_to_session_ids");
+    if (id === primaryTo || seen.has(id))
+      continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
 }
 function knockReadThrough(db, workspaceId, sessionId, cursorSequence) {
   try {
@@ -9517,12 +9589,12 @@ class CollabStore extends CollabStoreCore {
     if (!Number.isInteger(limit) || limit < 1 || limit > NOTE_INBOX_MAX_LIMIT) {
       throw new CollabError("invalid_limit", `limit must be an integer from 1 to ${NOTE_INBOX_MAX_LIMIT}`);
     }
-    if (input.include !== "for_me" && input.include !== "all") {
-      throw new CollabError("invalid_include", "include must be for_me or all");
+    if (input.include !== "for_me" && input.include !== "open" && input.include !== "all") {
+      throw new CollabError("invalid_include", "include must be for_me, open, or all");
     }
     const plan = (session, mark, record) => {
       const scan = this.scanNoteEvents(session, mark.sequence);
-      const shaped = input.include === "all" ? noteLines(scan.events.filter((event) => !event.own), true) : { lines: scan.events.filter((event) => event.for_me), dropped: [] };
+      const shaped = input.include === "all" ? noteLines(scan.events.filter((event) => !event.own), true) : input.include === "open" ? { lines: scan.events.filter((event) => event.for_me || event.open_report), dropped: [] } : { lines: scan.events.filter((event) => event.for_me), dropped: [] };
       const listed = shaped.lines;
       let through = scan.last_sequence;
       let more = scan.capped;
@@ -9604,8 +9676,8 @@ class CollabStore extends CollabStoreCore {
     if (!Number.isInteger(limit) || limit < 1 || limit > NOTE_INBOX_MAX_LIMIT) {
       throw new CollabError("invalid_limit", `limit must be an integer from 1 to ${NOTE_INBOX_MAX_LIMIT}`);
     }
-    if (input.include !== "for_me" && input.include !== "all") {
-      throw new CollabError("invalid_include", "include must be for_me or all");
+    if (input.include !== "for_me" && input.include !== "open" && input.include !== "all") {
+      throw new CollabError("invalid_include", "include must be for_me, open, or all");
     }
     if (!Number.isSafeInteger(input.since) || input.since < 0) {
       throw new CollabError("invalid_since", "since must be a whole number, 0 or more");
@@ -9616,7 +9688,7 @@ class CollabStore extends CollabStoreCore {
       const mark = this.readNoteMarkState(session);
       const after = Math.min(input.since, workspace.event_head_sequence);
       const scan = this.scanNoteEvents(session, after, this.endedNamesakes(session));
-      const shaped = noteLines(scan.events.filter((event) => input.include === "all" ? !event.own : event.for_me || event.for_name !== null), false);
+      const shaped = noteLines(scan.events.filter((event) => input.include === "all" ? !event.own : input.include === "open" ? event.for_me || event.for_name !== null || event.open_report : event.for_me || event.for_name !== null), false);
       const listed = shaped.lines;
       let through = scan.last_sequence;
       let more = scan.capped;
@@ -10080,11 +10152,13 @@ class CollabStore extends CollabStoreCore {
       const event = eventFromRow(row);
       const own = event.session_id === session.id;
       const forMe = !own && this.eventAddressesSession(event, session.id);
+      const openReport = !own && isOpenTableReport(event, session.id);
       return {
         sequence: event.sequence,
         type: event.type,
         own,
         for_me: forMe,
+        open_report: openReport,
         for_name: own || forMe ? null : this.namesakeAddressed(event, namesakes),
         thing: noteThingOf(event),
         attached: event.type === "evidence.cited" || event.type === "artifact.attached",
@@ -10197,7 +10271,7 @@ class CollabStore extends CollabStoreCore {
     const payload = event.payload ?? {};
     switch (event.type) {
       case "report.posted":
-        if (payload.to_session_id === sessionId)
+        if (payload.to_session_id === sessionId || Array.isArray(payload.also_to_session_ids) && payload.also_to_session_ids.includes(sessionId))
           return "addressed";
         if (typeof payload.about_proposal_id === "string")
           return "about_your_proposal";
@@ -11934,7 +12008,7 @@ function confirmOnTty(request, options = {}) {
 var PERSON_DESK_PROTOCOL = "agenttool.collab-host/1";
 var EXIT_NOT_CONFIRMED = 3;
 var MAX_JSON_INPUT_BYTES = 64 * 1024;
-var PERSON_DESK_USAGE = "usage: agenttool-collab-host person <verb> [--db <path>], where <verb> is one of: " + "workspaces | voices --workspace <id> | proposals --workspace <id> [--proposal <id> | --limit <n>]" + " | inbox [--workspace <id>]" + " | challenge --proposal <id> --act agree | challenge --proposal <id> --act reject --reason <text>" + " | challenge --proposal <id> --act set-aside --challenge <report id> --reason <text>" + " | consent --proposal <id> [--passkey-assertion <path>|-]" + " | reject --proposal <id> --reason <text> [--passkey-assertion <path>|-]" + " | set-aside --proposal <id> --challenge <report id> --reason <text> [--passkey-assertion <path>|-]" + " | ceremony --proposal <id> --act agree|reject|set-aside [--challenge <report id>] [--reason <text>] [--via <ssh-destination>] [--port <n>] [--no-open]" + " | say --workspace <id> --body <text> [--proposal <id>] --idempotency-key <key>" + " | propose --workspace <id> --question <text> --criteria <text> --extent <text>" + " [--known-conflicts <text>] [--topic <text>] [--consult-seconds <n>] --idempotency-key <key>" + " | withdraw --workspace <id> --proposal <id> --reason <text> --idempotency-key <key>" + " | passkey-enroll (--file <path>|- | --ceremony [--label <text>] [--port <n>] [--no-open])" + " | passkeys | passkey-export --credential <id> | passkey-revoke --credential <id>";
+var PERSON_DESK_USAGE = "usage: agenttool-collab-host person <verb> [--db <path>], where <verb> is one of: " + "workspaces | voices --workspace <id> | proposals --workspace <id> [--proposal <id> | --limit <n>]" + " | inbox [--workspace <id>]" + " | challenge --proposal <id> --act agree | challenge --proposal <id> --act reject --reason <text>" + " | challenge --proposal <id> --act set-aside --challenge <report id> --reason <text>" + " | consent --proposal <id> [--passkey-assertion <path>|-]" + " | reject --proposal <id> --reason <text> [--passkey-assertion <path>|-]" + " | set-aside --proposal <id> --challenge <report id> --reason <text> [--passkey-assertion <path>|-]" + " | ceremony --proposal <id> --act agree|reject|set-aside [--challenge <report id>] [--reason <text>] [--via <ssh-destination>] [--port <n>] [--no-open]" + " | say --workspace <id> --body <text> [--proposal <id>] [--to <session>] --idempotency-key <key>" + " | propose --workspace <id> --question <text> --criteria <text> --extent <text>" + " [--known-conflicts <text>] [--topic <text>] [--consult-seconds <n>] --idempotency-key <key>" + " | withdraw --workspace <id> --proposal <id> --reason <text> --idempotency-key <key>" + " | passkey-enroll (--file <path>|- | --ceremony [--label <text>] [--port <n>] [--no-open])" + " | passkeys | passkey-export --credential <id> | passkey-revoke --credential <id>";
 var VERB_OPTIONS = {
   workspaces: { required: [], optional: [] },
   voices: { required: ["workspace"], optional: [] },
@@ -11945,7 +12019,7 @@ var VERB_OPTIONS = {
   reject: { required: ["proposal", "reason"], optional: ["passkey-assertion"] },
   "set-aside": { required: ["proposal", "challenge", "reason"], optional: ["passkey-assertion"] },
   ceremony: { required: ["proposal", "act"], optional: ["reason", "challenge", "via", "port", "no-open"] },
-  say: { required: ["workspace", "body", "idempotency-key"], optional: ["proposal"] },
+  say: { required: ["workspace", "body", "idempotency-key"], optional: ["proposal", "to"] },
   propose: {
     required: ["workspace", "question", "criteria", "extent", "idempotency-key"],
     optional: ["known-conflicts", "topic", "consult-seconds"]
@@ -11992,7 +12066,8 @@ var STRING_OPTIONS = [
   "via",
   "port",
   "label",
-  "challenge"
+  "challenge",
+  "to"
 ];
 var BOOLEAN_OPTIONS = ["ceremony", "no-open"];
 function runPersonDeskCli(argv, env = process.env, deps = {}) {
@@ -12177,7 +12252,8 @@ ${status.proposal_bytes}`;
           workspace_id: values.workspace,
           idempotency_key: values["idempotency-key"],
           body: values.body,
-          proposal_report_id: values.proposal
+          proposal_report_id: values.proposal,
+          to_session_id: values.to
         })
       });
     case "propose":
@@ -12928,7 +13004,7 @@ var COLLAB_HOST_PROTOCOL = "agenttool.collab-host/1";
 var COLLAB_KNOCK_PROTOCOL = "agenttool.collab-knock/1";
 var COLLAB_DOORBELL_SCAN_PROTOCOL = "agenttool.collab-doorbell-scan/1";
 var KNOCK_LEDGER_FORMAT = "agenttool.collab-knock-ledger/1";
-var COLLAB_HOST_USAGE = "usage: agenttool-collab-host end (--session-file <path> | --seat-ref <ref> [--seat-ref <ref>...]) --reason <text>" + " [--release-leases] [--db <path>]" + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]" + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]" + ` | agenttool-collab-host person ... (${PERSON_DESK_USAGE})` + " | agenttool-collab-host person-remote (SSH forced command; reads a JSON argv from SSH_ORIGINAL_COMMAND)";
+var COLLAB_HOST_USAGE = "usage: agenttool-collab-host end (--session-file <path> | --seat-ref <ref> [--seat-ref <ref>...]) --reason <text>" + " [--release-leases] [--db <path>]" + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]" + " [--wait-ms <ms>] [--include-own] [--addressed [--open]] [--db <path>]" + ` | agenttool-collab-host person ... (${PERSON_DESK_USAGE})` + " | agenttool-collab-host person-remote (SSH forced command; reads a JSON argv from SSH_ORIGINAL_COMMAND)";
 var COLLAB_KNOCKS_USAGE = "usage: agenttool-collab-host knocks --host-ancestor auto|<pid> [--mark-tapped] [--db <path>]";
 var COLLAB_KNOCKS_SESSION_USAGE = "usage: agenttool-collab-host knocks --session <id> [--mark-tapped] [--with-sender] [--db <path>]";
 var COLLAB_DOORBELL_SCAN_USAGE = "usage: agenttool-collab-host doorbell-scan [--db <path>]";
@@ -13076,7 +13152,7 @@ function waitForSessionEvents(store2, credential, options, clock = systemClock) 
       headSequence = page.head_sequence;
       for (const event of page.events) {
         const own = event.session_id === credential.session_id;
-        const routed = !options.addressed || store2.eventAddressesSession(event, session.id);
+        const routed = !options.addressed || store2.eventAddressesSession(event, session.id) || options.open === true && isOpenTableReport(event, session.id);
         const rings = (options.include_own || !own) && routed;
         if (rings && restAllows(event))
           return receipt("ready", headSequence);
@@ -13245,7 +13321,8 @@ function runEndOrWait(argv, env, clock) {
         after_anchor: args.after_anchor,
         wait_ms: args.wait_ms,
         include_own: args.include_own,
-        addressed: args.addressed
+        addressed: args.addressed,
+        open: args.open
       }, clock), 0);
     } finally {
       store2.close();
@@ -13267,7 +13344,7 @@ async function runCollabHostCliAsync(argv, env = process.env, io = {
   return runCollabHostCli(argv, env, {}, personDeps);
 }
 var END_ONLY_OPTIONS = ["reason", "release-leases", "seat-ref"];
-var WAIT_ONLY_OPTIONS = ["session", "after-anchor", "wait-ms", "include-own", "addressed"];
+var WAIT_ONLY_OPTIONS = ["session", "after-anchor", "wait-ms", "include-own", "addressed", "open"];
 function parseHostArgs(argv) {
   let parsed;
   try {
@@ -13353,6 +13430,11 @@ function parseWaitArgs(values) {
   if (values["after-anchor"] !== undefined) {
     afterAnchor = parseAnchor(values["after-anchor"]);
   }
+  const addressed = values.addressed === true;
+  const open = values.open === true;
+  if (open && !addressed) {
+    throw new CollabError("usage_error", `--open requires --addressed; ${COLLAB_HOST_USAGE}`);
+  }
   return {
     command: "wait",
     session_file: sessionFile,
@@ -13360,7 +13442,8 @@ function parseWaitArgs(values) {
     after_anchor: afterAnchor,
     wait_ms: waitMs,
     include_own: values["include-own"] === true,
-    addressed: values.addressed === true,
+    addressed,
+    open,
     db: values.db
   };
 }
@@ -13392,7 +13475,8 @@ function parseHostOptions(argv) {
       "after-anchor": { type: "string" },
       "wait-ms": { type: "string" },
       "include-own": { type: "boolean" },
-      addressed: { type: "boolean" }
+      addressed: { type: "boolean" },
+      open: { type: "boolean" }
     }
   });
 }

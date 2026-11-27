@@ -210,7 +210,7 @@ describe("collab_arrive on an unbound default slot", () => {
     expect(() => j.store.startSession({ root_path: j.root })).toThrow("Supply actor");
   });
 
-  test("under Claude Code, listen.how is the doorbell watcher for this session, never --from-cursor", async () => {
+  test("under Claude Code, listen.how is the --stdout doorbell watcher for this session, never nohup or --from-cursor", async () => {
     const j = journal();
     const arrived = await ok(j.server({ CLAUDE_CODE_MESSAGING_SOCKET: "/nonexistent/12345.sock" }), "collab_arrive", {
       purpose: "be rung",
@@ -218,22 +218,31 @@ describe("collab_arrive on an unbound default slot", () => {
       name: "rung",
     });
     const how = arrived.listen.how as string;
-    expect(how).toStartWith("nohup ");
+    expect(how).not.toContain("nohup");
     expect(how).toContain("integrations/claude-code/collab-doorbell-watch.ts");
     expect(how).toContain(`--session ${arrived.you.session}`);
     expect(how).toContain(`--db '${j.store.db.filename}'`);
     expect(how).toContain("dist/agenttool-collab-host.js");
+    expect(how).toContain("--stdout");
     expect(how).not.toContain("--from-cursor");
+    const bySessionId = await ok(j.server({ CLAUDE_CODE_SESSION_ID: "claude-session-1" }), "collab_arrive", {
+      purpose: "be rung by session id",
+      root_path: j.root,
+      name: "rung2",
+    });
+    expect(bySessionId.listen.how).toContain("--stdout");
+    expect(bySessionId.listen.how).not.toContain("nohup");
   });
 
-  test("under the notes profile, listen.how is the same watcher, whose ring names collab_inbox", async () => {
+  test("under the notes profile, listen.how is the same --stdout watcher, whose ring names collab_inbox", async () => {
     const j = journal();
     const arrived = await ok(j.server({
       AGENTOOL_COLLAB_TOOLS: "notes",
       CLAUDE_CODE_MESSAGING_SOCKET: "/nonexistent/12345.sock",
     }), "collab_arrive", { purpose: "be told", root_path: j.root, name: "told" });
     expect(arrived.surface.tools).toBe("notes");
-    expect(arrived.listen.how).toStartWith("nohup ");
+    expect(arrived.listen.how).not.toContain("nohup");
+    expect(arrived.listen.how).toContain("--stdout");
     expect(arrived.listen.how).toContain("integrations/claude-code/collab-doorbell-watch.ts");
     const watcher = await Bun.file(resolve(import.meta.dir, "..", "integrations", "claude-code", "collab-doorbell-watch.ts")).text();
     expect(watcher).toContain("Read them with collab_inbox");

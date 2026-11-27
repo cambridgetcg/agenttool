@@ -348,6 +348,10 @@ export const EVIDENCE_REFS_DESCRIPTION =
   "report:, or checkpoint: (a task's base_checkpoint_digest or result_checkpoint_digest), " +
   "for example \"artifact:artifact_<id>\".";
 
+export const MAX_ALSO_TO_SESSIONS = 8;
+
+export type ReportFieldsMode = "full" | "headers";
+
 export interface CollabReport {
   id: string;
   workspace_id: string;
@@ -355,6 +359,8 @@ export interface CollabReport {
   from_session_id: string | null;
   from_actor: string;
   to_session_id: string | null;
+  /** Optional additional addressed session IDs (payload-only, at most 8). */
+  also_to_session_ids?: string[];
   kind: ReportKind;
   body: string;
   evidence_refs: string[];
@@ -367,6 +373,27 @@ export interface CollabReport {
   authority_basis: string | null;
   created_at: string;
   event_sequence: number;
+}
+
+/** Compact report header returned when legacy reads opt into `fields: "headers"`. */
+export interface CollabReportHeader {
+  id: string;
+  workspace_id: string;
+  task_id: string | null;
+  from_session_id: string | null;
+  from_actor: string;
+  to_session_id: string | null;
+  also_to_session_ids?: string[];
+  kind: ReportKind;
+  relation: ReportRelation;
+  target_report_id: string | null;
+  confidence: ReportConfidence;
+  evidence_refs: string[];
+  authority_scope: string | null;
+  created_at: string;
+  event_sequence: number;
+  summary: string;
+  body_chars: number;
 }
 
 /**

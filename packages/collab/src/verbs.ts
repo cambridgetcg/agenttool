@@ -50,6 +50,7 @@ export { durationSince, durationUntil, minutesSince };
 import { hashWorktreeFile, inspectRepository, MAX_CITED_FILE_BYTES } from "./repository.js";
 import { defaultSeatRef } from "./seat-ref.js";
 import { removeSessionCredentialFile, writeSessionCredentialFile } from "./session-file.js";
+import { isOpenTableReport } from "./store.js";
 import {
   NOTE_INBOX_MAX_LIMIT,
   NOTE_SELF_DECISION_BASIS,
@@ -1426,23 +1427,24 @@ function shellQuote(value: string): string {
 
 /**
  * How this session can be told when something arrives (spec 5.1 listen).
- * Under Claude Code: the existing doorbell watcher with absolute paths and
- * this session filled in, never --from-cursor, for the agent to run itself.
- * Collab starts nothing. The watcher's ring names collab_inbox first, so
- * the same command serves the notes profile.
+ * Under Claude Code: the doorbell watcher in --stdout mode (one content-free
+ * line per ring on stdout, suitable for Claude Code's Monitor tool without
+ * relying on the UDS socket or nohup backgrounding), with absolute paths and
+ * this session filled in, never --from-cursor. Collab starts nothing.
  */
 export function listenHow(ctx: NoteVerbContext, sessionId: string): string {
   const inboxWait = ctx.slot_key
     ? `collab_inbox {wait_seconds: 30, binding_key: "${ctx.slot_key}"}`
     : "collab_inbox {wait_seconds: 30}";
   const database = ctx.store.db.filename;
-  if (!ctx.environment.CLAUDE_CODE_MESSAGING_SOCKET || !database || database === ":memory:") return inboxWait;
+  const inClaudeCode = Boolean(ctx.environment.CLAUDE_CODE_MESSAGING_SOCKET || ctx.environment.CLAUDE_CODE_SESSION_ID);
+  if (!inClaudeCode || !database || database === ":memory:") return inboxWait;
   // One level below the package root, in src/ and in dist/ alike.
   const watcher = resolve(import.meta.dir, "..", "integrations", "claude-code", "collab-doorbell-watch.ts");
   const host = resolve(import.meta.dir, "..", "dist", "agenttool-collab-host.js");
   if (!existsSync(watcher) || !existsSync(host)) return inboxWait;
-  return `nohup ${shellQuote(process.execPath)} ${shellQuote(watcher)} --session ${sessionId} ` +
-    `--db ${shellQuote(database)} --host-bin ${shellQuote(host)} >/dev/null 2>&1 &`;
+  return `${shellQuote(process.execPath)} ${shellQuote(watcher)} --session ${sessionId} ` +
+    `--db ${shellQuote(database)} --host-bin ${shellQuote(host)} --stdout`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1663,6 +1665,9 @@ export function formatEntry(
     const to = report.to_session_id
       ? sessionRef(report.to_session_id, report.to_session_id, byId)
       : entry.to_person ? "person" : "all";
+    const alsoToIds = Array.isArray(payload.also_to_session_ids)
+      ? payload.also_to_session_ids.filter((id): id is string => typeof id === "string")
+      : [];
     // A decision or a note about a proposal targets nothing; the proposal it
     // is about is in storage too (about_proposal_id), so it is named.
     const aboutProposal = typeof payload.about_proposal_id === "string" ? payload.about_proposal_id : null;
@@ -1677,6 +1682,7 @@ export function formatEntry(
       ...(act === "corrects" || act === "supersedes" ? { relation: report.relation } : {}),
       from: sessionShown(report.from_session_id, report.from_actor, byId),
       to,
+      ...(alsoToIds.length > 0 ? { also_to: alsoToIds.map((id) => sessionRef(id, id, byId)) } : {}),
       re,
       ...base,
       statement,
@@ -1928,9 +1934,11 @@ function validInboxInput(ctx: NoteVerbContext, input: InboxInput) {
     });
   }
   const include = input.include ?? "for_me";
-  if (include !== "for_me" && include !== "all") {
-    throw new CollabError("invalid_include", "include must be for_me or all", {
-      remedy: { say: "include is for_me (the default: items for you) or all (also every other new item, as subject lines)." },
+  if (include !== "for_me" && include !== "open" && include !== "all") {
+    throw new CollabError("invalid_include", "include must be for_me, open, or all", {
+      remedy: {
+        say: "include is for_me (the default: items for you), open (also open table broadcasts), or all (every other new item, as subject lines).",
+      },
     });
   }
   const format = input.format ?? "json";
@@ -1963,7 +1971,7 @@ function validInboxInput(ctx: NoteVerbContext, input: InboxInput) {
       });
     }
   }
-  return { waitSeconds, limit, include: include as "for_me" | "all", format: format as "json" | "note", about, since };
+  return { waitSeconds, limit, include: include as "for_me" | "open" | "all", format: format as "json" | "note", about, since };
 }
 
 export async function inboxVerb(ctx: NoteVerbContext, input: InboxInput): Promise<Record<string, unknown>> {
@@ -1979,20 +1987,22 @@ export async function inboxVerb(ctx: NoteVerbContext, input: InboxInput): Promis
     throw new CollabError("too_many_waits", `At most ${ctx.waits.max} waits may run per endpoint`);
   }
   if (waits) ctx.waits.active += 1;
-  const paging = { ...(include === "all" ? { include } : {}), ...(input.limit !== undefined ? { limit } : {}) };
+  const paging = { ...(include !== "for_me" ? { include } : {}), ...(input.limit !== undefined ? { limit } : {}) };
   try {
     const first = ctx.store.inboxForSession({ ...credential, limit, include });
     const passes: NoteInboxData[] = [first];
     let waited: Record<string, unknown> | null = null;
     let waitError: CollabError | null = null;
     const extras: NoteEntry[] = [];
-    if (waits && !first.entries.some((entry) => entry.for_me) && !first.more) {
+    const hasMatchingItem = first.entries.some((entry) =>
+      entry.for_me || (include === "open" && isOpenTableReport(entry.event, binding.handle.session.id)));
+    if (waits && !hasMatchingItem && !first.more) {
       const started = performance.now();
       const seconds = () => Math.round((performance.now() - started) / 100) / 10;
       // From here on the first pass has written (mark, last-seen, delivery
       // records), so a failure must not discard what it found.
       try {
-        const woke = await waitForMe(ctx, binding, first.mark.anchor, waitSeconds * 1_000);
+        const woke = await waitForMe(ctx, binding, first.mark.anchor, waitSeconds * 1_000, include === "open");
         waited = woke === null
           ? { seconds: seconds(), ended_by: "timeout" }
           : woke.ended_by === "item"
@@ -2049,7 +2059,7 @@ function ballotClosedEntry(ctx: NoteVerbContext, credential: SessionHandle["cred
 function lookBack(
   ctx: NoteVerbContext,
   input: InboxInput,
-  options: { since: number; limit: number; include: "for_me" | "all"; format: "json" | "note"; waitSeconds: number },
+  options: { since: number; limit: number; include: "for_me" | "open" | "all"; format: "json" | "note"; waitSeconds: number },
 ): Record<string, unknown> {
   const { credential } = requireCredential(ctx);
   const data = ctx.store.inboxLookBackForSession({ ...credential, since: options.since, limit: options.limit, include: options.include });
@@ -2220,6 +2230,7 @@ async function waitForMe(
   binding: NoteBinding,
   anchor: { epoch_id: string; sequence: number; hash: string },
   durationMs: number,
+  includeOpen = false,
 ): Promise<WaitEnd | null> {
   const sessionId = binding.handle.session.id;
   const workspaceId = binding.handle.workspace.id;
@@ -2256,7 +2267,10 @@ async function waitForMe(
         event_limit: 50,
       });
       for (const event of page.events) {
-        if (event.session_id !== sessionId && ctx.store.eventAddressesSession(event, sessionId)) return { ended_by: "item" };
+        if (
+          event.session_id !== sessionId
+          && (ctx.store.eventAddressesSession(event, sessionId) || (includeOpen && isOpenTableReport(event, sessionId)))
+        ) return { ended_by: "item" };
         // A close before the deadline (every unit cast), or one another
         // process has already revealed.
         if ((event.type === "ballot.cast" || event.type === "ballot.closed") && watchedIds.has(event.entity_id)) {

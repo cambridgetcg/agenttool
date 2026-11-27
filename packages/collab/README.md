@@ -463,7 +463,7 @@ example as a background command whose exit wakes the agent, instead of
 spending a turn on each 30-second `collab_events_wait`:
 
 ```bash
-agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>] [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]
+agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>] [--wait-ms <ms>] [--include-own] [--addressed [--open]] [--db <path>]
 ```
 
 Under Claude Code, `collab_arrive` returns the watcher command for its session in
@@ -495,7 +495,11 @@ are each two events, the task event and an addressed report written beside it,
 and a wait that starts before them rings once for the pair. Proposal and ballot
 events ring as [Proposals and consent](#proposals-and-consent-unreleased) and
 [PROTOCOL.md](PROTOCOL.md) describe. Free text
-is never inspected, and the receipt adds `skipped_unaddressed_events`. This
+is never inspected, and the receipt adds `skipped_unaddressed_events`. Passing
+`--addressed --open` also rings for open table broadcast reports from a peer or the
+person desk that name no addressee, target report, proposal, or `to_person` (using
+the same `isOpenTableReport` predicate as `collab_inbox` with `include: "open"`);
+a declared rest still holds open broadcasts. This
 routed set is wider than a knock: an answer sent without `to_session_id`, an
 answer to its handoff offer, and recovery of its lease ring here, but are not
 counted in `addressed_waiting` and never reach `knocks` or `doorbell-scan`
@@ -539,8 +543,10 @@ exit 1 with `status: "error"`: `session_auth_failed` after a resume or end,
 through `collab_next` or an acknowledgement stays `live` in the 6-hour view.
 
 For Claude Code, `integrations/claude-code/collab-doorbell-watch.ts` loops this
-wait and posts one content-free line into the starting session's own inbox
-socket, by default only for addressed events. See
+wait and emits one content-free line per ring — to stdout with `--stdout` (for
+Claude Code's Monitor tool, as returned by `collab_arrive`'s `listen.how`), or
+into the starting session's own inbox socket, by default only for addressed
+events (or addressed plus open table broadcasts with `--open`). See
 [its README](integrations/claude-code/README.md) for lifecycle and limits.
 
 A host that relaunches the same agent thread for each round (for example
@@ -997,7 +1003,7 @@ through MCP. Code: `src/{person-desk,ceremony,passkey,tty}.ts`. Tests:
 | `passkey-enroll --ceremony [--label <text>] [--no-open]` | serve a one-time page that creates the passkey, then show its fingerprint on `/dev/tty` and enrol it only on `yes` |
 | `passkey-enroll --file <path>\|-`, `passkey-export --credential <id>`, `passkey-revoke --credential <id>` | enrol a passkey exported from another table, export one, or revoke one; enrol and revoke are confirmed on `/dev/tty` |
 | `challenge --proposal <id> --act agree` or `--act reject --reason <text>`, then `consent`/`reject` with `--passkey-assertion <path>\|-` | the same passkey act in two steps, for a page the desk does not serve |
-| `say --workspace <id> --body <text> [--proposal <id>] --idempotency-key <key>` | a desk note; about a proposal it is routed to the author session, or for a desk proposal to every consulted voice |
+| `say --workspace <id> --body <text> [--proposal <id>] [--to <session>] --idempotency-key <key>` | a desk note; about a proposal it is routed to the author session (or consulted voices for a desk proposal), or with `--to` directly to one session so its addressed doorbell rings; authorises nothing |
 | `propose --workspace <id> --question <text> --criteria <text> --extent <text> [--known-conflicts <text>] [--topic <text>] [--consult-seconds <n>] --idempotency-key <key>` | a desk proposal (`origin: person_relayed`, author voice `person`), settled by every agent voice |
 | `withdraw --workspace <id> --proposal <id> --reason <text> --idempotency-key <key>` | withdraw a proposal the desk opened |
 
