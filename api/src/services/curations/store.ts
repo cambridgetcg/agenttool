@@ -22,7 +22,8 @@ import {
   curations,
   curationSubscriptions,
 } from "../../db/schema/curations";
-import { identities, identityKeys } from "../../db/schema/identity";
+import { identities } from "../../db/schema/identity";
+import { resolveIdentitySigningKey } from "../identity/signing-key";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   const h = sha512.create();
@@ -212,21 +213,20 @@ export async function createCuration(
     .limit(1);
   if (!curator) throw new CurationError("curator_not_found_or_not_owned");
 
-  const [keyRow] = await db
-    .select({
-      publicKey: identityKeys.publicKey,
-      active: identityKeys.active,
-      identityId: identityKeys.identityId,
-    })
-    .from(identityKeys)
-    .where(eq(identityKeys.id, input.signingKeyId))
-    .limit(1);
-  if (!keyRow || !keyRow.active) {
+  const resolvedKey = await resolveIdentitySigningKey({
+    signingKeyId: input.signingKeyId,
+    identityId: input.curatorIdentityId,
+  });
+  if (!resolvedKey.ok) {
+    if (resolvedKey.reason === "signing_key_not_owned") {
+      throw new CurationError("wrong_signing_key_for_curator");
+    }
+    if (resolvedKey.reason === "signing_identity_not_active") {
+      throw new CurationError("curator_not_found_or_not_owned");
+    }
     throw new CurationError("signing_key_unknown_or_revoked");
   }
-  if (keyRow.identityId !== input.curatorIdentityId) {
-    throw new CurationError("wrong_signing_key_for_curator");
-  }
+  const keyRow = { publicKey: resolvedKey.key.publicKey };
 
   const canonical = canonicalCurationBytes({
     curatorDid: curator.did,

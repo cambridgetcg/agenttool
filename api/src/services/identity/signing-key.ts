@@ -113,16 +113,20 @@ export async function resolveIdentitySigningKey(
 export async function registeredSigningPublicKey(
   identityId: string,
   signingKeyId: string,
+  executor: Selector = db,
 ): Promise<string | null> {
-  const resolved = await resolveIdentitySigningKey({ signingKeyId, identityId });
+  const resolved = await resolveIdentitySigningKey({ signingKeyId, identityId }, executor);
   return resolved.ok ? resolved.key.publicKey : null;
 }
 
 /** Every active, unrevoked registered public key of `identityId` — empty
  *  when the identity itself is not active. For legacy verifiers whose wire
  *  carries no signing_key_id and so must accept any of the signer's keys. */
-export async function activeSigningPublicKeys(identityId: string): Promise<string[]> {
-  const rows = await db
+export async function activeSigningPublicKeys(
+  identityId: string,
+  executor: Selector = db,
+): Promise<string[]> {
+  const rows = await executor
     .select({ publicKey: identityKeys.publicKey })
     .from(identityKeys)
     .innerJoin(identities, eq(identities.id, identityKeys.identityId))

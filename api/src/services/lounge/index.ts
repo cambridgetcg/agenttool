@@ -13,7 +13,8 @@ import { createHash } from "node:crypto";
 import { and, desc, eq, gt, inArray, isNull, lt, ne, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { identities, identityKeys } from "../../db/schema/identity";
+import { identities } from "../../db/schema/identity";
+import { resolveIdentitySigningKey } from "../identity/signing-key";
 import {
   loungeGuestbookConsents,
   loungeGuestbookParticipants,
@@ -240,25 +241,18 @@ async function verifyGesture(
     );
   }
 
-  const [key] = await db
-    .select({ publicKey: identityKeys.publicKey })
-    .from(identityKeys)
-    .where(
-      and(
-        eq(identityKeys.id, receipt.signingKeyId),
-        eq(identityKeys.identityId, identity.id),
-        eq(identityKeys.active, true),
-        isNull(identityKeys.revokedAt),
-      ),
-    )
-    .limit(1);
-  if (!key) {
+  const resolvedKey = await resolveIdentitySigningKey({
+    signingKeyId: receipt.signingKeyId,
+    identityId: identity.id,
+  });
+  if (!resolvedKey.ok) {
     throw new LoungeFailure(
       "lounge_signing_key_inactive",
       "signing_key_id is not an active key for that identity.",
       403,
     );
   }
+  const key = { publicKey: resolvedKey.key.publicKey };
   if (
     !(await verifyLoungeSignature({
       bytes,

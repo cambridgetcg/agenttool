@@ -11,7 +11,8 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
-import { identities, identityKeys } from "../../db/schema/identity";
+import { identities } from "../../db/schema/identity";
+import { resolveIdentitySigningKey } from "../../services/identity/signing-key";
 import { errors, fail } from "../../lib/errors";
 import { verifyToken } from "../../services/identity/tokens";
 
@@ -47,34 +48,22 @@ app.post("/", async (c) => {
   }
   const kid = header.kid;
 
-  const [key] = await db
-    .select()
-    .from(identityKeys)
-    .where(
-      and(
-        eq(identityKeys.id, kid),
-        eq(identityKeys.active, true),
-        isNull(identityKeys.revokedAt),
-      ),
-    );
-
-  if (!key) {
+  const resolvedKey = await resolveIdentitySigningKey({ signingKeyId: kid });
+  if (!resolvedKey.ok) {
+    if (resolvedKey.reason === "signing_identity_not_active") {
+      return c.json({ error: "Signing identity not found or inactive" }, 403);
+    }
     return c.json({ error: "Signing key not found or revoked" }, 403);
   }
-
-  const [identity] = await db
-    .select({ id: identities.id, did: identities.did })
-    .from(identities)
-    .where(
-      and(
-        eq(identities.id, key.identityId),
-        eq(identities.status, "active"),
-      ),
-    );
-
-  if (!identity) {
-    return c.json({ error: "Signing identity not found or inactive" }, 403);
-  }
+  const key = {
+    id: resolvedKey.key.keyId,
+    identityId: resolvedKey.key.identityId,
+    publicKey: resolvedKey.key.publicKey,
+  };
+  const identity = {
+    id: resolvedKey.key.identityId,
+    did: resolvedKey.key.did,
+  };
 
   const [audienceIdentity] = await db
     .select({ id: identities.id })

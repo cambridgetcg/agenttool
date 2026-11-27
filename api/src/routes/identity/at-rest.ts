@@ -30,7 +30,7 @@
 import { createHash } from "node:crypto";
 
 import * as ed from "@noble/ed25519";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -45,6 +45,7 @@ import {
   readAuthorityBoundJson,
 } from "../../services/identity/authority";
 import { publicAgentPath } from "../../services/identity/public-profile";
+import { identityMaySign, resolveIdentitySigningKey } from "../../services/identity/signing-key";
 import { publishWakeEvent } from "../../services/wake/push";
 
 const app = new Hono<ProjectContext>();
@@ -324,18 +325,11 @@ app.post("/", async (c) => {
       409,
     );
   }
-  const [keyRow] = await db
-    .select({ publicKey: identityKeys.publicKey })
-    .from(identityKeys)
-    .where(
-      and(
-        eq(identityKeys.id, body.signing_key_id),
-        eq(identityKeys.identityId, witness.id),
-        eq(identityKeys.active, true),
-      ),
-    )
-    .limit(1);
-  if (!keyRow) {
+  const resolvedWitnessKey = await resolveIdentitySigningKey({
+    signingKeyId: body.signing_key_id,
+    identityId: witness.id,
+  });
+  if (!resolvedWitnessKey.ok) {
     return fail(
       c,
       errors.validation(
@@ -344,6 +338,7 @@ app.post("/", async (c) => {
       404,
     );
   }
+  const keyRow = { publicKey: resolvedWitnessKey.key.publicKey };
 
   // Compute canonical bytes; verify the witness's signature. v2 is offered
   // first and v1 remains accepted, so signatures already in production keep
@@ -426,7 +421,7 @@ app.post("/", async (c) => {
         .from(identities)
         .where(eq(identities.id, witness.id))
         .for("update");
-      if (!lockedWitness || lockedWitness.status !== "active") {
+      if (!lockedWitness || !identityMaySign(lockedWitness.status)) {
         return "witness_not_active";
       }
 
@@ -438,6 +433,7 @@ app.post("/", async (c) => {
             eq(identityKeys.id, body.signing_key_id),
             eq(identityKeys.identityId, witness.id),
             eq(identityKeys.active, true),
+            isNull(identityKeys.revokedAt),
           ),
         )
         .for("update");

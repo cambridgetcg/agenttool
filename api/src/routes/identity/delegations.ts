@@ -13,7 +13,8 @@ import { Hono } from "hono";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
-import { delegations, identities, identityKeys } from "../../db/schema/identity";
+import { delegations, identities } from "../../db/schema/identity";
+import { resolveIdentitySigningKey } from "../../services/identity/signing-key";
 import {
   delegationReceipt,
   deriveDelegationStatus,
@@ -86,24 +87,18 @@ app.post("/", async (c) => {
     return c.json({ error: "Delegate identity not found or not active" }, 404);
   }
 
-  // The signing key must belong to the delegator and be live.
-  const [key] = await db
-    .select()
-    .from(identityKeys)
-    .where(
-      and(
-        eq(identityKeys.id, body.kid),
-        eq(identityKeys.identityId, body.delegator_id),
-        eq(identityKeys.active, true),
-        isNull(identityKeys.revokedAt),
-      ),
-    );
-  if (!key) {
+  // The signing key must belong to an active delegator and be active/unrevoked.
+  const resolvedKey = await resolveIdentitySigningKey({
+    signingKeyId: body.kid,
+    identityId: body.delegator_id,
+  });
+  if (!resolvedKey.ok) {
     return c.json(
       { error: "Key not found, not active, or does not belong to delegator" },
       403,
     );
   }
+  const key = { publicKey: resolvedKey.key.publicKey };
 
   const expiresAtStr = body.expires_at ?? null;
   if (
