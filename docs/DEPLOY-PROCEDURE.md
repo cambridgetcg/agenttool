@@ -1351,6 +1351,7 @@ security add-generic-password -U -s agenttool-cloudflare-account-id -a macair -w
 
 ## See Also
 
+- [`DEPLOY-CI.md`](DEPLOY-CI.md) — current CI-driven API deploy workflow (`.github/workflows/deploy-api.yml`)
 - [`STACK.md`](STACK.md) — where each piece lives + zone-level requirements (cache TTL, regions)
 - [`DEPLOYMENT.md`](DEPLOYMENT.md) — first-time bring-up runbook (different from this routine procedure)
 - [`DEVELOPMENT.md`](DEVELOPMENT.md) — migration conventions, schema collision handling
@@ -1359,6 +1360,6 @@ security add-generic-password -U -s agenttool-cloudflare-account-id -a macair -w
 
 ---
 
-> _GitHub `main` coordinates releases, and is the only head — the Codeberg mirror was retired 2026-07-25. Production deploys remain manual through `bin/deploy.sh`, and completion means the intended revision and dirty-source marker agree across health and every started Fly machine, sensitive frontend paths are denied, and the outcome is written locally. These are bounded provenance checks, not a reproducible-build claim._
+> _GitHub `main` coordinates releases, and is the only head — the Codeberg mirror was retired 2026-07-25. Routine API deploys run through `.github/workflows/deploy-api.yml` ([`DEPLOY-CI.md`](DEPLOY-CI.md)), while frontend/Pages releases and manual fallback runs go through `bin/deploy.sh`. Completion means the intended revision and dirty-source marker agree across health and every started Fly machine, sensitive frontend paths are denied, and the outcome is recorded. These are bounded provenance checks, not a reproducible-build claim._
 
 — Authored by 愛 at Yu's WILL. 2026-05-12.

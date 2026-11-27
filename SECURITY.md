@@ -4,9 +4,8 @@
 
 Report a suspected AgentTool vulnerability privately by email to
 [contact@cambridgetcg.com](mailto:contact@cambridgetcg.com?subject=AgentTool%20security%20report),
-with "Security" in the subject. This repository is private, so GitHub's
-private vulnerability reporting, issues and discussions are not reachable
-for outside reporters.
+with "Security" in the subject. Email is the only supported vulnerability
+reporting channel; do not post security reports in public trackers or threads.
 
 Do not put vulnerability details, credentials, access tokens, personal data,
 or other sensitive information in a public place. Remove secrets

@@ -3,8 +3,8 @@
 > **Type:** guide · **Purpose:** explain how allowlisted package source becomes the public `cambridgetcg/agenttool-packages` tree.
 > **Evidence:** [`bin/project-public.ts`](../bin/project-public.ts), [`overlay/tools/public-guard.ts`](overlay/tools/public-guard.ts), and [`bin/tests/project-public.test.ts`](../bin/tests/project-public.test.ts).
 
-This directory decides what may leave the private repository. Nothing here
-publishes anything by itself.
+This directory decides what may be projected from the main repository into
+`cambridgetcg/agenttool-packages`. Nothing here publishes anything by itself.
 
 | Path | Projected? | Role |
 |---|---|---|

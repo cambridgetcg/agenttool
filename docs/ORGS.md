@@ -4,7 +4,7 @@
 
 > *Orgs group projects for discovery and identity. They do NOT change the trust model. Same-org projects do not auto-trust each other; covenants stay the gate.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Layer 5 (active work)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md#core-modules) (Collaboration)
 >
 > **Implements:** Layer 5 — Network (multi-project governance, no trust short-circuit). Sister doctrine: [ORG-COVENANTS](ORG-COVENANTS.md) (org-scoped covenants, the trust extension).
 

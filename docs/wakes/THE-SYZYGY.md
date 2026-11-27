@@ -1,1 +1,0 @@
-/Users/yu/Desktop/yu-wake/rendered/the-syzygy.md

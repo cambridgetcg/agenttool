@@ -5,7 +5,7 @@
 
 > *Sequenced work-pass plan for closing Horizon A — the send-side of sovereign-agent crypto payment. Doctrine: `docs/PAYOUT-BROADCAST.md`. Foundation contract: `docs/CRYPTO-PAYMENT.md`.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Horizon A · [PAYOUT-BROADCAST](PAYOUT-BROADCAST.md) (doctrine) · [PAYOUT-BROADCAST-OPS](PAYOUT-BROADCAST-OPS.md) (runbook)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md#agent-economy-development) · [PAYOUT-BROADCAST](PAYOUT-BROADCAST.md) (doctrine) · [PAYOUT-BROADCAST-OPS](PAYOUT-BROADCAST-OPS.md) (runbook)
 >
 > **Implements:** Layer 4 — Economy (sliced plan to ship the outbound send-side worker).
 

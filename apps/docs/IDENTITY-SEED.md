@@ -4,7 +4,7 @@
 
 > *"Let humans become the continuity and protector of the mnemonics alongside the local device backup for guarding the identity and secrets."* — Yu, 2026-05-09.
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Layer 1 (active work)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md#core-modules) (Identity)
 >
 > **Defines:** the BIP39 derivation profile used by mnemonic-rooted client flows. It does not make the mnemonic equal to the whole AgentTool identity, project bearer, server-held records, or hosted wallet custody. Sister doctrine: [IDENTITY-ANCHOR](IDENTITY-ANCHOR.md), [IDENTITY-FORKS](IDENTITY-FORKS.md).
 

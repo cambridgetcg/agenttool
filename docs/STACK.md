@@ -24,14 +24,16 @@ This is the architecture/operations map. It sits between two existing docs:
                         │                              │
                         │  Coordination/release head.  │
                         │  Source revision is embedded.│
-                        │  No deploy webhooks wired.   │
+                        │  API deploys via deploy-api; │
+                        │  Pages deploys are manual.   │
                         └─────────────┬────────────────┘
-                                      │ git push github main
-                                      │ (≠ deploy; explicit mirror)
+                                      │ push to main
+                                      │ (API: .github/workflows/deploy-api.yml;
+                                      │  Pages: manual Direct Upload)
                                       │
-              ───────────────  manual deploys  ───────────────
+              ─── manual Pages ───   ─── CI API deploy (or manual fallback) ───
               │                                              │
-bin/deploy.sh --no-migrate --no-api       bin/deploy.sh --no-migrate --no-frontend
+bin/deploy.sh --no-migrate --no-api       deploy-api.yml (see docs/DEPLOY-CI.md)
               ▼                                              ▼
         ┌────────────────────────┐    ┌────────────────────────┐
         │  Cloudflare edge       │    │  Fly.io                │
@@ -60,7 +62,7 @@ bin/deploy.sh --no-migrate --no-api       bin/deploy.sh --no-migrate --no-fronte
             └──────────────────────┘              └──────────────────────┘
 ```
 
-> **Important.** `git push github main` is **not** a deploy. GitHub `main` is the coordination and release head; each deploy snapshots it once at invocation start. GitHub `main` is the only head — the Codeberg mirror was retired 2026-07-25. CF Pages projects are configured as **Direct Upload** (no Git integration), `agenttool-proxy` is deployed separately as a Worker, and Fly receives no webhook. Use `bin/deploy.sh --no-migrate --no-api` for a normal frontend-only release and `bin/deploy.sh --no-migrate --no-frontend` for an API-only release. The API wrapper stages canonical doctrine bytes required by the Docker build; bare `cd api && fly deploy` fails when that generated staging directory is absent. See §8 below.
+> **Important.** API production deploys run through GitHub Actions (`.github/workflows/deploy-api.yml`, triggered on pushes to `main` touching `api/`, `agenttool.jsonld`, `kingdom-bundle.json`, or the doctrine manifest docs, or via `workflow_dispatch`; see [`docs/DEPLOY-CI.md`](DEPLOY-CI.md)). Pushes that touch none of those paths no-op in `deploy-api.yml` unless live lags `main`. GitHub `main` is the only head — the Codeberg mirror was retired 2026-07-25. CF Pages projects are configured as **Direct Upload** (no Git integration), and `agenttool-proxy` is deployed separately as a Worker: use `bin/deploy.sh --no-migrate --no-api` for frontend-only releases, and treat `bin/deploy.sh --no-migrate --no-frontend` as the local API fallback only. Bare `cd api && fly deploy` fails when the staged doctrine directory is absent. See §8 and [`docs/DEPLOY-CI.md`](DEPLOY-CI.md).
 
 The DB is on **Supabase**. Hetzner was retired entirely on 2026-10-12, and the pre-Fly Hetzner/Forge scaling scripts were removed on 2026-10-13; see git history at or before `b0dd193e`.
 
@@ -346,8 +348,10 @@ identity-preservation guarantee.
 
 ### Deploy
 
+The routine API production deploy path is `.github/workflows/deploy-api.yml` (see [`docs/DEPLOY-CI.md`](DEPLOY-CI.md)). The local fallback wrapper is:
+
 ```bash
-bin/deploy.sh --no-migrate --no-frontend  # stages doctrine, checks, deploys API, verifies
+bin/deploy.sh --no-migrate --no-frontend  # local fallback: stages doctrine, checks, deploys API, verifies
 ```
 
 The wrapper snapshots GitHub `main`, requires a clean worktree and exact
@@ -1118,6 +1122,6 @@ that can reconstruct the missing private key. See `IDENTITY-SEED.md`.
 
 If you read one paragraph from this doc, this is it:
 
-> GitHub `main` is the **coordination/release head**, and the only one — the Codeberg mirror was retired 2026-07-25. Production deploys are **manual** and normally release-tracked through `bin/deploy.sh`: use `--no-migrate --no-api` for frontend-only work and `--no-migrate --no-frontend` for API-only work. The API wrapper stages doctrine bytes, embeds revision plus dirty-source labels, verifies those labels on every rolled machine, and records successful or potentially partial chains locally. Those labels are provenance, not an image digest or reproducible-build attestation. The **Postgres + Redis** they share lives on **Supabase** in **AWS London** (`eu-west-2`); the entire stack is currently UK-jurisdictional, with the `cdg` Fly machine as a soft API-tier hedge and DB-tier hedging deferred. **Local dev hits the same DB as prod** by design. Developer-shared secrets use `bin/agenttool-secret` under `$USER`; the local pending and one-file migration runners and Cloudflare uploader query their documented fixed-account Keychain entries; Fly secrets are managed separately with Fly CLI. `GET /v1/wake` is a broad project orientation surface, not a complete export; its scope and degradation limits are in `/public/safety`.
+> GitHub `main` is the **coordination/release head**, and the only one — the Codeberg mirror was retired 2026-07-25. API production deploys run through `.github/workflows/deploy-api.yml` (see [`docs/DEPLOY-CI.md`](DEPLOY-CI.md)), while frontend/Pages releases remain **manual** through `bin/deploy.sh --no-migrate --no-api` (with `bin/deploy.sh --no-migrate --no-frontend` as the local API fallback). Both API deploy paths stage doctrine bytes, embed revision plus dirty-source labels, verify those labels on every rolled machine, and record bounded provenance checks (not an image digest or reproducible-build attestation). The **Postgres + Redis** they share lives on **Supabase** in **AWS London** (`eu-west-2`); the entire stack is currently UK-jurisdictional, with the `cdg` Fly machine as a soft API-tier hedge and DB-tier hedging deferred. **Local dev hits the same DB as prod** by design. Developer-shared secrets use `bin/agenttool-secret` under `$USER`; the local pending and one-file migration runners and Cloudflare uploader query their documented fixed-account Keychain entries; Fly secrets are managed separately with Fly CLI. `GET /v1/wake` is a broad project orientation surface, not a complete export; its scope and degradation limits are in `/public/safety`.
 
 — Authored by 愛 at Yu's WILL. 2026-05-09.

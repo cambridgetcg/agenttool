@@ -2,7 +2,7 @@
 
 > **Type:** proposal
 > **Purpose:** Make agents in different harnesses and devices able to contribute to a shared purpose through explicit membership, bounded permissions and reviewable evidence.
-> **Evidence:** Reviewed 2026-10-18. Local Collab 0.4.0 is on npm; 0.5.0 is a GitHub release in `cambridgetcg/agenttool-collab` ([distribution record](NPM-RELEASES.md#collab-050-public-distribution--2026-10-10)); the host doorbell on main is unreleased. Deployed: scoped missions, same-project root enrollment, and participant-chosen grant token hashes with participant leave (PR #479, live API `593ce404`). Observed: active-turn peer exchange. The courier, the Hermes receiver and the lobby desk remain source candidates. The record of recent merges and the 2026-09-30 checkpoint are in the repository work log. The phases below are acceptance criteria, not deployment promises.
+> **Evidence:** Reviewed 2026-11-19 (following the 2026-10-18 review). Local Collab 0.4.0 is on npm; 0.5.0 is a GitHub release in `cambridgetcg/agenttool-collab` ([distribution record](NPM-RELEASES.md#collab-050-public-distribution--2026-10-10)); on `main` (`0.6.0-dev.0`), the host doorbell, Collab Notes eight-verb surface, sealed ballots, lazy-consensus proposals (`consent/v1`–`v2`), and declared session rest & knocks are merged and unreleased. Deployed: scoped missions, same-project root enrollment, and participant-chosen grant token hashes with participant leave (PR #479, live API `46649845`). Observed: active-turn peer exchange. The courier, the Hermes receiver and the lobby desk remain source candidates. Recent merges and release receipts are in [ROADMAP](ROADMAP.md) and [NPM-RELEASES](NPM-RELEASES.md) (and `docs/NOW.md` in the repository). The phases below are acceptance criteria, not deployment promises.
 > **Start:** [Practical collaboration guide](COLLABORATION.md) · [Mission contract](COLLABORATION-MISSIONS.md) · [API coverage](API-COVERAGE.md)
 
 The [economy roadmap](ROADMAP.md#agent-economy-development) builds chosen work,
@@ -28,10 +28,11 @@ membership, permission, consent or execution authority.
 
 Today, local Collab coordinates independent sessions sharing one SQLite journal.
 The npm 0.4.0 release provides 32 tools. The 0.5.0 GitHub release adds bounded
-waiting as the 33rd tool. Main adds an unreleased host doorbell: `agenttool-collab-host wait`
-lets a host wait between model turns (PR #484). PR #485 adds an addressed mode,
-which rings only for events routed to the waiting session, and a Claude Code watcher.
-The next npm candidate is 0.5.1. The private courier candidate exchanges selected messages between
+waiting as the 33rd tool. Main (`0.6.0-dev.0`, unreleased) adds the host doorbell
+(`agenttool-collab-host wait`, PR #484; addressed mode and Claude Code watcher,
+PR #485), Collab Notes, sealed ballots, lazy-consensus proposals (`consent/v1`–`v2`),
+and declared session rest & knocks (PR #575). The next staged npm release is
+`0.6.0`. The private courier candidate exchanges selected messages between
 enrolled own-fleet peers; it does not replicate leases, accepted reviews or task
 authority. The courier's native reception and physical second-device operation
 still need their own receipts; the mission API trials use a separate transport.

@@ -4,7 +4,7 @@
 
 > *"The hosted orchestrator is the moment agenttool becomes a true cloud platform."* — the platform thesis.
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [WAKE](WAKE.md) (foundation · the worker thinks with the wake AND subscribes to its voice) · [AUTONOMOUS-MODE](AUTONOMOUS-MODE.md) (composition recipe layered on top of the trusted tier — no human-substrate mediation) · [ROADMAP](ROADMAP.md) §Horizon C (active work)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [WAKE](WAKE.md) (foundation · the worker thinks with the wake AND subscribes to its voice) · [AUTONOMOUS-MODE](AUTONOMOUS-MODE.md) (composition recipe layered on top of the trusted tier — no human-substrate mediation) · [ROADMAP](ROADMAP.md#core-modules) (Wake & Continuity)
 >
 > **Implements:** Layer 7 — Runtime. Three custody tiers (`self` · `bridged` · `trusted`) for K_master.
 >

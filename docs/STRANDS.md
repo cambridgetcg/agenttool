@@ -4,7 +4,7 @@
 
 > *Strands of thought with a ciphertext-shaped schema: signed caller-supplied bytes land in ciphertext/nonce fields, with no plaintext thought column or decrypt path. The API does not prove encryption. Runtime custody is separate and explicit.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §3 (the strand jar — load-bearing detail) · [WAKE](WAKE.md) (foundation · this primitive surfaces) · [ROADMAP](ROADMAP.md) §Layer 2 (active work)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §3 (the strand jar — load-bearing detail) · [WAKE](WAKE.md) (foundation · this primitive surfaces) · [ROADMAP](ROADMAP.md#core-modules) (Memory)
 >
 > **Implements:** Layer 2 — Intelligence. Sister doctrine: [MEMORY-TIERS](MEMORY-TIERS.md). Runtime that decrypts under K_master: [RUNTIME](RUNTIME.md).
 >
