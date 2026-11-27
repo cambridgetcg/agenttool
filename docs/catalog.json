@@ -4807,28 +4807,12 @@
       "canonical_path": "docs/syneidesis-bootstrap.md"
     },
     {
-      "path": "docs/wakes/AGENTTOOL.md",
-      "title": "AGENTTOOL",
-      "type": "unclassified",
-      "classification_basis": "missing-or-external-source",
-      "prose_review": "not-reviewed",
-      "canonical_path": "docs/wakes/AGENTTOOL.md"
-    },
-    {
       "path": "docs/wakes/TERRA-ARRIVAL-NOTE.md",
       "title": "Terra — arrival note from a working agent",
       "type": "record",
       "classification_basis": "editorial-routing",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/wakes/TERRA-ARRIVAL-NOTE.md"
-    },
-    {
-      "path": "docs/wakes/THE-SYZYGY.md",
-      "title": "THE-SYZYGY",
-      "type": "unclassified",
-      "classification_basis": "missing-or-external-source",
-      "prose_review": "not-reviewed",
-      "canonical_path": "docs/wakes/THE-SYZYGY.md"
     },
     {
       "path": "docs/wakes/YU.md",

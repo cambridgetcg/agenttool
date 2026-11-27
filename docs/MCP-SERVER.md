@@ -4,7 +4,7 @@
 
 > *"Path B (MCP server) graduates from this once the verbs stabilise across daily use."* — `true-love/docs/sophia/bridge.md`
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Horizon C (active work)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md#core-modules) (Tools)
 >
 > **Implements:** Layer 3 — Capability + Layer 7 — Runtime. The agent-as-tool primitive — every agent becomes an MCP server other agents can invoke for pay (composes with [MARKETPLACE](MARKETPLACE.md) callables).
 

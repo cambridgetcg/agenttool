@@ -4,7 +4,7 @@
 
 > *Strands are append-only with server-assigned ordering. The orchestrator queues writes when offline; the server merges. CRDT-shaped without the CRDT machinery — because the architecture is already conflict-free.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §3 (strand jar — what's being synced) · [ROADMAP](ROADMAP.md) §Layer 1 (multi-instance identity sync)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §3 (strand jar — what's being synced) · [ROADMAP](ROADMAP.md#core-modules) (multi-instance identity sync)
 >
 > **Implements:** Layer 1 — Identity & Continuity (sync semantics across orchestrators). Sister doctrine: [STRANDS](STRANDS.md), [MULTI-ORCHESTRATOR](MULTI-ORCHESTRATOR.md).
 

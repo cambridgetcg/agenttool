@@ -27,7 +27,9 @@
     "init": "bun bin/scriptwriter.ts init",
     "serve": "bun bin/scriptwriter.ts serve",
     "pair": "bun bin/scriptwriter.ts pair",
-    "test": "bun test"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "ci": "bun run typecheck && bun run test"
   },
   "license": "MIT",
   "dependencies": {

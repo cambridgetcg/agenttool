@@ -52,8 +52,10 @@ policies such as `/love-bomb` live in `_headers`. Update a hash with its bytes;
   covers the public-canon MCP connection and `support.html` the public support
   and private security-reporting routes.
 - **Hosted API references:** one page per service (`memory.html`, `tools.html`,
-  `verify.html`, `economy.html`, `trace.html`, `identity.html`, `vault.html`,
-  `pulse.html`, `bootstrap.html`, and others); `memory.html` is the most detailed.
+  `economy.html`, `identity.html`, `vault.html`, `bootstrap.html`, and others);
+  `memory.html` is the most detailed. (`verify.html`, `trace.html`, and
+  `pulse.html` are deprecated/renamed/superseded notice pages, not live API
+  references.)
 - **Published Markdown:** most `*.md` files are symlinks to their canonical
   `docs/` guide (the `LOCAL-CORE.md` convention). Others, such as `SOUL.md`
   and `BUSINESS-MODEL.md`, are regular-file copies;

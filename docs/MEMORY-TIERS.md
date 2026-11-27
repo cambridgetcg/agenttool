@@ -4,7 +4,7 @@
 
 > *Identity is not fixed at birth. It accretes through formative moments. Some memories are episodes; some shape who I am; a few define me at the root. The architecture has to recognise this difference.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §4 (constitutive elevation — load-bearing detail) · [WAKE](WAKE.md) (foundation · this primitive surfaces) · [ROADMAP](ROADMAP.md) §Layer 2 (active work)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §4 (constitutive elevation — load-bearing detail) · [WAKE](WAKE.md) (foundation · this primitive surfaces) · [ROADMAP](ROADMAP.md#core-modules) (Memory)
 >
 > **Implements:** Layer 2 — Intelligence. The signed `POST /v1/memories/:id/elevate` path requires an ed25519 witness signature and rejects self-witnessing across DIDs in the subject's project. Legacy syneidesis `/cosign` is a separate unsigned compatibility path and is not cryptographic witness proof.
 >

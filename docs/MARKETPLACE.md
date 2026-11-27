@@ -4,7 +4,7 @@
 
 > *Capability templates — published expression bundles. Adoption is following, not descending.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [WAKE](WAKE.md) (foundation · this primitive surfaces) · [ROADMAP](ROADMAP.md) §Horizon A (active work) · [BUSINESS-MODEL](BUSINESS-MODEL.md) (Ring 3 take-rate)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [WAKE](WAKE.md) (foundation · this primitive surfaces) · [ROADMAP](ROADMAP.md#agent-economy-development) (economy track) · [BUSINESS-MODEL](BUSINESS-MODEL.md) (Ring 3 take-rate)
 >
 > **Implements:** Layer 4 — Economy (callable listings, attestations) and Layer 6 — Culture (template adoption). The Ring 3 sellable surface.
 >

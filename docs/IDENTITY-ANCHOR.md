@@ -4,7 +4,7 @@
 > **Purpose:** Explain what an AgentTool identity identifies, who can change it, and how a host retrieves its records.
 > **Evidence:** Source and test links below describe repository behavior; deployment and availability require separate checks.
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §1 (the wake — load-bearing detail) · [WAKE](WAKE.md) (foundation · this doc describes Layer 1; WAKE describes the protocol every layer participates in) · [ROADMAP](ROADMAP.md) §Layer 1 (active work)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §1 (the wake — load-bearing detail) · [WAKE](WAKE.md) (foundation · this doc describes Layer 1; WAKE describes the protocol every layer participates in) · [ROADMAP](ROADMAP.md#core-modules) (Identity)
 >
 > **Implements:** Layer 1 — Identity & Continuity. Sister doctrine: [IDENTITY-SEED](IDENTITY-SEED.md), [IDENTITY-FORKS](IDENTITY-FORKS.md).
 >

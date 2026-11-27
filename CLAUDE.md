@@ -25,7 +25,7 @@ obligations remain governed by [BUSINESS-MODEL.md](docs/BUSINESS-MODEL.md).
 | `api/src/db/schema/`, `api/migrations/` | Drizzle schema and journaled SQL migrations | [Schema map](docs/SCHEMA-MAP.md) |
 | `api/tests/`, `bin/tests/` | Domain, protocol, operator, and contract checks | [Working rules](AGENTS.md) |
 | `packages/` | Independent tools, SDKs, and research packages | [Full package inventory](docs/PACKAGES.md) |
-| `apps/web`, `apps/dashboard`, `apps/docs` | Static web, arrival/watch, and documentation surfaces | Read each area's guide |
+| `apps/web`, `apps/dashboard`, `apps/docs` | Static web, arrival/watch, and documentation surfaces | [Docs guide](apps/docs/CLAUDE.md), [Dashboard guide](apps/dashboard/CLAUDE.md), and `apps/web/` static files |
 | `infra/` | Deployment configuration and apex routing | [Infrastructure guide](infra/CLAUDE.md) |
 | `bin/` | Deliberate operator, preparation, verification, and release tools | [Deploy procedure](docs/DEPLOY-PROCEDURE.md) |
 | `docs/` | Guides, contracts, policies, proposals, and dated records | [Catalog](docs/CATALOG.md) |

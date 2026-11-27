@@ -6,7 +6,7 @@
 > preserves historical replay, listing, cancellation, and ambiguity handling;
 > it is not an enablement guide.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Horizon A · [PAYOUT-BROADCAST](PAYOUT-BROADCAST.md) (doctrine) · [PAYOUT-BROADCAST-PLAN](PAYOUT-BROADCAST-PLAN.md) (historical implementation plan)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md#agent-economy-development) · [PAYOUT-BROADCAST](PAYOUT-BROADCAST.md) (doctrine) · [PAYOUT-BROADCAST-PLAN](PAYOUT-BROADCAST-PLAN.md) (historical implementation plan)
 >
 > **Implements:** Layer 4 — Economy. Operational containment for historical
 > outbound payout rows while fresh admission and every worker boot path rest.

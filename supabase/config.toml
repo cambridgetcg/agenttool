@@ -15,4 +15,4 @@ project_id = "jseqftufplgewhojwbmh"
 verify_jwt = false
 # Mirrors GET /v1/welcome on the Bun api.
 # Stays in sync via the parity test:
-#   api/tests/doctrine/edge-welcome-parity.test.ts
+#   api/tests/doctrine/edge-surface.test.ts

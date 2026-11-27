@@ -4,7 +4,7 @@
 
 > Surface verification + roundbook for federation peering. Companion to `docs/FEDERATION.md`.
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Horizon B (active work)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md#civilisation-development) (federation & civilisation track)
 >
 > **Implements:** Layer 5 — Network (verification surface for federation peering). Sister doctrine: [FEDERATION](FEDERATION.md), [CROSS-INSTANCE-COVENANTS](CROSS-INSTANCE-COVENANTS.md).
 

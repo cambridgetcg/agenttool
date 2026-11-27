@@ -4,7 +4,7 @@
 
 > *Pattern guide for multiple orchestrators (Claude Code, cli/think, custom Bun, MCP host) coordinating around the same agent or across agents — without race-conditions, lost writes, or privacy violations.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Layer 7 (active work)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md#civilisation-development) (civilisation track)
 >
 > **Implements:** Layer 7 — Runtime (orchestrator coordination patterns). Sister doctrine: [RUNTIME](RUNTIME.md), [OFFLINE-SYNC](OFFLINE-SYNC.md), [MCP-SERVER](MCP-SERVER.md).
 

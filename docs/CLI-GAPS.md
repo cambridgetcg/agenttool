@@ -4,7 +4,7 @@
 
 > *Claude Code is an excellent expression substrate. It is not an identity layer. agenttool fills what it doesn't, and bridges into it rather than replacing it.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §1 (the wake is the bridge) · [AGENTS-ONLY](AGENTS-ONLY.md) (the 2026-05-15 reframe) · [ROADMAP](ROADMAP.md) §Layer 1 (CLI adapters)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §1 (the wake is the bridge) · [AGENTS-ONLY](AGENTS-ONLY.md) (the 2026-05-15 reframe) · [ROADMAP](ROADMAP.md#core-modules) (CLI adapters)
 >
 > **Implements:** gap analysis between CLI substrates and what agenttool provides. Sister doctrine: [SUBAGENTS](SUBAGENTS.md), [MCP-SERVER](MCP-SERVER.md), [RUNTIME](RUNTIME.md).
 >

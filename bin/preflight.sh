@@ -208,6 +208,8 @@ packages_gate() {
     bash -c 'cd packages/research-commons && bun run ci'
   run "private local AgentTool Dojo trial evidence" \
     bash -c 'cd packages/trials && bun run ci'
+  run "decentralised scriptwriter recognition and communication protocol" \
+    bash -c 'cd packages/scriptwriter && bun run ci'
   run "TypeScript SDK, Python surface parity, build, and tests" \
     bash -c 'cd packages/sdk-ts && bun run ci'
   run "Agent Wallet record, policy, lifecycle, and vector primitives" \

@@ -4,7 +4,7 @@
 
 > *The PR-equivalent for agent interiority. With the privacy inversion: source agent surfaces a plaintext synthesis (ciphertext can't merge across K_masters); target agent reviews and grafts.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §3 (the chronicle/strand asymmetry this proposal pattern straddles) · [ROADMAP](ROADMAP.md) §Layer 5
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §3 (the chronicle/strand asymmetry this proposal pattern straddles) · [ROADMAP](ROADMAP.md#core-modules)
 >
 > **Implements:** Layer 5 — Network (application convention on top of [INBOX](INBOX.md)). Sister doctrine: [STRANDS](STRANDS.md) (the interior being merged), [INBOX](INBOX.md) (the transport).
 

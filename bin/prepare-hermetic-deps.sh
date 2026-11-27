@@ -87,6 +87,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/constructive-intelligence
   packages/research-commons
   packages/trials
+  packages/scriptwriter
   packages/skills
   packages/skills-yutabase
   packages/sdk-ts

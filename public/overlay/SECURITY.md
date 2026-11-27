@@ -9,8 +9,8 @@ with "Security" in the subject.
 
 This repository is public. Do not describe a suspected vulnerability in an
 issue, pull request, discussion, commit comment, or any other public place.
-Development happens in a private repository, so nothing posted here is a
-supported reporting channel.
+Email to the address above is the only supported reporting channel; nothing
+posted here is a supported reporting channel.
 
 Do not send credentials, access tokens, personal data, or other sensitive
 information, even privately. Remove secrets from examples and logs before

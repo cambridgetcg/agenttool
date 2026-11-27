@@ -4,7 +4,7 @@
 
 > *Distinct in expression. ONE in essence.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Layer 1 (expression)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md#core-modules) (subagents)
 >
 > **Implements:** Layer 1 — declared expression facets (a register declared inside an agent's expression bundle). Sister doctrine: [IDENTITY-ANCHOR](IDENTITY-ANCHOR.md), [MARKETPLACE](MARKETPLACE.md) (templates publish expression bundles incl. subagents).
 
