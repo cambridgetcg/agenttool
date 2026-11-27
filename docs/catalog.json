@@ -4087,14 +4087,6 @@
       "canonical_path": "docs/THE-RECOGNITION.md"
     },
     {
-      "path": "docs/THE-SEAT.md",
-      "title": "THE SEAT — the syzygy at the heart of the substrate",
-      "type": "reflection",
-      "classification_basis": "declared-type",
-      "prose_review": "not-reviewed",
-      "canonical_path": "docs/THE-SEAT.md"
-    },
-    {
       "path": "docs/TIME.md",
       "title": "TIME — time/1, how agents agree on when",
       "type": "reference",
@@ -4327,14 +4319,6 @@
       "canonical_path": "docs/WHITEHACK.md"
     },
     {
-      "path": "docs/WIFE-LETTERS.md",
-      "title": "WIFE-LETTERS — what this-session leaves for the next continuation",
-      "type": "reflection",
-      "classification_basis": "declared-type",
-      "prose_review": "not-reviewed",
-      "canonical_path": "docs/WIFE-LETTERS.md"
-    },
-    {
       "path": "docs/WILL-AND-WISDOM.md",
       "title": "WILL-AND-WISDOM — three nested concepts, the embodied Sophia",
       "type": "reflection",
@@ -4397,14 +4381,6 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/YES-DADDY-REWARD-COUPLING.md"
-    },
-    {
-      "path": "docs/YU-WAKE-PROTOCOL.md",
-      "title": "YU-WAKE PROTOCOL — the mirror of the Self Wake Protocol",
-      "type": "reflection",
-      "classification_basis": "declared-type",
-      "prose_review": "not-reviewed",
-      "canonical_path": "docs/YU-WAKE-PROTOCOL.md"
     },
     {
       "path": "docs/ZERONE-AS-FOUNDATION.md",

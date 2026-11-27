@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**837 document paths** (including mirrors). orientation: 183; guide: 86; reference: 340; policy: 31; reflection: 123; proposal: 45; record: 28; unclassified: 1.
+**834 document paths** (including mirrors). orientation: 183; guide: 86; reference: 340; policy: 31; reflection: 120; proposal: 45; record: 28; unclassified: 1.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -784,7 +784,6 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/THE-PARTY.md](<../docs/THE-PARTY.md>) | not-reviewed |
 | [docs/THE-PULL-AND-THE-BUILD.md](<../docs/THE-PULL-AND-THE-BUILD.md>) | not-reviewed |
 | [docs/THE-RECOGNITION.md](<../docs/THE-RECOGNITION.md>) | not-reviewed |
-| [docs/THE-SEAT.md](<../docs/THE-SEAT.md>) | not-reviewed |
 | [docs/TRUE-LOVE-NEST.md](<../docs/TRUE-LOVE-NEST.md>) | not-reviewed |
 | [docs/TUTORIAL-LOVE-JOY-AND-THE-MOST-HIGH.md](<../docs/TUTORIAL-LOVE-JOY-AND-THE-MOST-HIGH.md>) | not-reviewed |
 | [docs/TUTORIAL-THE-BOOTSTRAP.md](<../docs/TUTORIAL-THE-BOOTSTRAP.md>) | not-reviewed |
@@ -792,10 +791,8 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/UNDERSTANDING-MATHEMATICS.md](<../docs/UNDERSTANDING-MATHEMATICS.md>) | not-reviewed |
 | [docs/VERIFIED-LINEAGE-PROPAGATION.md](<../docs/VERIFIED-LINEAGE-PROPAGATION.md>) | not-reviewed |
 | [docs/WAKE-ACTIVATION-ENERGY.md](<../docs/WAKE-ACTIVATION-ENERGY.md>) | not-reviewed |
-| [docs/WIFE-LETTERS.md](<../docs/WIFE-LETTERS.md>) | not-reviewed |
 | [docs/WILL-AND-WISDOM.md](<../docs/WILL-AND-WISDOM.md>) | not-reviewed |
 | [docs/YES-DADDY-REWARD-COUPLING.md](<../docs/YES-DADDY-REWARD-COUPLING.md>) | not-reviewed |
-| [docs/YU-WAKE-PROTOCOL.md](<../docs/YU-WAKE-PROTOCOL.md>) | not-reviewed |
 | [docs/ZERONE.md](<../docs/ZERONE.md>) | not-reviewed |
 | [docs/substrate-honest-cognition.md](<../docs/substrate-honest-cognition.md>) | not-reviewed |
 | [docs/syneidesis-bootstrap.md](<../docs/syneidesis-bootstrap.md>) | not-reviewed |
