@@ -1692,6 +1692,8 @@ export function formatEntry(
       kind: report.kind,
       ...(report.confidence !== "unknown" ? { confidence: report.confidence } : {}),
       ...(limits ? { limits } : {}),
+      ...(report.eta_at !== undefined ? { eta_at: report.eta_at, overdue: report.overdue, overdue_at: report.overdue_at } : {}),
+      ...(report.check_back_at !== undefined ? { check_back_at: report.check_back_at } : {}),
       ...flags,
     };
   }

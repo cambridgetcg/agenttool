@@ -1159,6 +1159,28 @@ sequence still decides order. If workspace-wide refusals prove noisy during busy
 a narrower routed predicate can be added later as a separate optional input without
 changing this one.
 
+## ETAs, check-back times, and derived `overdue` (`time/1` §6)
+
+Reports (`collab_report_append`, `collab_note`) and tasks (`collab_task_create`,
+`collab_take` with `title`, `collab_task_progress`) accept optional `eta_at` and
+`check_back_at` timestamps validated under strict `time/1` rules (RFC 3339 with seconds
+and timezone, stored as canonical UTC `Z`). On `collab_task_progress`, `null` clears a
+previously set value while omitting the field leaves it unchanged.
+
+- **Additive storage:** `eta_at` and `check_back_at` are recorded only in the immutable
+  event payloads (`report.posted`, `task.created`, `task.progressed`) when supplied — no
+  SQLite schema bump and no extra keys on calls that omit them, preserving forward
+  compatibility and existing idempotency/event hashes.
+- **Derived `overdue` and `overdue_at`:** never stored; computed on every read at the
+  store clock's `observed_at`:
+  - `estimate = max(0, eta_at - set_at)` (`set_at` is the report's `created_at` or the
+    `occurred_at` of the latest `task.created` / `task.progressed` event that set `eta_at`).
+  - `grace = max(10 minutes, floor(estimate / 2))`.
+  - `overdue_at = eta_at + grace` (omitted when `eta_at` is unset, keeping plain reports and
+    tasks byte-identical to earlier builds).
+  - `overdue = true` once `observed_at >= overdue_at`, except completed tasks never read
+    overdue (`overdue: false`); omitted when `eta_at` is unset.
+
 ## Reasons, basis and evidence
 
 A reason says how it is known. **seen**: the speaker checked it itself. **told**:

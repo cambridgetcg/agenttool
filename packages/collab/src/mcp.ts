@@ -463,6 +463,14 @@ export function buildCollabMcpServer(
           + "reports_since, missed_report_ids and a ready collab_inbox call. Your own reports and non-report events do not count. "
           + "On write, compared_at_sequence echoes the checked value.",
         ),
+        eta_at: z.string().optional().describe(
+          "Optional time/1 §6 reference-clock ETA (RFC 3339 timestamp with seconds and timezone, for example 2026-11-27T15:45:00Z). "
+          + "Reads compute overdue once observed_at reaches eta_at + max(10m, floor(estimate / 2)).",
+        ),
+        check_back_at: z.string().optional().describe(
+          "Optional time/1 §6 reference-clock instant when the waiter will check back if nothing arrives "
+          + "(RFC 3339 timestamp with seconds and timezone, for example 2026-11-27T16:00:00Z).",
+        ),
       },
     },
     async (input) => noteCall(() => noteVerb(noteContext(), input), input),
@@ -484,6 +492,8 @@ export function buildCollabMcpServer(
         purpose: z.string().optional().describe("Why you take it, at most 200 characters; written into a new task's description only."),
         review: z.string().optional().describe("required | none: override whether a new task waits for review."),
         because: z.string().optional().describe("Why you recover a lapsed lease (at most 4,000 characters)."),
+        eta_at: z.string().optional().describe("Optional time/1 §6 reference-clock ETA for a new task (RFC 3339 with seconds and timezone)."),
+        check_back_at: z.string().optional().describe("Optional time/1 §6 check-back instant for a new task (RFC 3339 with seconds and timezone)."),
       },
     },
     async (input) => noteCall(() => takeVerb(noteContext(), input), input),
@@ -1005,6 +1015,14 @@ export function buildCollabMcpServer(
         work_mode: z.enum(["coordination", "read_only", "edit"]).optional(),
         completion_policy: z.enum(["reported", "accepted"]).optional(),
         expected_base_sha: z.string().regex(/^[a-fA-F0-9]{40,64}$/).optional(),
+        eta_at: z.string().optional().describe(
+          "Optional time/1 §6 reference-clock ETA (RFC 3339 timestamp with seconds and timezone, for example 2026-11-27T15:45:00Z). "
+          + "Unfinished tasks read overdue once observed_at reaches eta_at + max(10m, floor(estimate / 2)).",
+        ),
+        check_back_at: z.string().optional().describe(
+          "Optional time/1 §6 reference-clock instant when the waiter will check back if nothing arrives "
+          + "(RFC 3339 timestamp with seconds and timezone, for example 2026-11-27T16:00:00Z).",
+        ),
       },
     },
     async ({ workspace_id, actor, task_id, ...input }) => call(() => {
@@ -1137,7 +1155,15 @@ export function buildCollabMcpServer(
       description:
         "Record a result-oriented progress note. Use a structured report when evidence, confidence, disagreement, or authority matters.",
       annotations: localRetrySafeMutation,
-      inputSchema: leaseMutationSchema({ message: z.string().min(1).max(2000) }),
+      inputSchema: leaseMutationSchema({
+        message: z.string().min(1).max(2000),
+        eta_at: z.string().nullable().optional().describe(
+          "Optional time/1 §6 reference-clock ETA update (RFC 3339 timestamp with seconds and timezone), or null to clear.",
+        ),
+        check_back_at: z.string().nullable().optional().describe(
+          "Optional time/1 §6 check-back instant update (RFC 3339 timestamp with seconds and timezone), or null to clear.",
+        ),
+      }),
     },
     async ({ workspace_id, actor, ...input }) => call(() => {
       requireWorkspace(workspace_id);
@@ -1355,6 +1381,14 @@ export function buildCollabMcpServer(
         also_to_session_ids: z.array(z.string().min(1)).max(MAX_ALSO_TO_SESSIONS).optional().describe(
           `Optional additional session IDs (at most ${MAX_ALSO_TO_SESSIONS}) to route this report to alongside to_session_id; `
           + "payload-only routing, not access control.",
+        ),
+        eta_at: z.string().optional().describe(
+          "Optional time/1 §6 reference-clock ETA (RFC 3339 timestamp with seconds and timezone, for example 2026-11-27T15:45:00Z). "
+          + "Reads compute overdue once observed_at reaches eta_at + max(10m, floor(estimate / 2)).",
+        ),
+        check_back_at: z.string().optional().describe(
+          "Optional time/1 §6 reference-clock instant when the waiter will check back if nothing arrives "
+          + "(RFC 3339 timestamp with seconds and timezone, for example 2026-11-27T16:00:00Z).",
         ),
       },
     },

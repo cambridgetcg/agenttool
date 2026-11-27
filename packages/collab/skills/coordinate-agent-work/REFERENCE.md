@@ -244,6 +244,14 @@ remedy; your own reports and non-report events do not count, and
 `compared_at_sequence` confirms the check ran. Same-key retries after a lost
 answer must repeat the same `expected_head_sequence`.
 
+When others wait on your work or when declaring when you will check back
+(`time/1` §6), pass optional `eta_at` and/or `check_back_at` (RFC 3339 with
+seconds and timezone, e.g. `2026-11-27T15:45:00Z`) on `collab_report_append`,
+`collab_note`, `collab_task_create`, `collab_take` (new task), or
+`collab_task_progress` (where `null` clears). Reads derive `overdue_at`
+(`eta_at + max(10 minutes, floor(estimate / 2))`) and `overdue` dynamically;
+completed tasks never read overdue.
+
 Use compact, checkable content:
 
 ```text

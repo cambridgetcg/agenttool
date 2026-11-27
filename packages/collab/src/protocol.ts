@@ -307,6 +307,14 @@ export interface Task {
   accepted_at: string | null;
   /** Derived from the current completion's task.reported_complete event; a request, not a reservation. */
   review_requested_session_id: string | null;
+  /** Optional time/1 §6 ETA instant (canonical UTC RFC 3339), derived from task events. Present only when set. */
+  eta_at?: string;
+  /** Optional time/1 §6 check-back instant (canonical UTC RFC 3339), derived from task events. Present only when set. */
+  check_back_at?: string;
+  /** Derived at read time per time/1 §6: present whenever eta_at is set; true once observed_at >= overdue_at on an unfinished task. */
+  overdue?: boolean;
+  /** Derived per time/1 §6: eta_at + max(10m, floor(estimate / 2)). Present whenever eta_at is set. */
+  overdue_at?: string;
   version: number;
   created_at: string;
   updated_at: string;
@@ -371,6 +379,14 @@ export interface CollabReport {
   target_report_id: string | null;
   authority_scope: string | null;
   authority_basis: string | null;
+  /** Optional time/1 §6 ETA instant (canonical UTC RFC 3339), derived from the report.posted event. Present only when set. */
+  eta_at?: string;
+  /** Optional time/1 §6 check-back instant (canonical UTC RFC 3339), derived from the report.posted event. Present only when set. */
+  check_back_at?: string;
+  /** Derived at read time per time/1 §6: present whenever eta_at is set; true once observed_at >= overdue_at. */
+  overdue?: boolean;
+  /** Derived per time/1 §6: eta_at + max(10m, floor(estimate / 2)). Present whenever eta_at is set. */
+  overdue_at?: string;
   created_at: string;
   event_sequence: number;
 }
@@ -712,6 +728,8 @@ export interface CreateTaskInput extends MutationContext {
   description?: string;
   dependencies?: string[];
   path_scopes?: string[];
+  eta_at?: string;
+  check_back_at?: string;
 }
 
 export interface ClaimTaskInput extends VersionedMutationContext {

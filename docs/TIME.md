@@ -181,8 +181,16 @@ person proposal acts) do not count. On crossing, nothing is written and
 on success, `compared_at_sequence` confirms the compare ran (Collab
 PROTOCOL.md).
 
-Proposed: optional `eta_at` and `check_back_at` on reports and tasks, with an
-`overdue` flag once the grace has passed.
+Source: `collab_report_append`, `collab_note`, `collab_task_create`,
+`collab_take` (with `title`), and `collab_task_progress` accept optional
+`eta_at` and `check_back_at` (strict `time/1` RFC 3339 instants with seconds
+and timezone, canonicalized to UTC `Z`; `collab_task_progress` also accepts
+`null` to clear). Values are recorded in the journal event payloads only when
+supplied (zero schema bump; older schema-3 builds ignore them). Reads
+(`collab_report_list`, `collab_next`, `collab_inbox`, `collab_task_get`,
+`collab_task_list`, `collab_workspace_status`) derive `overdue_at = eta_at +
+max(10 minutes, floor(max(0, eta_at - set_at) / 2))` and `overdue: boolean` at
+`observed_at`; completed tasks never read overdue.
 
 ## Provenance
 

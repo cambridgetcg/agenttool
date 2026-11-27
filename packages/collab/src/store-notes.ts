@@ -91,6 +91,7 @@ import {
   reviewFromRow,
   type ReviewRow,
   sessionLiveness,
+  validateEtaInstant,
   validateExpectedHeadSequence,
   validateId,
   validateIdempotencyKey,
@@ -336,6 +337,8 @@ export class CollabStore extends CollabStoreCore {
         posted.push(this.appendReportInternal(session, {
           ...normalized,
           ...(report.about_proposal_id ? { about_proposal_id: report.about_proposal_id } : {}),
+          ...(report.eta_at ? { eta_at: report.eta_at } : {}),
+          ...(report.check_back_at ? { check_back_at: report.check_back_at } : {}),
           note: NOTE_FORMAT,
         }));
       }
@@ -1451,7 +1454,7 @@ export class CollabStore extends CollabStoreCore {
     let report: CollabReport | null = null;
     if (event.type === "report.posted" || event.type.startsWith("proposal.")) {
       const reportRow = this.db.query(`SELECT * FROM reports WHERE id = ?`).get(event.entity_id) as ReportRow | null;
-      report = reportRow ? reportFromRow(reportRow) : null;
+      report = reportRow ? this.hydrateReport(reportRow) : null;
     }
     const taskId = event.type.startsWith("task.") ? event.entity_id
       : event.type.startsWith("handoff.") ? (typeof payload.task_id === "string" ? payload.task_id
@@ -2524,10 +2527,16 @@ export class CollabStore extends CollabStoreCore {
     evidence_refs?: string[];
     receipt_plan?: ReceiptPlanGuard;
     expected_head_sequence?: number;
+    eta_at?: string;
+    check_back_at?: string;
   }): NoteDecisionReceipt {
     const expectedHead = input.expected_head_sequence === undefined
       ? undefined
       : validateExpectedHeadSequence(input.expected_head_sequence);
+    const etaAt = input.eta_at === undefined ? undefined : validateEtaInstant(input.eta_at, "eta_at");
+    const checkBackAt = input.check_back_at === undefined
+      ? undefined
+      : validateEtaInstant(input.check_back_at, "check_back_at");
     if (!(NOTE_DECISION_OUTCOMES as readonly string[]).includes(input.outcome)) {
       throw new CollabError("invalid_outcome", `outcome is ${NOTE_DECISION_OUTCOMES.join(", ")}`);
     }
@@ -2546,6 +2555,8 @@ export class CollabStore extends CollabStoreCore {
       to_person: input.to_person === true,
       evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
       cite,
+      ...(etaAt !== undefined ? { eta_at: etaAt } : {}),
+      ...(checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}),
     };
     const request = expectedHead === undefined
       ? normalized
@@ -2577,6 +2588,8 @@ export class CollabStore extends CollabStoreCore {
       const posted = this.appendReportInternal(session, {
         ...report,
         ...(proposal ? { about_proposal_id: proposal.id } : {}),
+        ...(etaAt !== undefined ? { eta_at: etaAt } : {}),
+        ...(checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}),
         note: NOTE_FORMAT,
       });
       return {
@@ -2750,10 +2763,13 @@ export class CollabStore extends CollabStoreCore {
         last_seen: (voice: string) => sessions.filter((view) => view.voice_id === voice).map((view) => view.last_seen_at).sort().at(-1) ?? null,
       }
       : null;
-    const stances = (this.db.query(`
-      SELECT * FROM reports WHERE workspace_id = ? AND target_report_id = ? AND relation IN ('supports', 'challenges')
-      ORDER BY event_sequence
-    `).all(workspaceId, proposalId) as ReportRow[]).map(reportFromRow).map((report) => {
+    const stances = this.hydrateReports(
+      workspaceId,
+      this.db.query(`
+        SELECT * FROM reports WHERE workspace_id = ? AND target_report_id = ? AND relation IN ('supports', 'challenges')
+        ORDER BY event_sequence
+      `).all(workspaceId, proposalId) as ReportRow[],
+    ).map((report) => {
       const session = report.from_session_id ? byId.get(report.from_session_id) ?? null : null;
       const view = challengeViews.get(report.id);
       return this.noteStanceView(workspaceId, report, session, author, context, {
@@ -3235,6 +3251,10 @@ export interface NoteReportInput {
   cite_event?: boolean;
   /** Also cite the reports this call posted before this one, by index. */
   cite_earlier?: number[];
+  /** Optional time/1 §6 reference-clock ETA (RFC 3339 instant with seconds and timezone). */
+  eta_at?: string;
+  /** Optional time/1 §6 reference-clock check-back instant (RFC 3339 instant with seconds and timezone). */
+  check_back_at?: string;
 }
 
 export interface NoteAppendReceipt {
@@ -3281,6 +3301,8 @@ interface NormalizedNoteReport {
   evidence_refs: string[];
   cite_event: boolean;
   cite_earlier: number[];
+  eta_at?: string;
+  check_back_at?: string;
 }
 
 const NOTE_CITE_LOCATOR_MAX = 1_000;
@@ -3352,6 +3374,10 @@ function normalizeNoteReport(report: NoteReportInput, index: number): Normalized
   if (!Array.isArray(earlier) || earlier.some((at) => !Number.isInteger(at) || at < 0 || at >= index)) {
     throw new CollabError("invalid_note_reports", "cite_earlier names reports this call posted before this one");
   }
+  const etaAt = report.eta_at === undefined ? undefined : validateEtaInstant(report.eta_at, "eta_at");
+  const checkBackAt = report.check_back_at === undefined
+    ? undefined
+    : validateEtaInstant(report.check_back_at, "check_back_at");
   return {
     kind: report.kind,
     relation: report.relation,
@@ -3364,6 +3390,8 @@ function normalizeNoteReport(report: NoteReportInput, index: number): Normalized
     evidence_refs: normalizeEvidenceRefs(report.evidence_refs ?? []),
     cite_event: report.cite_event === true,
     cite_earlier: [...earlier],
+    ...(etaAt !== undefined ? { eta_at: etaAt } : {}),
+    ...(checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}),
   };
 }
 

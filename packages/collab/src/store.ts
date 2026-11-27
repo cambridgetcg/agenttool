@@ -18,6 +18,7 @@ import {
 } from "./merkle.js";
 import { NOTE_FORMAT } from "./note.js";
 import { validateSeatRef } from "./seat-ref.js";
+import { computeEtaOverdue, parseCanonicalInstant } from "./time.js";
 import {
   COLLAB_COORDINATION_PROTOCOL,
   COLLAB_SESSION_PROTOCOL,
@@ -2728,6 +2729,10 @@ export class CollabStoreCore {
         "work_mode, completion_policy, and expected_base_sha require createTaskForSession",
       );
     }
+    const etaAt = input.eta_at === undefined ? undefined : validateEtaInstant(input.eta_at, "eta_at");
+    const checkBackAt = input.check_back_at === undefined
+      ? undefined
+      : validateEtaInstant(input.check_back_at, "check_back_at");
     const normalized = {
       ...normalizeMutation(input),
       workspace_id: input.workspace_id,
@@ -2736,6 +2741,8 @@ export class CollabStoreCore {
       description: optionalText(input.description, "description", MAX_TEXT),
       dependencies: normalizeDependencies(input.dependencies ?? []),
       path_scopes: normalizePathScopes(input.path_scopes ?? []),
+      ...(etaAt !== undefined ? { eta_at: etaAt } : {}),
+      ...(checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}),
     };
     return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.create", normalized, () => {
       this.requireWorkspace(input.workspace_id);
@@ -2769,6 +2776,8 @@ export class CollabStoreCore {
         description: normalized.description,
         dependencies: normalized.dependencies,
         path_scopes: normalized.path_scopes,
+        ...(etaAt !== undefined ? { eta_at: etaAt } : {}),
+        ...(checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}),
         version: 1,
       });
       return this.requireTask(input.workspace_id, id);
@@ -2788,7 +2797,13 @@ export class CollabStoreCore {
     work_mode?: TaskWorkMode;
     completion_policy?: CompletionPolicy;
     expected_base_sha?: string;
+    eta_at?: string;
+    check_back_at?: string;
   }): Task {
+    const etaAt = input.eta_at === undefined ? undefined : validateEtaInstant(input.eta_at, "eta_at");
+    const checkBackAt = input.check_back_at === undefined
+      ? undefined
+      : validateEtaInstant(input.check_back_at, "check_back_at");
     const normalized = {
       idempotency_key: validateIdempotencyKey(input.idempotency_key),
       id: input.id ? validateId(input.id, "task_id") : undefined,
@@ -2801,6 +2816,8 @@ export class CollabStoreCore {
       expected_base_sha: input.expected_base_sha
         ? validateGitObjectId(input.expected_base_sha)
         : null,
+      ...(etaAt !== undefined ? { eta_at: etaAt } : {}),
+      ...(checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}),
     };
     if (!["coordination", "read_only", "edit"].includes(normalized.work_mode)) {
       throw new CollabError("invalid_work_mode", "Unsupported task work mode");
@@ -2870,6 +2887,8 @@ export class CollabStoreCore {
         work_mode: normalized.work_mode,
         completion_policy: completionPolicy,
         expected_base_sha: normalized.expected_base_sha,
+        ...(etaAt !== undefined ? { eta_at: etaAt } : {}),
+        ...(checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}),
         version: 1,
       }, session.id);
       return this.requireTask(session.workspace_id, id);
@@ -3151,14 +3170,25 @@ export class CollabStoreCore {
     lease_id: string;
     expected_version: number;
     message: string;
+    eta_at?: string | null;
+    check_back_at?: string | null;
   }): Task {
     const normalized = normalizeSessionLeaseInput(input);
     const message = cleanText(input.message, "message", 2_000);
+    const etaAt = input.eta_at === undefined ? undefined : validateNullableEtaInstant(input.eta_at, "eta_at");
+    const checkBackAt = input.check_back_at === undefined
+      ? undefined
+      : validateNullableEtaInstant(input.check_back_at, "check_back_at");
     return this.mutateAsSession(
       input,
       normalized.idempotency_key,
       "task.progress.v2",
-      { ...normalized.request, message },
+      {
+        ...normalized.request,
+        message,
+        ...(etaAt !== undefined ? { eta_at: etaAt } : {}),
+        ...(checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}),
+      },
       (session) => {
         const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
         this.requireVersion(row, normalized.expected_version);
@@ -3171,6 +3201,8 @@ export class CollabStoreCore {
         `).run(message, version, now, row.workspace_id, row.id);
         this.appendEvent(row.workspace_id, "task.progressed", row.id, session.actor, {
           message,
+          ...(etaAt !== undefined ? { eta_at: etaAt } : {}),
+          ...(checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}),
           version,
         }, session.id);
         return this.requireTask(row.workspace_id, row.id);
@@ -3608,8 +3640,17 @@ export class CollabStoreCore {
     });
   }
 
-  progressTask(input: LeaseTaskInput & { message: string }): Task {
-    const normalized = { ...normalizeLeaseInput(input), message: cleanText(input.message, "message", 2_000) };
+  progressTask(input: LeaseTaskInput & { message: string; eta_at?: string | null; check_back_at?: string | null }): Task {
+    const etaAt = input.eta_at === undefined ? undefined : validateNullableEtaInstant(input.eta_at, "eta_at");
+    const checkBackAt = input.check_back_at === undefined
+      ? undefined
+      : validateNullableEtaInstant(input.check_back_at, "check_back_at");
+    const normalized = {
+      ...normalizeLeaseInput(input),
+      message: cleanText(input.message, "message", 2_000),
+      ...(etaAt !== undefined ? { eta_at: etaAt } : {}),
+      ...(checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}),
+    };
     return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.progress", normalized, () => {
       const row = this.requireTaskRow(input.workspace_id, normalized.task_id);
       this.requireVersion(row, normalized.expected_version);
@@ -3622,6 +3663,8 @@ export class CollabStoreCore {
       `).run(normalized.message, version, now, input.workspace_id, normalized.task_id);
       this.appendEvent(input.workspace_id, "task.progressed", normalized.task_id, normalized.actor, {
         message: normalized.message,
+        ...(etaAt !== undefined ? { eta_at: etaAt } : {}),
+        ...(checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}),
         version,
       });
       return this.requireTask(input.workspace_id, normalized.task_id);
@@ -3815,6 +3858,10 @@ export class CollabStoreCore {
      * and non-report events do not count.
      */
     expected_head_sequence?: number;
+    /** Optional time/1 §6 reference-clock ETA (RFC 3339 instant with seconds and timezone). */
+    eta_at?: string;
+    /** Optional time/1 §6 reference-clock check-back instant (RFC 3339 instant with seconds and timezone). */
+    check_back_at?: string;
   }): CollabReport {
     const expectedHead = input.expected_head_sequence === undefined
       ? undefined
@@ -3823,6 +3870,10 @@ export class CollabStoreCore {
       ? validateId(input.to_session_id, "to_session_id")
       : null;
     const alsoToSessionIds = normalizeAlsoToSessionIds(input.also_to_session_ids, toSessionId);
+    const etaAt = input.eta_at === undefined ? undefined : validateEtaInstant(input.eta_at, "eta_at");
+    const checkBackAt = input.check_back_at === undefined
+      ? undefined
+      : validateEtaInstant(input.check_back_at, "check_back_at");
     const normalized = {
       task_id: input.task_id ? validateId(input.task_id, "task_id") : null,
       to_session_id: toSessionId,
@@ -3841,6 +3892,8 @@ export class CollabStoreCore {
       // Present only when set, so earlier idempotency receipts keep their request hash.
       ...(input.to_person === true ? { to_person: true } : {}),
       ...(alsoToSessionIds.length > 0 ? { also_to_session_ids: alsoToSessionIds } : {}),
+      ...(etaAt !== undefined ? { eta_at: etaAt } : {}),
+      ...(checkBackAt !== undefined ? { check_back_at: checkBackAt } : {}),
     };
     return this.mutateAsSession(
       input,
@@ -4580,10 +4633,13 @@ export class CollabStoreCore {
         const status = this.readProposalStatus(context, row.report_id, unreadable);
         if (status && settled.has(status.ai.position)) awaiting.push(status);
       }
-      const addressed = (this.db.query(`
-        SELECT r.* FROM person_addressed_reports p JOIN reports r ON r.id = p.report_id
-        WHERE p.workspace_id = ? ORDER BY r.event_sequence DESC LIMIT 50
-      `).all(workspaceId) as ReportRow[]).map(reportFromRow);
+      const addressed = this.hydrateReports(
+        workspaceId,
+        this.db.query(`
+          SELECT r.* FROM person_addressed_reports p JOIN reports r ON r.id = p.report_id
+          WHERE p.workspace_id = ? ORDER BY r.event_sequence DESC LIMIT 50
+        `).all(workspaceId) as ReportRow[],
+      );
       return { workspace_id: workspaceId, awaiting_person: awaiting, addressed_reports: addressed, unreadable };
     });
     return transaction.deferred();
@@ -4790,7 +4846,7 @@ export class CollabStoreCore {
   } {
     const status = this.proposalStatusInternal(terms.workspace_id, terms.report_id);
     const row = this.db.query(`SELECT * FROM reports WHERE id = ?`).get(challengeId) as ReportRow | null;
-    const challenge = row ? reportFromRow(row) : null;
+    const challenge = row ? this.hydrateReport(row) : null;
     const presence = this.challengerPresence(terms.workspace_id, challenge?.from_session_id ?? null);
     this.refuseUnrecordableSetAside(status, challenge, presence);
     return {
@@ -5296,7 +5352,7 @@ export class CollabStoreCore {
       toSessionId,
       limit,
     ) as ReportRow[];
-    return rows.map(reportFromRow);
+    return this.hydrateReports(workspaceId, rows);
   }
 
   reviewTaskForSession(input: {
@@ -5875,7 +5931,7 @@ export class CollabStoreCore {
           task: this.requireTask(workspaceId, row.task_id),
         })),
         recovery_required: recoveryRequiredFirst(tasks, () => false),
-        reports: reportRows.map(reportFromRow),
+        reports: this.hydrateReports(workspaceId, reportRows),
         events,
         projection_scope: "snapshot_head" as const,
         reports_scope: "event_page" as const,
@@ -6022,7 +6078,7 @@ export class CollabStoreCore {
           tasks,
           (task) => task.assignee_session_id === current.id,
         ),
-        reports: reportRows.map(reportFromRow),
+        reports: this.hydrateReports(current.workspace_id, reportRows),
         events,
         projection_scope: "snapshot_head" as const,
         reports_scope: "event_page" as const,
@@ -7601,6 +7657,8 @@ export class CollabStoreCore {
       ...(alsoTo ? { also_to_session_ids: alsoTo } : {}),
       // The collab-note/1 marker (spec 4): reads parse a body only when it is present.
       ...(input.note ? { note: input.note } : {}),
+      ...(input.eta_at ? { eta_at: input.eta_at } : {}),
+      ...(input.check_back_at ? { check_back_at: input.check_back_at } : {}),
       task_id: input.task_id,
       to_session_id: input.to_session_id,
       kind: input.kind,
@@ -7652,7 +7710,33 @@ export class CollabStoreCore {
   protected requireReport(id: string): CollabReport {
     const row = this.db.query(`SELECT * FROM reports WHERE id = ?`).get(id) as ReportRow | null;
     if (!row) throw new CollabError("report_not_found", `Report '${id}' was not found`);
-    return reportFromRow(row);
+    return this.hydrateReport(row);
+  }
+
+  protected hydrateReport(row: ReportRow, observedAt = this.timestamp()): CollabReport {
+    const eventRow = this.db.query(`
+      SELECT payload_json FROM events WHERE workspace_id = ? AND sequence = ?
+    `).get(row.workspace_id, row.event_sequence) as { payload_json: string } | null;
+    return reportFromRow(row, extractReportTimingMeta(eventRow?.payload_json), observedAt);
+  }
+
+  protected hydrateReports(
+    workspaceId: string,
+    rows: ReportRow[],
+    observedAt = this.timestamp(),
+  ): CollabReport[] {
+    if (rows.length === 0) return [];
+    const sequences = rows.map((row) => row.event_sequence);
+    const placeholders = sequences.map(() => "?").join(", ");
+    const eventRows = this.db.query(`
+      SELECT sequence, payload_json FROM events
+      WHERE workspace_id = ? AND sequence IN (${placeholders})
+    `).all(workspaceId, ...sequences) as Array<{ sequence: number; payload_json: string }>;
+    const bySequence = new Map<number, ReportTimingMeta>();
+    for (const eventRow of eventRows) {
+      bySequence.set(eventRow.sequence, extractReportTimingMeta(eventRow.payload_json));
+    }
+    return rows.map((row) => reportFromRow(row, bySequence.get(row.event_sequence), observedAt));
   }
 
   private requireReview(id: string): TaskReview {
@@ -8070,7 +8154,52 @@ export class CollabStoreCore {
     return !holder || !leaseHolderPresent(holder, observedAt);
   }
 
+  private taskEtaState(
+    row: TaskRow,
+    observedAt: string,
+  ): { eta_at: string | null; check_back_at: string | null; overdue: boolean; overdue_at: string | null } {
+    const events = this.db.query(`
+      SELECT occurred_at, payload_json FROM events
+      WHERE workspace_id = ? AND entity_id = ? AND type IN ('task.created', 'task.progressed')
+      ORDER BY sequence ASC
+    `).all(row.workspace_id, row.id) as Array<{ occurred_at: string; payload_json: string }>;
+    let etaAt: string | null = null;
+    let etaSetAt = row.created_at;
+    let checkBackAt: string | null = null;
+    for (const event of events) {
+      let payload: Record<string, unknown>;
+      try {
+        payload = JSON.parse(event.payload_json) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      if (Object.hasOwn(payload, "eta_at")) {
+        if (typeof payload.eta_at === "string") {
+          etaAt = payload.eta_at;
+          etaSetAt = event.occurred_at;
+        } else if (payload.eta_at === null) {
+          etaAt = null;
+        }
+      }
+      if (Object.hasOwn(payload, "check_back_at")) {
+        if (typeof payload.check_back_at === "string") {
+          checkBackAt = payload.check_back_at;
+        } else if (payload.check_back_at === null) {
+          checkBackAt = null;
+        }
+      }
+    }
+    const { overdue, overdue_at } = computeEtaOverdue({
+      set_at: etaSetAt,
+      eta_at: etaAt,
+      observed_at: observedAt,
+      active: row.status !== "completed",
+    });
+    return { eta_at: etaAt, check_back_at: checkBackAt, overdue, overdue_at };
+  }
+
   private taskFromRow(row: TaskRow): Task {
+    const observedAt = this.timestamp();
     let effectiveStatus: Task["effective_status"] = row.status;
     if (this.isExpired(row)) {
       effectiveStatus = row.assignee_session_id ? "recovery_required" : "lease_expired";
@@ -8081,6 +8210,7 @@ export class CollabStoreCore {
     }
     const baseCheckpoint = parseCheckpoint(row.base_checkpoint_json);
     const resultCheckpoint = parseCheckpoint(row.result_checkpoint_json);
+    const eta = this.taskEtaState(row, observedAt);
     return {
       id: row.id,
       workspace_id: row.workspace_id,
@@ -8101,7 +8231,7 @@ export class CollabStoreCore {
       completion_report_id: row.completion_report_id,
       assignee: row.assignee,
       assignee_session_id: row.assignee_session_id,
-      assignee_liveness: this.assigneeLiveness(row.assignee_session_id),
+      assignee_liveness: this.assigneeLiveness(row.assignee_session_id, observedAt),
       claim_worktree_id: row.claim_worktree_id,
       lease_id: row.lease_id,
       lease_expires_at: row.lease_expires_at,
@@ -8114,6 +8244,10 @@ export class CollabStoreCore {
       accepted_by_session_id: row.accepted_by_session_id,
       accepted_at: row.accepted_at,
       review_requested_session_id: this.reviewRequestedSessionId(row),
+      ...(eta.eta_at !== null
+        ? { eta_at: eta.eta_at, overdue: eta.overdue, overdue_at: eta.overdue_at! }
+        : {}),
+      ...(eta.check_back_at !== null ? { check_back_at: eta.check_back_at } : {}),
       version: row.version,
       created_at: row.created_at,
       updated_at: row.updated_at,
@@ -8674,6 +8808,22 @@ export function validateExpectedHeadSequence(value: unknown): number {
     throw new CollabError("invalid_expected_head_sequence", "expected_head_sequence must be a non-negative integer");
   }
   return value;
+}
+
+export function validateEtaInstant(value: unknown, field: "eta_at" | "check_back_at"): string {
+  const canonical = parseCanonicalInstant(typeof value === "string" ? value.trim() : value);
+  if (canonical === null) {
+    throw new CollabError(
+      field === "eta_at" ? "invalid_eta_at" : "invalid_check_back_at",
+      `${field} must be an RFC 3339 timestamp with seconds and a timezone (for example 2026-11-27T15:45:00Z)`,
+    );
+  }
+  return canonical;
+}
+
+export function validateNullableEtaInstant(value: unknown, field: "eta_at" | "check_back_at"): string | null {
+  if (value === null) return null;
+  return validateEtaInstant(value, field);
 }
 
 function validateRestMode(value: unknown): "resting" | "ready" {
@@ -9330,7 +9480,35 @@ function checkpointFromWorktreeRow(row: WorktreeRow, capturedAt: string): RepoCh
   };
 }
 
-export function reportFromRow(row: ReportRow): CollabReport {
+interface ReportTimingMeta {
+  eta_at: string | null;
+  check_back_at: string | null;
+}
+
+function extractReportTimingMeta(payloadJson: string | undefined): ReportTimingMeta {
+  if (!payloadJson) return { eta_at: null, check_back_at: null };
+  try {
+    const payload = JSON.parse(payloadJson) as Record<string, unknown>;
+    return {
+      eta_at: typeof payload.eta_at === "string" ? payload.eta_at : null,
+      check_back_at: typeof payload.check_back_at === "string" ? payload.check_back_at : null,
+    };
+  } catch {
+    return { eta_at: null, check_back_at: null };
+  }
+}
+
+export function reportFromRow(
+  row: ReportRow,
+  meta: ReportTimingMeta = { eta_at: null, check_back_at: null },
+  observedAt = row.created_at,
+): CollabReport {
+  const { overdue, overdue_at } = computeEtaOverdue({
+    set_at: row.created_at,
+    eta_at: meta.eta_at,
+    observed_at: observedAt,
+    active: true,
+  });
   return {
     id: row.id,
     workspace_id: row.workspace_id,
@@ -9348,6 +9526,10 @@ export function reportFromRow(row: ReportRow): CollabReport {
     target_report_id: row.target_report_id,
     authority_scope: row.authority_scope,
     authority_basis: row.authority_basis,
+    ...(meta.eta_at !== null
+      ? { eta_at: meta.eta_at, overdue, overdue_at: overdue_at! }
+      : {}),
+    ...(meta.check_back_at !== null ? { check_back_at: meta.check_back_at } : {}),
     created_at: row.created_at,
     event_sequence: row.event_sequence,
   };
@@ -9473,6 +9655,10 @@ interface ReportInternalInput {
   about_proposal_id?: string;
   /** The body is a rendered collab-note/1 note (spec 4, 8.3). */
   note?: typeof NOTE_FORMAT;
+  /** Optional time/1 §6 reference-clock ETA (canonical UTC RFC 3339). */
+  eta_at?: string;
+  /** Optional time/1 §6 reference-clock check-back instant (canonical UTC RFC 3339). */
+  check_back_at?: string;
 }
 
 /** One read of a workspace's obsoletions and consent voices, shared across statuses. */
