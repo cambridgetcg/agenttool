@@ -3,6 +3,9 @@ import { createHash } from "node:crypto";
 export const PROPOSAL_FORMAT = "kingdom.kg-proposal/0.1";
 export const EVENT_HASH_DOMAIN = "kingdom.kg-proposal-event/v0.1";
 export const PROPOSAL_BINDING_DOMAIN = "kingdom.kg-proposal-binding/v0.1";
+export const EVENT_ENVELOPE_FORMAT = "kingdom.kg-proposal-event-envelope/0.1";
+export const EVENT_ENVELOPE_HASH_DOMAIN =
+  "kingdom.kg-proposal-event-envelope/v0.1";
 export const PACKAGE_VERSION = "0.1.0-dev.0";
 export const CONTRACT_ID = "agenttool.dark-continent/0.1";
 export const DARK_CONTINENT_FORMAT = "agenttool-dark-continent-framework/v0.1";
@@ -96,6 +99,20 @@ export const CONSEQUENCE_KINDS = Object.freeze([
   "requires_safety_review",
   "deferred",
   "rejected",
+]);
+
+export const CARTOGRAPHER_TOOLS = Object.freeze([
+  "list_proposals",
+  "show_provenance",
+  "compare_conflicts",
+]);
+
+export const FORBIDDEN_CARTOGRAPHER_SURFACES = Object.freeze([
+  "award",
+  "authorize",
+  "coronate",
+  "merge",
+  "publish",
 ]);
 
 const EPISTEMIC_STATUSES = Object.freeze([
@@ -348,6 +365,447 @@ export function hfFileEvidenceRef(subject, file) {
   const root = subject.repo_type === "model" ? "models" : `${subject.repo_type}s`;
   const encodedPath = file.path.split("/").map(encodeURIComponent).join("/");
   return `hf://${root}/${subject.repo_id}@${subject.revision}/${encodedPath}#sha256=${file.sha256}`;
+}
+
+/**
+ * Extract canonical standalone event envelopes from one or more validated
+ * proposals in deterministic (proposal_id, sequence) order.
+ *
+ * @param {unknown} proposals
+ */
+export function extractProposalEvents(proposals) {
+  const normalized = validateProposalCollection(proposals, "extractProposalEvents");
+  const envelopes = [];
+  for (const proposal of normalized) {
+    const bindingSha = proposalBindingSha256(proposal);
+    for (const event of proposal.events) {
+      const payload = {
+        _format: EVENT_ENVELOPE_FORMAT,
+        proposal_id: proposal.proposal_id,
+        proposal_binding_sha256: bindingSha,
+        event: cloneJson(event),
+        effects: cloneJson(EFFECTS),
+        authority: cloneJson(AUTHORITY),
+      };
+      const envelope = {
+        ...payload,
+        envelope_sha256: eventEnvelopeDigest(payload),
+      };
+      const errors = validateEventEnvelope(envelope);
+      if (errors.length > 0) {
+        throw new TypeError(`invalid generated event envelope: ${errors.join("; ")}`);
+      }
+      envelopes.push(canonicalize(envelope));
+      if (envelopes.length > 16_384) {
+        throw new TypeError("invalid events.jsonl input: exceeds maximum 16384 event envelopes");
+      }
+    }
+  }
+  return deepFreeze(envelopes);
+}
+
+/**
+ * Validate a single standalone event envelope without throwing.
+ *
+ * @param {unknown} value
+ * @returns {string[]}
+ */
+export function validateEventEnvelope(value) {
+  try {
+    return validateEventEnvelopeInternal(value);
+  } catch (error) {
+    return [`event envelope validation failed safely: ${errorMessage(error)}`];
+  }
+}
+
+/**
+ * Format proposals or standalone event envelopes as canonical compact JSONL.
+ * Always self-verifies the emitted stream before returning.
+ *
+ * @param {unknown} items
+ * @returns {string}
+ */
+export function formatEventJsonl(items) {
+  if (!Array.isArray(items)) {
+    throw new TypeError(
+      "invalid events.jsonl input: expected an array of proposals or event envelopes",
+    );
+  }
+  if (items.length === 0) return "";
+  let envelopes;
+  if (items.every((item) => isRecord(item) && item._format === PROPOSAL_FORMAT)) {
+    envelopes = extractProposalEvents(items);
+  } else if (
+    items.every((item) => isRecord(item) && item._format === EVENT_ENVELOPE_FORMAT)
+  ) {
+    if (items.length > 16_384) {
+      throw new TypeError("invalid events.jsonl input: exceeds maximum 16384 event envelopes");
+    }
+    envelopes = items.map((item, index) => {
+      const errors = validateEventEnvelope(item);
+      if (errors.length > 0) {
+        throw new TypeError(
+          `invalid event envelope at index ${index}: ${errors.join("; ")}`,
+        );
+      }
+      return canonicalize(cloneJson(item));
+    });
+  } else {
+    throw new TypeError(
+      "invalid events.jsonl input: expected an array of proposals or event envelopes",
+    );
+  }
+  if (envelopes.length === 0) return "";
+  const jsonl = `${envelopes.map((envelope) => JSON.stringify(canonicalize(envelope))).join("\n")}\n`;
+  const verification = verifyEventJsonl(jsonl);
+  if (!verification.ok) {
+    throw new TypeError(`invalid events.jsonl output: ${verification.errors.join("; ")}`);
+  }
+  return jsonl;
+}
+
+/**
+ * Verify a standalone canonical events.jsonl stream without throwing.
+ * Enforces exact canonical compact JSON per line, envelope and event hashes,
+ * per-proposal sequence and hash-chain continuity, and optional cross-checks
+ * against supplied proposals and/or independently retained heads.
+ *
+ * @param {unknown} jsonl
+ * @param {unknown} [options]
+ */
+export function verifyEventJsonl(jsonl, options = undefined) {
+  try {
+    return verifyEventJsonlInternal(jsonl, options);
+  } catch (error) {
+    return failedEventJsonlResult([
+      `events.jsonl verification failed safely: ${errorMessage(error)}`,
+    ]);
+  }
+}
+
+/**
+ * Create a pure, read-only Cartographer catalog over validated proposals.
+ * Exposes only list_proposals, show_provenance, and compare_conflicts.
+ *
+ * @param {unknown} proposals
+ */
+export function createCartographerCatalog(proposals) {
+  const orderedProposals = validateProposalCollection(
+    proposals,
+    "createCartographerCatalog",
+  );
+  const byId = new Map();
+  for (const proposal of orderedProposals) {
+    byId.set(proposal.proposal_id, proposal);
+  }
+
+  function listProposals(filter = undefined) {
+    const normalizedFilter = normalizeCartographerListFilter(filter);
+    const matched = orderedProposals
+      .filter((proposal) => matchesCartographerFilter(proposal, normalizedFilter))
+      .map((proposal) => summarizeProposalForCatalog(proposal));
+    return deepFreeze({
+      tool: "list_proposals",
+      total_count: orderedProposals.length,
+      matched_count: matched.length,
+      proposals: matched,
+      effects: cloneJson(EFFECTS),
+      authority: cloneJson(AUTHORITY),
+    });
+  }
+
+  function showProvenance(proposalId) {
+    const proposal = lookupCatalogProposal(byId, proposalId, "proposal_id");
+    const refSet = new Set();
+    for (const node of proposal.graph_delta.nodes) {
+      for (const ref of node.evidence_refs) refSet.add(ref);
+    }
+    for (const edge of proposal.graph_delta.edges) {
+      for (const ref of edge.evidence_refs) refSet.add(ref);
+    }
+    for (const event of proposal.events) {
+      for (const ref of event.evidence_refs) refSet.add(ref);
+    }
+    const evidenceRefs = [...refSet].sort(compareStrings);
+    return deepFreeze({
+      tool: "show_provenance",
+      proposal_id: proposal.proposal_id,
+      proposal_binding_sha256: proposalBindingSha256(proposal),
+      proposal_sha256: sha256(prettyJsonBytes(proposal)),
+      created_from: cloneJson(proposal.created_from),
+      subject: cloneJson(proposal.subject),
+      base_graph: cloneJson(proposal.base_graph),
+      dark_continent: {
+        contract_id: proposal.dark_continent.source_snapshot.contract_id,
+        source_profile: proposal.dark_continent.source_profile,
+        snapshot_sha256: proposal.dark_continent.source_snapshot.sha256,
+        recommendation: proposal.dark_continent.decision.recommendation,
+        wall_verified: false,
+      },
+      evidence_refs: evidenceRefs,
+      event_chain: {
+        count: proposal.events.length,
+        head_sha256: proposal.events.at(-1)?.event_sha256 ?? null,
+        events: proposal.events.map((event) => {
+          const base = {
+            sequence: event.sequence,
+            kind: event.kind,
+            event_id: event.event_id,
+            subject_operation_id: event.subject_operation_id,
+            event_sha256: event.event_sha256,
+            previous_event_sha256: event.previous_event_sha256,
+            note_sha256: event.note_sha256,
+            evidence_refs: [...event.evidence_refs],
+          };
+          if (event.kind === "consequence") {
+            return {
+              ...base,
+              consequence: event.consequence,
+              epistemic_status: event.epistemic_status,
+            };
+          }
+          return {
+            ...base,
+            reviewer_ref: event.reviewer_ref,
+            lens: event.lens,
+            verdict: event.verdict,
+          };
+        }),
+      },
+      effects: cloneJson(EFFECTS),
+      authority: cloneJson(AUTHORITY),
+    });
+  }
+
+  function compareConflicts(leftProposalId, rightProposalId) {
+    const left = lookupCatalogProposal(byId, leftProposalId, "left_proposal_id");
+    const right = lookupCatalogProposal(byId, rightProposalId, "right_proposal_id");
+    const sameProposal = left.proposal_id === right.proposal_id;
+    const sameSubjectRepo = left.subject.repo_id === right.subject.repo_id;
+    const sameSubjectRevision =
+      sameSubjectRepo && left.subject.revision === right.subject.revision;
+    const sameBaseGraph = sameJson(left.base_graph, right.base_graph);
+
+    const leftNodes = new Map(left.graph_delta.nodes.map((node) => [node.id, node]));
+    const rightNodes = new Map(right.graph_delta.nodes.map((node) => [node.id, node]));
+    const sharedNodeIds = [...leftNodes.keys()]
+      .filter((id) => rightNodes.has(id))
+      .sort(compareStrings);
+    const nodeLabelDivergences = [];
+    for (const nodeId of sharedNodeIds) {
+      const leftNode = leftNodes.get(nodeId);
+      const rightNode = rightNodes.get(nodeId);
+      if (
+        leftNode.kind !== rightNode.kind ||
+        leftNode.label !== rightNode.label ||
+        leftNode.label_class !== rightNode.label_class
+      ) {
+        nodeLabelDivergences.push({
+          node_id: nodeId,
+          left: {
+            kind: leftNode.kind,
+            label: leftNode.label,
+            label_class: leftNode.label_class,
+          },
+          right: {
+            kind: rightNode.kind,
+            label: rightNode.label,
+            label_class: rightNode.label_class,
+          },
+        });
+      }
+    }
+
+    const leftEdgesByPair = groupEdgeRelationsByPair(left.graph_delta.edges);
+    const rightEdgesByPair = groupEdgeRelationsByPair(right.graph_delta.edges);
+    const sharedEdgePairs = [...leftEdgesByPair.keys()]
+      .filter((pairKey) => rightEdgesByPair.has(pairKey))
+      .sort(compareStrings);
+    const edgeRelationDivergences = [];
+    for (const pairKey of sharedEdgePairs) {
+      const leftEntry = leftEdgesByPair.get(pairKey);
+      const rightEntry = rightEdgesByPair.get(pairKey);
+      if (!sameJson(leftEntry.relations, rightEntry.relations)) {
+        edgeRelationDivergences.push({
+          from: leftEntry.from,
+          to: leftEntry.to,
+          left_relations: leftEntry.relations,
+          right_relations: rightEntry.relations,
+        });
+      }
+    }
+
+    const leftRefs = collectProposalEvidenceRefs(left);
+    const rightRefs = collectProposalEvidenceRefs(right);
+    const sharedEvidenceRefs = [...leftRefs]
+      .filter((ref) => rightRefs.has(ref))
+      .sort(compareStrings);
+
+    const leftSummary = summarizeConflictSignals(left);
+    const rightSummary = summarizeConflictSignals(right);
+
+    const leftVerdictsByLens = groupVerdictsByLens(left.events);
+    const rightVerdictsByLens = groupVerdictsByLens(right.events);
+    const sharedLenses = [...leftVerdictsByLens.keys()]
+      .filter((lens) => rightVerdictsByLens.has(lens))
+      .sort(compareStrings);
+    const verdictDivergences = [];
+    for (const lens of sharedLenses) {
+      const leftVerdicts = leftVerdictsByLens.get(lens);
+      const rightVerdicts = rightVerdictsByLens.get(lens);
+      if (!sameJson(leftVerdicts, rightVerdicts)) {
+        verdictDivergences.push({
+          lens,
+          left_verdicts: leftVerdicts,
+          right_verdicts: rightVerdicts,
+        });
+      }
+    }
+
+    const leftConsequences = new Set(leftSummary.consequences);
+    const rightConsequences = new Set(rightSummary.consequences);
+    const sharedConsequences = [...leftConsequences]
+      .filter((kind) => rightConsequences.has(kind))
+      .sort(compareStrings);
+    const leftOnlyConsequences = [...leftConsequences]
+      .filter((kind) => !rightConsequences.has(kind))
+      .sort(compareStrings);
+    const rightOnlyConsequences = [...rightConsequences]
+      .filter((kind) => !leftConsequences.has(kind))
+      .sort(compareStrings);
+
+    const hasCrossProposalDivergence =
+      !sameProposal &&
+      (nodeLabelDivergences.length > 0 ||
+        edgeRelationDivergences.length > 0 ||
+        verdictDivergences.length > 0 ||
+        leftOnlyConsequences.length > 0 ||
+        rightOnlyConsequences.length > 0 ||
+        (sameSubjectRepo && !sameSubjectRevision));
+
+    return deepFreeze({
+      tool: "compare_conflicts",
+      same_proposal: sameProposal,
+      same_subject_repo: sameSubjectRepo,
+      same_subject_revision: sameSubjectRevision,
+      same_base_graph: sameBaseGraph,
+      shared_node_ids: sharedNodeIds,
+      shared_evidence_refs: sharedEvidenceRefs,
+      node_label_divergences: nodeLabelDivergences,
+      edge_relation_divergences: edgeRelationDivergences,
+      verdict_divergences: verdictDivergences,
+      consequence_differences: {
+        shared: sharedConsequences,
+        left_only: leftOnlyConsequences,
+        right_only: rightOnlyConsequences,
+      },
+      left: leftSummary,
+      right: rightSummary,
+      has_cross_proposal_divergence: hasCrossProposalDivergence,
+      has_any_conflict_or_block:
+        leftSummary.has_conflict_or_block || rightSummary.has_conflict_or_block,
+      effects: cloneJson(EFFECTS),
+      authority: cloneJson(AUTHORITY),
+    });
+  }
+
+  function invokeTool(toolName, args = undefined) {
+    if (typeof toolName !== "string" || toolName.length === 0) {
+      return deepFreeze({
+        ok: false,
+        tool: typeof toolName === "string" ? toolName : "",
+        error: {
+          code: "invalid_tool_name",
+          message: "Cartographer tool name must be a non-empty string",
+        },
+        effects: cloneJson(EFFECTS),
+        authority: cloneJson(AUTHORITY),
+      });
+    }
+    const normalizedLower = toolName.trim().toLowerCase();
+    if (FORBIDDEN_CARTOGRAPHER_SURFACES.includes(normalizedLower)) {
+      return deepFreeze({
+        ok: false,
+        tool: toolName,
+        error: {
+          code: "forbidden_cartographer_surface",
+          message: `Cartographer forbids mutation or authority surface "${normalizedLower}"`,
+        },
+        effects: cloneJson(EFFECTS),
+        authority: cloneJson(AUTHORITY),
+      });
+    }
+    if (!CARTOGRAPHER_TOOLS.includes(toolName)) {
+      return deepFreeze({
+        ok: false,
+        tool: toolName,
+        error: {
+          code: "unknown_cartographer_tool",
+          message: `unknown Cartographer tool "${toolName}"`,
+        },
+        effects: cloneJson(EFFECTS),
+        authority: cloneJson(AUTHORITY),
+      });
+    }
+    try {
+      if (toolName === "list_proposals") {
+        const result = listProposals(args);
+        return deepFreeze({
+          ok: true,
+          tool: "list_proposals",
+          result,
+          effects: cloneJson(EFFECTS),
+          authority: cloneJson(AUTHORITY),
+        });
+      }
+      if (toolName === "show_provenance") {
+        const input = exactObject(args, ["proposal_id"], "show_provenance args");
+        const result = showProvenance(input.proposal_id);
+        return deepFreeze({
+          ok: true,
+          tool: "show_provenance",
+          result,
+          effects: cloneJson(EFFECTS),
+          authority: cloneJson(AUTHORITY),
+        });
+      }
+      const input = exactObject(
+        args,
+        ["left_proposal_id", "right_proposal_id"],
+        "compare_conflicts args",
+      );
+      const result = compareConflicts(input.left_proposal_id, input.right_proposal_id);
+      return deepFreeze({
+        ok: true,
+        tool: "compare_conflicts",
+        result,
+        effects: cloneJson(EFFECTS),
+        authority: cloneJson(AUTHORITY),
+      });
+    } catch (error) {
+      return deepFreeze({
+        ok: false,
+        tool: toolName,
+        error: {
+          code: error instanceof RangeError ? "unknown_proposal" : "invalid_arguments",
+          message: errorMessage(error),
+        },
+        effects: cloneJson(EFFECTS),
+        authority: cloneJson(AUTHORITY),
+      });
+    }
+  }
+
+  return Object.freeze({
+    tools: CARTOGRAPHER_TOOLS,
+    forbidden_surfaces: FORBIDDEN_CARTOGRAPHER_SURFACES,
+    effects: cloneJson(EFFECTS),
+    authority: cloneJson(AUTHORITY),
+    listProposals,
+    showProvenance,
+    compareConflicts,
+    invokeTool,
+  });
 }
 
 function normalizeCreateInput(input) {
@@ -802,10 +1260,728 @@ function eventDigest(payload) {
   return sha256(`${EVENT_HASH_DOMAIN}\n${prettyJsonBytes(payload)}`);
 }
 
+function eventEnvelopeDigest(payload) {
+  return sha256(`${EVENT_ENVELOPE_HASH_DOMAIN}\n${prettyJsonBytes(payload)}`);
+}
+
 function proposalBindingSha256(proposal) {
   if (!isRecord(proposal)) return null;
   const { events: _events, ...bound } = proposal;
   return sha256(`${PROPOSAL_BINDING_DOMAIN}\n${prettyJsonBytes(bound)}`);
+}
+
+function validateProposalCollection(proposals, callerLabel) {
+  if (!Array.isArray(proposals) || proposals.length > 4096) {
+    throw new TypeError(
+      `${callerLabel} expects an array of at most 4096 validated proposals`,
+    );
+  }
+  const seenIds = new Set();
+  const cloned = [];
+  for (const [index, proposal] of proposals.entries()) {
+    const errors = validateProposal(proposal);
+    if (errors.length > 0) {
+      throw new TypeError(
+        `${callerLabel}: invalid proposal at index ${index}: ${errors.join("; ")}`,
+      );
+    }
+    if (seenIds.has(proposal.proposal_id)) {
+      throw new TypeError(
+        `${callerLabel}: duplicate proposal_id ${proposal.proposal_id}`,
+      );
+    }
+    seenIds.add(proposal.proposal_id);
+    cloned.push(deepFreeze(cloneJson(proposal)));
+  }
+  cloned.sort((left, right) => compareStrings(left.proposal_id, right.proposal_id));
+  return cloned;
+}
+
+function validateStandaloneEvent(event, label, errors) {
+  if (!isRecord(event)) {
+    errors.push(`${label} must be an object`);
+    return;
+  }
+  const common = [
+    "event_id",
+    "event_sha256",
+    "evidence_refs",
+    "kind",
+    "note_sha256",
+    "previous_event_sha256",
+    "proposal_binding_sha256",
+    "sequence",
+    "subject_operation_id",
+  ];
+  const keys = event.kind === "consequence"
+    ? [...common, "consequence", "epistemic_status"]
+    : event.kind === "review"
+      ? [...common, "lens", "reviewer_ref", "verdict"]
+      : common;
+  checkExactKeys(event, keys, label, errors);
+  const validSequence =
+    Number.isInteger(event.sequence) && event.sequence >= 0 && event.sequence <= 511;
+  push(errors, validSequence, `${label} sequence is invalid`);
+  if (validSequence) {
+    if (event.sequence === 0) {
+      push(
+        errors,
+        event.previous_event_sha256 === null,
+        `${label} previous_event_sha256 must be null at sequence 0`,
+      );
+    } else {
+      push(
+        errors,
+        isSha256(event.previous_event_sha256),
+        `${label} previous_event_sha256 must be a SHA-256 digest when sequence > 0`,
+      );
+    }
+  }
+  push(
+    errors,
+    isSha256(event.proposal_binding_sha256),
+    `${label} proposal_binding_sha256 is invalid`,
+  );
+  push(errors, isSafeId(event.event_id, 200), `${label} event_id is invalid`);
+  push(
+    errors,
+    isSafeId(event.subject_operation_id, 200),
+    `${label} subject_operation_id is invalid`,
+  );
+  push(errors, isSha256(event.note_sha256), `${label} note hash is invalid`);
+  validateRefs(event.evidence_refs, `${label}.evidence_refs`, errors, true);
+  if (event.kind === "consequence") {
+    push(
+      errors,
+      CONSEQUENCE_KINDS.includes(event.consequence),
+      `${label} consequence is invalid`,
+    );
+    push(
+      errors,
+      EPISTEMIC_STATUSES.includes(event.epistemic_status),
+      `${label} epistemic status is invalid`,
+    );
+  } else if (event.kind === "review") {
+    push(errors, isSafeId(event.reviewer_ref, 300), `${label} reviewer_ref is invalid`);
+    push(errors, REVIEW_LENSES.includes(event.lens), `${label} lens is invalid`);
+    push(errors, REVIEW_VERDICTS.includes(event.verdict), `${label} verdict is invalid`);
+  } else {
+    errors.push(`${label} kind is invalid`);
+  }
+  const { event_sha256: claimed, ...payload } = event;
+  push(
+    errors,
+    isSha256(claimed) && claimed === eventDigest(payload),
+    `${label} hash is invalid`,
+  );
+}
+
+function validateEventEnvelopeInternal(value) {
+  const errors = [];
+  const complexityError = jsonComplexityError(value);
+  if (complexityError !== null) return [complexityError];
+  if (!isRecord(value)) return ["event envelope must be an object"];
+  checkExactKeys(value, [
+    "_format",
+    "authority",
+    "effects",
+    "envelope_sha256",
+    "event",
+    "proposal_binding_sha256",
+    "proposal_id",
+  ], "event envelope", errors);
+  push(errors, value._format === EVENT_ENVELOPE_FORMAT, "unexpected envelope _format");
+  push(errors, isSafeId(value.proposal_id, 200), "envelope proposal_id is invalid");
+  push(
+    errors,
+    isSha256(value.proposal_binding_sha256),
+    "envelope proposal_binding_sha256 is invalid",
+  );
+  push(errors, sameJson(value.effects, EFFECTS), "envelope effect boundary changed");
+  push(errors, sameJson(value.authority, AUTHORITY), "envelope authority boundary changed");
+  validateStandaloneEvent(value.event, "envelope.event", errors);
+  if (isRecord(value.event)) {
+    push(
+      errors,
+      value.event.proposal_binding_sha256 === value.proposal_binding_sha256,
+      "envelope.event proposal_binding_sha256 does not match envelope.proposal_binding_sha256",
+    );
+  }
+  const { envelope_sha256: claimed, ...payload } = value;
+  push(
+    errors,
+    isSha256(claimed) && claimed === eventEnvelopeDigest(payload),
+    "envelope hash is invalid",
+  );
+  rejectForbiddenKeys(value, errors, "envelope");
+  return [...new Set(errors)];
+}
+
+function failedEventJsonlResult(errors) {
+  return deepFreeze({
+    ok: false,
+    errors: [...new Set(errors)],
+    event_count: 0,
+    proposal_count: 0,
+    proposals: [],
+    envelopes: [],
+    effects: cloneJson(EFFECTS),
+    authority: cloneJson(AUTHORITY),
+  });
+}
+
+function parseVerifyEventJsonlOptions(options, errors) {
+  let allowExtensions = false;
+  let proposalMap = null;
+  let expectedHeadMap = null;
+  if (options === undefined) {
+    return { allowExtensions, proposalMap, expectedHeadMap };
+  }
+  if (!isRecord(options)) {
+    errors.push("verifyEventJsonl options must be an object");
+    return { allowExtensions, proposalMap, expectedHeadMap };
+  }
+  const allowedKeys = new Set(["allowExtensions", "expectedHeads", "proposals"]);
+  for (const key of Object.keys(options)) {
+    if (!allowedKeys.has(key)) {
+      errors.push(`unknown verifyEventJsonl option "${key}"`);
+    }
+  }
+  if (options.allowExtensions !== undefined) {
+    if (typeof options.allowExtensions !== "boolean") {
+      errors.push("verifyEventJsonl option allowExtensions must be a boolean");
+    } else {
+      allowExtensions = options.allowExtensions;
+    }
+  }
+  if (options.proposals !== undefined) {
+    if (!Array.isArray(options.proposals) || options.proposals.length > 4096) {
+      errors.push("verifyEventJsonl option proposals must be an array of at most 4096 proposals");
+    } else {
+      proposalMap = new Map();
+      for (const [index, proposal] of options.proposals.entries()) {
+        const proposalErrors = validateProposal(proposal);
+        if (proposalErrors.length > 0) {
+          errors.push(
+            `options.proposals[${index}] is invalid: ${proposalErrors.join("; ")}`,
+          );
+          continue;
+        }
+        if (proposalMap.has(proposal.proposal_id)) {
+          errors.push(
+            `options.proposals contains duplicate proposal_id ${proposal.proposal_id}`,
+          );
+          continue;
+        }
+        const operationIds = new Set([
+          ...proposal.graph_delta.nodes.map((node) => node.operation_id),
+          ...proposal.graph_delta.edges.map((edge) => edge.operation_id),
+        ]);
+        proposalMap.set(proposal.proposal_id, {
+          proposal: deepFreeze(cloneJson(proposal)),
+          bindingSha: proposalBindingSha256(proposal),
+          operationIds,
+        });
+      }
+    }
+  }
+  if (options.expectedHeads !== undefined) {
+    let entries = null;
+    if (options.expectedHeads instanceof Map) {
+      entries = [...options.expectedHeads.entries()];
+    } else if (isRecord(options.expectedHeads)) {
+      entries = Object.entries(options.expectedHeads);
+    } else {
+      errors.push("verifyEventJsonl option expectedHeads must be a Map or plain object");
+    }
+    if (entries !== null) {
+      if (entries.length > 4096) {
+        errors.push("verifyEventJsonl option expectedHeads exceeds 4096 entries");
+      } else {
+        expectedHeadMap = new Map();
+        for (const [proposalId, expectedHead] of entries) {
+          if (!isSafeId(proposalId, 200)) {
+            errors.push(`expectedHeads contains invalid proposal_id "${String(proposalId)}"`);
+            continue;
+          }
+          if (expectedHead !== null && !isSha256(expectedHead)) {
+            errors.push(`expectedHeads[${proposalId}] must be a SHA-256 digest or null`);
+            continue;
+          }
+          expectedHeadMap.set(proposalId, expectedHead);
+        }
+      }
+    }
+  }
+  return { allowExtensions, proposalMap, expectedHeadMap };
+}
+
+function verifyEventJsonlInternal(jsonl, options) {
+  const errors = [];
+  if (typeof jsonl !== "string") {
+    return failedEventJsonlResult(["events.jsonl input must be a string"]);
+  }
+  if (jsonl.length > 16 * 1024 * 1024) {
+    return failedEventJsonlResult(["events.jsonl exceeds maximum size of 16 MiB"]);
+  }
+  const { allowExtensions, proposalMap, expectedHeadMap } =
+    parseVerifyEventJsonlOptions(options, errors);
+  if (errors.length > 0) {
+    return failedEventJsonlResult(errors);
+  }
+  if (jsonl.includes("\r")) {
+    return failedEventJsonlResult(["events.jsonl must use LF line endings without CR"]);
+  }
+  if (jsonl.length > 0 && !jsonl.endsWith("\n")) {
+    return failedEventJsonlResult(["events.jsonl must end with a single LF newline"]);
+  }
+  const rawLines = jsonl.length === 0 ? [] : jsonl.slice(0, -1).split("\n");
+  if (rawLines.length > 16_384) {
+    return failedEventJsonlResult(["events.jsonl exceeds maximum 16384 lines"]);
+  }
+
+  const logByProposal = new Map();
+  const parsedEnvelopes = [];
+
+  for (const [index, line] of rawLines.entries()) {
+    const lineNumber = index + 1;
+    if (line.length === 0) {
+      errors.push(`line ${lineNumber}: blank line is not allowed`);
+      continue;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      errors.push(`line ${lineNumber}: invalid JSON`);
+      continue;
+    }
+    const complexityError = jsonComplexityError(parsed);
+    if (complexityError !== null) {
+      errors.push(`line ${lineNumber}: ${complexityError}`);
+      continue;
+    }
+    const canonicalLine = JSON.stringify(canonicalize(parsed));
+    if (line !== canonicalLine) {
+      errors.push(
+        `line ${lineNumber}: line is not canonical compact JSON (possible duplicate keys, non-canonical key order, whitespace, or non-canonical literal)`,
+      );
+    }
+    const envelopeErrors = validateEventEnvelopeInternal(parsed);
+    for (const envelopeError of envelopeErrors) {
+      errors.push(`line ${lineNumber}: ${envelopeError}`);
+    }
+    if (
+      !isRecord(parsed) ||
+      !isSafeId(parsed.proposal_id, 200) ||
+      !isSha256(parsed.proposal_binding_sha256) ||
+      !isRecord(parsed.event)
+    ) {
+      continue;
+    }
+    let state = logByProposal.get(parsed.proposal_id);
+    if (!state) {
+      state = {
+        proposal_id: parsed.proposal_id,
+        proposal_binding_sha256: parsed.proposal_binding_sha256,
+        events: [],
+        eventIds: new Set(),
+        headSha: null,
+      };
+      logByProposal.set(parsed.proposal_id, state);
+    } else if (state.proposal_binding_sha256 !== parsed.proposal_binding_sha256) {
+      errors.push(
+        `line ${lineNumber}: proposal ${parsed.proposal_id} binding changed mid-chain`,
+      );
+    }
+    const expectedSequence = state.events.length;
+    if (expectedSequence >= 512) {
+      errors.push(
+        `line ${lineNumber}: proposal ${parsed.proposal_id} exceeds maximum 512 events`,
+      );
+      continue;
+    }
+    if (parsed.event.sequence !== expectedSequence) {
+      errors.push(
+        `line ${lineNumber}: proposal ${parsed.proposal_id} expected sequence ${expectedSequence}, got ${String(parsed.event.sequence)}`,
+      );
+    }
+    if (parsed.event.previous_event_sha256 !== state.headSha) {
+      errors.push(
+        `line ${lineNumber}: proposal ${parsed.proposal_id} previous_event_sha256 does not link to prior chain head`,
+      );
+    }
+    if (typeof parsed.event.event_id === "string") {
+      if (state.eventIds.has(parsed.event.event_id)) {
+        errors.push(
+          `line ${lineNumber}: proposal ${parsed.proposal_id} duplicates event_id ${parsed.event.event_id}`,
+        );
+      }
+      state.eventIds.add(parsed.event.event_id);
+    }
+    state.events.push(parsed.event);
+    state.headSha =
+      typeof parsed.event.event_sha256 === "string" ? parsed.event.event_sha256 : null;
+    parsedEnvelopes.push(canonicalize(parsed));
+  }
+
+  if (proposalMap !== null) {
+    for (const [proposalId, state] of logByProposal.entries()) {
+      const entry = proposalMap.get(proposalId);
+      if (!entry) {
+        errors.push(`proposal ${proposalId}: not present in supplied proposals`);
+        continue;
+      }
+      if (state.proposal_binding_sha256 !== entry.bindingSha) {
+        errors.push(
+          `proposal ${proposalId}: proposal_binding_sha256 does not match supplied proposal`,
+        );
+      }
+      for (const event of state.events) {
+        if (!entry.operationIds.has(event.subject_operation_id)) {
+          errors.push(
+            `proposal ${proposalId}: event ${String(event.event_id)} references missing subject_operation_id ${String(event.subject_operation_id)}`,
+          );
+        }
+      }
+    }
+    for (const [proposalId, entry] of proposalMap.entries()) {
+      const logEvents = logByProposal.get(proposalId)?.events ?? [];
+      const proposalEvents = entry.proposal.events;
+      if (logEvents.length < proposalEvents.length) {
+        errors.push(
+          `proposal ${proposalId}: events.jsonl is truncated relative to proposal.events (${logEvents.length} < ${proposalEvents.length})`,
+        );
+      }
+      const sharedLength = Math.min(logEvents.length, proposalEvents.length);
+      for (let seq = 0; seq < sharedLength; seq += 1) {
+        if (!sameJson(logEvents[seq], proposalEvents[seq])) {
+          errors.push(
+            `proposal ${proposalId}: events.jsonl diverges from proposal.events at sequence ${seq}`,
+          );
+        }
+      }
+      if (logEvents.length > proposalEvents.length && !allowExtensions) {
+        errors.push(
+          `proposal ${proposalId}: events.jsonl extends beyond proposal.events (${logEvents.length} > ${proposalEvents.length}); pass allowExtensions: true to permit verified extensions`,
+        );
+      }
+    }
+  }
+
+  if (expectedHeadMap !== null) {
+    for (const [proposalId, expectedHead] of expectedHeadMap.entries()) {
+      const actualHead = logByProposal.get(proposalId)?.headSha ?? null;
+      if (actualHead !== expectedHead) {
+        errors.push(
+          `proposal ${proposalId}: expected head ${expectedHead ?? "null"} does not match log head ${actualHead ?? "null"}`,
+        );
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    return failedEventJsonlResult(errors);
+  }
+
+  const allProposalIds = new Set([...logByProposal.keys()]);
+  if (proposalMap !== null) {
+    for (const id of proposalMap.keys()) allProposalIds.add(id);
+  }
+  const sortedIds = [...allProposalIds].sort(compareStrings);
+  const proposalSummaries = sortedIds.map((proposalId) => {
+    const state = logByProposal.get(proposalId) ?? null;
+    const entry = proposalMap?.get(proposalId) ?? null;
+    const logEventCount = state ? state.events.length : 0;
+    const logHeadSha = state ? state.headSha : null;
+    const proposalEventCount = entry ? entry.proposal.events.length : null;
+    const proposalHeadSha = entry
+      ? (entry.proposal.events.at(-1)?.event_sha256 ?? null)
+      : null;
+    const matchesProposalHead = entry
+      ? logEventCount === proposalEventCount && logHeadSha === proposalHeadSha
+      : null;
+    return {
+      proposal_id: proposalId,
+      proposal_binding_sha256: state ? state.proposal_binding_sha256 : entry.bindingSha,
+      event_count: logEventCount,
+      log_head_sha256: logHeadSha,
+      proposal_event_count: proposalEventCount,
+      proposal_head_sha256: proposalHeadSha,
+      matches_proposal_head: matchesProposalHead,
+    };
+  });
+
+  return deepFreeze({
+    ok: true,
+    errors: [],
+    event_count: parsedEnvelopes.length,
+    proposal_count: proposalSummaries.length,
+    proposals: proposalSummaries,
+    envelopes: parsedEnvelopes,
+    effects: cloneJson(EFFECTS),
+    authority: cloneJson(AUTHORITY),
+  });
+}
+
+function normalizeCartographerListFilter(filter) {
+  if (filter === undefined) return {};
+  if (!isRecord(filter)) {
+    throw new TypeError("invalid Cartographer filter: filter must be an object");
+  }
+  const allowedKeys = new Set([
+    "consequence",
+    "consumer_kind",
+    "has_conflicts_or_blocks",
+    "repo_id",
+    "repo_type",
+    "review_verdict",
+    "visibility",
+  ]);
+  for (const key of Object.keys(filter)) {
+    if (!allowedKeys.has(key)) {
+      throw new TypeError(`invalid Cartographer filter: unknown field "${key}"`);
+    }
+  }
+  const normalized = {};
+  if (filter.consumer_kind !== undefined) {
+    assertOneOf(filter.consumer_kind, CONSUMER_KINDS, "filter.consumer_kind");
+    normalized.consumer_kind = filter.consumer_kind;
+  }
+  if (filter.repo_id !== undefined) {
+    if (
+      typeof filter.repo_id !== "string" ||
+      filter.repo_id.length < 1 ||
+      filter.repo_id.length > 200
+    ) {
+      throw new TypeError("invalid Cartographer filter: filter.repo_id is invalid");
+    }
+    normalized.repo_id = filter.repo_id;
+  }
+  if (filter.repo_type !== undefined) {
+    assertOneOf(filter.repo_type, ["model", "dataset", "space"], "filter.repo_type");
+    normalized.repo_type = filter.repo_type;
+  }
+  if (filter.visibility !== undefined) {
+    assertOneOf(filter.visibility, ["public", "private", "gated"], "filter.visibility");
+    normalized.visibility = filter.visibility;
+  }
+  if (filter.consequence !== undefined) {
+    assertOneOf(filter.consequence, CONSEQUENCE_KINDS, "filter.consequence");
+    normalized.consequence = filter.consequence;
+  }
+  if (filter.review_verdict !== undefined) {
+    assertOneOf(filter.review_verdict, REVIEW_VERDICTS, "filter.review_verdict");
+    normalized.review_verdict = filter.review_verdict;
+  }
+  if (filter.has_conflicts_or_blocks !== undefined) {
+    if (typeof filter.has_conflicts_or_blocks !== "boolean") {
+      throw new TypeError(
+        "invalid Cartographer filter: filter.has_conflicts_or_blocks must be a boolean",
+      );
+    }
+    normalized.has_conflicts_or_blocks = filter.has_conflicts_or_blocks;
+  }
+  return normalized;
+}
+
+function matchesCartographerFilter(proposal, filter) {
+  if (
+    filter.consumer_kind !== undefined &&
+    proposal.dark_continent.consumer.kind !== filter.consumer_kind
+  ) {
+    return false;
+  }
+  if (filter.repo_id !== undefined && proposal.subject.repo_id !== filter.repo_id) {
+    return false;
+  }
+  if (filter.repo_type !== undefined && proposal.subject.repo_type !== filter.repo_type) {
+    return false;
+  }
+  if (filter.visibility !== undefined && proposal.subject.visibility !== filter.visibility) {
+    return false;
+  }
+  if (
+    filter.consequence !== undefined &&
+    !proposal.events.some(
+      (event) => event.kind === "consequence" && event.consequence === filter.consequence,
+    )
+  ) {
+    return false;
+  }
+  if (
+    filter.review_verdict !== undefined &&
+    !proposal.events.some(
+      (event) => event.kind === "review" && event.verdict === filter.review_verdict,
+    )
+  ) {
+    return false;
+  }
+  if (filter.has_conflicts_or_blocks !== undefined) {
+    const signals = summarizeConflictSignals(proposal);
+    if (signals.has_conflict_or_block !== filter.has_conflicts_or_blocks) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function summarizeProposalForCatalog(proposal) {
+  const consequences = [
+    ...new Set(
+      proposal.events
+        .filter((event) => event.kind === "consequence")
+        .map((event) => event.consequence),
+    ),
+  ].sort(compareStrings);
+  const reviewVerdicts = [
+    ...new Set(
+      proposal.events
+        .filter((event) => event.kind === "review")
+        .map((event) => event.verdict),
+    ),
+  ].sort(compareStrings);
+  return {
+    proposal_id: proposal.proposal_id,
+    proposal_binding_sha256: proposalBindingSha256(proposal),
+    proposal_sha256: sha256(prettyJsonBytes(proposal)),
+    consumer: cloneJson(proposal.dark_continent.consumer),
+    subject: {
+      repo_id: proposal.subject.repo_id,
+      repo_type: proposal.subject.repo_type,
+      revision: proposal.subject.revision,
+      visibility: proposal.subject.visibility,
+      license: proposal.subject.license,
+      file_count: proposal.subject.files.length,
+    },
+    base_graph: cloneJson(proposal.base_graph),
+    node_count: proposal.graph_delta.nodes.length,
+    edge_count: proposal.graph_delta.edges.length,
+    event_count: proposal.events.length,
+    event_head_sha256: proposal.events.at(-1)?.event_sha256 ?? null,
+    consequences,
+    review_verdicts: reviewVerdicts,
+    state: proposal.state,
+    recommendation: proposal.dark_continent.decision.recommendation,
+    wall_verified: false,
+    authority: cloneJson(AUTHORITY),
+  };
+}
+
+function lookupCatalogProposal(byId, proposalId, label) {
+  if (typeof proposalId !== "string" || proposalId.length === 0) {
+    throw new TypeError(`invalid Cartographer input: ${label} must be a non-empty string`);
+  }
+  const proposal = byId.get(proposalId);
+  if (!proposal) {
+    throw new RangeError(`unknown proposal_id: ${proposalId}`);
+  }
+  return proposal;
+}
+
+function groupEdgeRelationsByPair(edges) {
+  const grouped = new Map();
+  for (const edge of edges) {
+    const key = JSON.stringify([edge.from, edge.to]);
+    let entry = grouped.get(key);
+    if (!entry) {
+      entry = { from: edge.from, to: edge.to, relations: [] };
+      grouped.set(key, entry);
+    }
+    if (!entry.relations.includes(edge.relation)) {
+      entry.relations.push(edge.relation);
+    }
+  }
+  for (const entry of grouped.values()) {
+    entry.relations.sort(compareStrings);
+  }
+  return grouped;
+}
+
+function collectProposalEvidenceRefs(proposal) {
+  const refs = new Set();
+  for (const node of proposal.graph_delta.nodes) {
+    for (const ref of node.evidence_refs) refs.add(ref);
+  }
+  for (const edge of proposal.graph_delta.edges) {
+    for (const ref of edge.evidence_refs) refs.add(ref);
+  }
+  for (const event of proposal.events) {
+    for (const ref of event.evidence_refs) refs.add(ref);
+  }
+  return refs;
+}
+
+function groupVerdictsByLens(events) {
+  const byLens = new Map();
+  for (const event of events) {
+    if (event.kind !== "review") continue;
+    let list = byLens.get(event.lens);
+    if (!list) {
+      list = [];
+      byLens.set(event.lens, list);
+    }
+    if (!list.includes(event.verdict)) {
+      list.push(event.verdict);
+    }
+  }
+  for (const list of byLens.values()) {
+    list.sort(compareStrings);
+  }
+  return byLens;
+}
+
+function summarizeConflictSignals(proposal) {
+  const consequences = [
+    ...new Set(
+      proposal.events
+        .filter((event) => event.kind === "consequence")
+        .map((event) => event.consequence),
+    ),
+  ].sort(compareStrings);
+  const reviewVerdicts = [
+    ...new Set(
+      proposal.events
+        .filter((event) => event.kind === "review")
+        .map((event) => event.verdict),
+    ),
+  ].sort(compareStrings);
+  const conflictEventIds = proposal.events
+    .filter(
+      (event) =>
+        event.kind === "consequence" &&
+        (event.consequence === "conflicts_with_source" ||
+          event.consequence === "rejected"),
+    )
+    .map((event) => event.event_id);
+  const reviewGateEventIds = proposal.events
+    .filter(
+      (event) =>
+        event.kind === "consequence" &&
+        (event.consequence === "requires_rights_review" ||
+          event.consequence === "requires_safety_review" ||
+          event.consequence === "deferred"),
+    )
+    .map((event) => event.event_id);
+  const blockEventIds = proposal.events
+    .filter((event) => event.kind === "review" && event.verdict === "block")
+    .map((event) => event.event_id);
+  const concernEventIds = proposal.events
+    .filter((event) => event.kind === "review" && event.verdict === "concern")
+    .map((event) => event.event_id);
+  return {
+    proposal_id: proposal.proposal_id,
+    repo_id: proposal.subject.repo_id,
+    revision: proposal.subject.revision,
+    consequences,
+    review_verdicts: reviewVerdicts,
+    conflict_event_ids: conflictEventIds,
+    review_gate_event_ids: reviewGateEventIds,
+    block_event_ids: blockEventIds,
+    concern_event_ids: concernEventIds,
+    has_conflict_or_block: conflictEventIds.length > 0 || blockEventIds.length > 0,
+    has_concern_or_gate: reviewGateEventIds.length > 0 || concernEventIds.length > 0,
+  };
 }
 
 function assertEventIdUnused(proposal, eventId) {
@@ -907,7 +2083,7 @@ function jsonComplexityError(root) {
   return null;
 }
 
-function rejectForbiddenKeys(value, errors) {
+function rejectForbiddenKeys(value, errors, rootLabel = "proposal") {
   const forbidden = new Set([
     "score",
     "points",
@@ -920,7 +2096,7 @@ function rejectForbiddenKeys(value, errors) {
     "same_as",
     "agent_votes",
   ]);
-  const stack = [{ value, path: "proposal" }];
+  const stack = [{ value, path: rootLabel }];
   while (stack.length > 0) {
     const current = stack.pop();
     if (Array.isArray(current.value)) {

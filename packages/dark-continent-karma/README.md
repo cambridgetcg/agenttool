@@ -123,13 +123,30 @@ Published, as read anonymously from the Hub API on 2026-10-27:
 - A second Space, `Yu-and-Ai/kingdom-dark-continent-viewer`, carried older
   boundary wording; it was deleted on 2026-10-27.
 
-Not built: the MCP tools `list_proposals` and `show_provenance` (the Gradio
-app's comparison view is a UI handler, not an MCP tool), a standalone
-`events.jsonl` with a defined envelope and verifier, and any recorded
-independent privacy review. If an MCP Space is separately reviewed and
-authorized, the only proposed tools are read operations: `list_proposals`,
-`show_provenance`, and `compare_conflicts`. Merge, publish, award, authorize,
-and coronate remain forbidden surfaces.
+Not published on Hugging Face: the Gradio Space keeps its MCP server disabled
+(its comparison view is a UI handler, not an MCP server), no standalone
+`events.jsonl` is included in the pinned `4ea10623` dataset release, and no
+independent privacy review is recorded.
+
+In package source (unreleased beyond `0.1.0-dev.0`), this package now provides
+two offline, zero-dependency surfaces:
+
+- **Standalone `events.jsonl` envelope and verifier**
+  (`extractProposalEvents`, `validateEventEnvelope`, `formatEventJsonl`,
+  `verifyEventJsonl`, and `@agenttool/dark-continent-karma/event-envelope-schema`
+  for `kingdom.kg-proposal-event-envelope/0.1`). Verification enforces exact
+  canonical compact JSON bytes per line (rejecting duplicate keys, key
+  reordering, padding, and non-canonical literals), domain-separated envelope
+  and event SHA-256 digests, per-proposal sequence/hash-chain continuity, and
+  optional cross-checks against supplied proposals (exact match by default;
+  opt-in `allowExtensions: true` requires `proposal.events` as an exact prefix)
+  and independently retained heads (`expectedHeads`).
+- **Pure read-only Cartographer catalog** (`createCartographerCatalog`),
+  exposing only `list_proposals`, `show_provenance`, and `compare_conflicts`
+  (plus `invokeTool`, which case-insensitively refuses `merge`, `publish`,
+  `award`, `authorize`, and `coronate` as forbidden surfaces). If an MCP Space
+  is separately reviewed and authorized later, these remain the only proposed
+  tools and forbidden surfaces.
 
 Core proposals accept only single-line classified metadata labels and
 content-addressed `sha256:` or commit-pinned `hf://...#sha256=...` evidence

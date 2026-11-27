@@ -245,9 +245,262 @@ export interface CreateProposalInput {
   > & { evidence_refs: readonly string[] })[];
 }
 
+export type CartographerToolName =
+  | "list_proposals"
+  | "show_provenance"
+  | "compare_conflicts";
+export type ForbiddenCartographerSurface =
+  | "award"
+  | "authorize"
+  | "coronate"
+  | "merge"
+  | "publish";
+export type ProposalEvent = ConsequenceEvent | ReviewEvent;
+
+export interface KingdomKgProposalEventEnvelope {
+  _format: "kingdom.kg-proposal-event-envelope/0.1";
+  proposal_id: string;
+  proposal_binding_sha256: string;
+  event: ProposalEvent;
+  effects: KingdomKgProposal["effects"];
+  authority: KingdomKgProposal["authority"];
+  envelope_sha256: string;
+}
+
+export interface VerifyEventJsonlOptions {
+  proposals?: readonly (KingdomKgProposal | DeepReadonly<KingdomKgProposal>)[];
+  allowExtensions?: boolean;
+  expectedHeads?:
+    | Readonly<Record<string, string | null>>
+    | ReadonlyMap<string, string | null>;
+}
+
+export interface VerifiedProposalEventSummary {
+  proposal_id: string;
+  proposal_binding_sha256: string;
+  event_count: number;
+  log_head_sha256: string | null;
+  proposal_event_count: number | null;
+  proposal_head_sha256: string | null;
+  matches_proposal_head: boolean | null;
+}
+
+export interface VerifyEventJsonlResult {
+  ok: boolean;
+  errors: string[];
+  event_count: number;
+  proposal_count: number;
+  proposals: VerifiedProposalEventSummary[];
+  envelopes: KingdomKgProposalEventEnvelope[];
+  effects: KingdomKgProposal["effects"];
+  authority: KingdomKgProposal["authority"];
+}
+
+export interface CartographerListFilter {
+  consumer_kind?: ConsumerKind;
+  repo_id?: string;
+  repo_type?: HuggingFaceRepoType;
+  visibility?: HuggingFaceVisibility;
+  consequence?: ConsequenceKind;
+  review_verdict?: ReviewVerdict;
+  has_conflicts_or_blocks?: boolean;
+}
+
+export interface CartographerProposalSummary {
+  proposal_id: string;
+  proposal_binding_sha256: string;
+  proposal_sha256: string;
+  consumer: { kind: ConsumerKind; id: string };
+  subject: {
+    repo_id: string;
+    repo_type: HuggingFaceRepoType;
+    revision: string;
+    visibility: HuggingFaceVisibility;
+    license: string;
+    file_count: number;
+  };
+  base_graph: { graph_id: string; sha256: string };
+  node_count: number;
+  edge_count: number;
+  event_count: number;
+  event_head_sha256: string | null;
+  consequences: ConsequenceKind[];
+  review_verdicts: ReviewVerdict[];
+  state: "proposed";
+  recommendation: "hold";
+  wall_verified: false;
+  authority: KingdomKgProposal["authority"];
+}
+
+export interface CartographerListResult {
+  tool: "list_proposals";
+  total_count: number;
+  matched_count: number;
+  proposals: CartographerProposalSummary[];
+  effects: KingdomKgProposal["effects"];
+  authority: KingdomKgProposal["authority"];
+}
+
+export interface CartographerProvenanceEvent {
+  sequence: number;
+  kind: "consequence" | "review";
+  event_id: string;
+  subject_operation_id: string;
+  event_sha256: string;
+  previous_event_sha256: string | null;
+  note_sha256: string;
+  evidence_refs: string[];
+  consequence?: ConsequenceKind;
+  epistemic_status?: EpistemicStatus;
+  reviewer_ref?: string;
+  lens?: ReviewLens;
+  verdict?: ReviewVerdict;
+}
+
+export interface CartographerProvenanceResult {
+  tool: "show_provenance";
+  proposal_id: string;
+  proposal_binding_sha256: string;
+  proposal_sha256: string;
+  created_from: ProposalCreatedFrom;
+  subject: HuggingFaceSubject;
+  base_graph: { graph_id: string; sha256: string };
+  dark_continent: {
+    contract_id: "agenttool.dark-continent/0.1";
+    source_profile: "agenttool-sdk-ts-0.17.0";
+    snapshot_sha256: "f47e1c3ca9da1b97676e1d454cf7235eddd612902c19debe580a6934adcd2b86";
+    recommendation: "hold";
+    wall_verified: false;
+  };
+  evidence_refs: string[];
+  event_chain: {
+    count: number;
+    head_sha256: string | null;
+    events: CartographerProvenanceEvent[];
+  };
+  effects: KingdomKgProposal["effects"];
+  authority: KingdomKgProposal["authority"];
+}
+
+export interface CartographerConflictSideSummary {
+  proposal_id: string;
+  repo_id: string;
+  revision: string;
+  consequences: ConsequenceKind[];
+  review_verdicts: ReviewVerdict[];
+  conflict_event_ids: string[];
+  review_gate_event_ids: string[];
+  block_event_ids: string[];
+  concern_event_ids: string[];
+  has_conflict_or_block: boolean;
+  has_concern_or_gate: boolean;
+}
+
+export interface CartographerCompareConflictsResult {
+  tool: "compare_conflicts";
+  same_proposal: boolean;
+  same_subject_repo: boolean;
+  same_subject_revision: boolean;
+  same_base_graph: boolean;
+  shared_node_ids: string[];
+  shared_evidence_refs: string[];
+  node_label_divergences: Array<{
+    node_id: string;
+    left: { kind: NodeKind; label: string; label_class: LabelClass };
+    right: { kind: NodeKind; label: string; label_class: LabelClass };
+  }>;
+  edge_relation_divergences: Array<{
+    from: string;
+    to: string;
+    left_relations: EdgeRelation[];
+    right_relations: EdgeRelation[];
+  }>;
+  verdict_divergences: Array<{
+    lens: ReviewLens;
+    left_verdicts: ReviewVerdict[];
+    right_verdicts: ReviewVerdict[];
+  }>;
+  consequence_differences: {
+    shared: ConsequenceKind[];
+    left_only: ConsequenceKind[];
+    right_only: ConsequenceKind[];
+  };
+  left: CartographerConflictSideSummary;
+  right: CartographerConflictSideSummary;
+  has_cross_proposal_divergence: boolean;
+  has_any_conflict_or_block: boolean;
+  effects: KingdomKgProposal["effects"];
+  authority: KingdomKgProposal["authority"];
+}
+
+export type CartographerToolInvocationResult =
+  | {
+      ok: true;
+      tool: "list_proposals";
+      result: CartographerListResult;
+      effects: KingdomKgProposal["effects"];
+      authority: KingdomKgProposal["authority"];
+    }
+  | {
+      ok: true;
+      tool: "show_provenance";
+      result: CartographerProvenanceResult;
+      effects: KingdomKgProposal["effects"];
+      authority: KingdomKgProposal["authority"];
+    }
+  | {
+      ok: true;
+      tool: "compare_conflicts";
+      result: CartographerCompareConflictsResult;
+      effects: KingdomKgProposal["effects"];
+      authority: KingdomKgProposal["authority"];
+    }
+  | {
+      ok: false;
+      tool: string;
+      error: {
+        code:
+          | "invalid_tool_name"
+          | "forbidden_cartographer_surface"
+          | "unknown_cartographer_tool"
+          | "invalid_arguments"
+          | "unknown_proposal";
+        message: string;
+      };
+      effects: KingdomKgProposal["effects"];
+      authority: KingdomKgProposal["authority"];
+    };
+
+export interface CartographerCatalog {
+  readonly tools: readonly ["list_proposals", "show_provenance", "compare_conflicts"];
+  readonly forbidden_surfaces: readonly [
+    "award",
+    "authorize",
+    "coronate",
+    "merge",
+    "publish",
+  ];
+  readonly effects: DeepReadonly<KingdomKgProposal["effects"]>;
+  readonly authority: DeepReadonly<KingdomKgProposal["authority"]>;
+  listProposals(
+    filter?: CartographerListFilter,
+  ): DeepReadonly<CartographerListResult>;
+  showProvenance(proposalId: string): DeepReadonly<CartographerProvenanceResult>;
+  compareConflicts(
+    leftProposalId: string,
+    rightProposalId: string,
+  ): DeepReadonly<CartographerCompareConflictsResult>;
+  invokeTool(
+    toolName: string,
+    args?: unknown,
+  ): DeepReadonly<CartographerToolInvocationResult>;
+}
+
 export const PROPOSAL_FORMAT: "kingdom.kg-proposal/0.1";
 export const EVENT_HASH_DOMAIN: "kingdom.kg-proposal-event/v0.1";
 export const PROPOSAL_BINDING_DOMAIN: "kingdom.kg-proposal-binding/v0.1";
+export const EVENT_ENVELOPE_FORMAT: "kingdom.kg-proposal-event-envelope/0.1";
+export const EVENT_ENVELOPE_HASH_DOMAIN: "kingdom.kg-proposal-event-envelope/v0.1";
 export const PACKAGE_VERSION: "0.1.0-dev.0";
 export const CONTRACT_ID: "agenttool.dark-continent/0.1";
 export const DARK_CONTINENT_FORMAT: "agenttool-dark-continent-framework/v0.1";
@@ -312,6 +565,18 @@ export const CONSEQUENCE_KINDS: readonly [
   "deferred",
   "rejected",
 ];
+export const CARTOGRAPHER_TOOLS: readonly [
+  "list_proposals",
+  "show_provenance",
+  "compare_conflicts",
+];
+export const FORBIDDEN_CARTOGRAPHER_SURFACES: readonly [
+  "award",
+  "authorize",
+  "coronate",
+  "merge",
+  "publish",
+];
 
 export function createProposal(input: CreateProposalInput): DeepReadonly<KingdomKgProposal>;
 export function appendConsequence(
@@ -347,3 +612,22 @@ export function hfFileEvidenceRef(
   subject: Pick<HuggingFaceSubject, "repo_type" | "repo_id" | "revision">,
   file: { path: string; sha256: string },
 ): string;
+export function extractProposalEvents(
+  proposals: readonly (KingdomKgProposal | DeepReadonly<KingdomKgProposal>)[],
+): DeepReadonly<KingdomKgProposalEventEnvelope[]>;
+export function validateEventEnvelope(value: unknown): string[];
+export function formatEventJsonl(
+  items: readonly (
+    | KingdomKgProposal
+    | DeepReadonly<KingdomKgProposal>
+    | KingdomKgProposalEventEnvelope
+    | DeepReadonly<KingdomKgProposalEventEnvelope>
+  )[],
+): string;
+export function verifyEventJsonl(
+  jsonl: string,
+  options?: VerifyEventJsonlOptions,
+): DeepReadonly<VerifyEventJsonlResult>;
+export function createCartographerCatalog(
+  proposals: readonly (KingdomKgProposal | DeepReadonly<KingdomKgProposal>)[],
+): CartographerCatalog;

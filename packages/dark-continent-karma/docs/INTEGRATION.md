@@ -140,12 +140,20 @@ older boundary wording was deleted on 2026-10-27.
 
 A separately authorized MCP Space may expose `list_proposals`,
 `show_provenance`, and `compare_conflicts`; it must not expose merge, publish,
-award, authorize, or coronate. None of those MCP tools is built: the app's
-comparison view is a UI handler, not an MCP tool.
+award, authorize, or coronate. In package source (unreleased beyond npm
+`0.1.0-dev.0`), `createCartographerCatalog(proposals)` implements those three
+read-only operations (plus `invokeTool`, which refuses forbidden surfaces
+case-insensitively) as a pure offline library; the hosted Space still launches
+with `mcp_server=False` and its comparison view remains a Gradio UI handler.
 
-No standalone `events.jsonl` is published: its envelope and verifier are not
-built. Event
-hashes are unsigned: they show rewrites only relative to an independently
+No standalone `events.jsonl` is published in the pinned `4ea10623` Hugging Face
+dataset release. In package source, the `kingdom.kg-proposal-event-envelope/0.1`
+schema (`@agenttool/dark-continent-karma/event-envelope-schema`) and offline
+helpers (`extractProposalEvents`, `validateEventEnvelope`, `formatEventJsonl`,
+`verifyEventJsonl`) define and verify canonical compact JSONL event logs,
+including exact canonical line bytes, domain-separated envelope/event hashes,
+per-proposal chain continuity, and proposal-chain / retained-head verification.
+Event hashes are unsigned: they show rewrites only relative to an independently
 retained head and do not provide Crown-style signature/authorship guarantees.
 
 ## npm crossover
