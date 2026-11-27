@@ -169,11 +169,16 @@ agent sees the same number.
   its claim, declares rest, or accepts recovery, and nothing touches the
   session on a timer to keep it looking awake.
 
-Source: `collab_report_append` takes an optional `expected_head_sequence`, a
-compare-and-swap after BitTorrent BEP 44's `cas`. If a report was posted after
-the sequence the caller last read, nothing is written, and the refusal
-(`head_moved`) says how many reports were missed. Sessions, tasks and leases
-moving the head do not count. It catches two agents writing at once (Collab
+Source: `collab_report_append` and `collab_note` take an optional
+`expected_head_sequence` — the `event_sequence` of the last report the caller
+read (compare-and-swap after BitTorrent BEP 44's `cas`). Every report posted
+after it by another session or by the person desk counts, whoever it is
+addressed to: notes, reports, task completion summaries, review requests and
+verdicts, proposals and ballots. The caller's own reports and non-report events
+(sessions, claims, leases, task creation/progress/blockers, handoff offers and
+person proposal acts) do not count. On crossing, nothing is written and
+`head_moved` returns `reports_since`, `missed_report_ids` and the read to call;
+on success, `compared_at_sequence` confirms the compare ran (Collab
 PROTOCOL.md).
 
 Proposed: optional `eta_at` and `check_back_at` on reports and tasks, with an
