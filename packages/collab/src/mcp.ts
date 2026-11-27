@@ -27,7 +27,8 @@ import {
   removeSessionCredentialFile,
   writeSessionCredentialFile,
 } from "./session-file.js";
-import { CollabStore } from "./store-notes.js";
+import { CollabStore, globPathScopeRefusal, normalizePathScopes } from "./store-notes.js";
+import { topLevelTrackedPaths } from "./repository.js";
 import { doneVerb, noteVerb, takeVerb } from "./note-verbs.js";
 import { proposeVerb } from "./propose-verb.js";
 import { pollVerb, voteVerb } from "./ballot-verbs.js";
@@ -130,9 +131,31 @@ export interface CollabMcpServerOptions {
 
 const WAITS_PER_ENDPOINT = 8;
 
+/** The calls that start a session on a slot that has none. */
+const STARTS_SESSION: ReadonlySet<string> = new Set(["collab_session_start", "collab_arrive"]);
+
+/** The self-declared presence plane: it never uses the slot's session, so a freed slot changes nothing for it. */
+const PRESENCE_PLANE: ReadonlySet<string> = new Set([
+  "collab_session_join",
+  "collab_session_heartbeat",
+  "collab_session_leave",
+]);
+
 interface BoundSession {
   handle: SessionHandle;
   credential_file: string;
+}
+
+/** session_already_bound clears nothing itself: it names the call that can. */
+const ALREADY_BOUND_REMEDY =
+  "If that session was ended or resumed outside this process, call collab_arrive or collab_next on this slot: " +
+  "its session_auth_failed refusal frees the slot, and a new session can then start.";
+
+/** A session a slot held that was ended, or resumed by another process, outside this one. */
+interface FreedSession {
+  session_id: string;
+  state: "ended" | "resumed_elsewhere";
+  parent_session_id: string | null;
 }
 
 export function buildCollabMcpServer(
@@ -141,7 +164,9 @@ export function buildCollabMcpServer(
 ): McpServer {
   // `left`: what collab_done returned when it ended this slot's session, kept
   // until a new session arrives here, so a lost-response retry is answered.
-  type Slot = { key: string; binding: BoundSession | null; left?: LeaveMemo | null };
+  // `freed`: set when this slot lost its session to another process, until a
+  // new session starts here; it keeps calls from falling into legacy mode.
+  type Slot = { key: string; binding: BoundSession | null; left?: LeaveMemo | null; freed?: FreedSession | null };
   const slots = new Map<string, Slot>([["", { key: "", binding: given.resumed_session ?? null }]]);
   for (const [key, binding] of Object.entries(given.resumed_sessions ?? {})) {
     if (!key || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(key)) {
@@ -166,7 +191,16 @@ export function buildCollabMcpServer(
   };
   const state = {
     get binding() { return requestSlot.getStore()!.binding; },
-    set binding(value: BoundSession | null) { requestSlot.getStore()!.binding = value; },
+    set binding(value: BoundSession | null) {
+      const slot = requestSlot.getStore()!;
+      slot.binding = value;
+      // Whichever tool started the new session, what the slot kept about its
+      // last one is over.
+      if (value) {
+        slot.left = null;
+        slot.freed = null;
+      }
+    },
   };
   const environment = options.environment ?? process.env;
   // An unknown or conflicting value refuses to start: guessing a profile would
@@ -244,17 +278,99 @@ export function buildCollabMcpServer(
         && !(name === "collab_done" && slot?.left)) {
         return noteFailure(notArrived(key, slots.get("")?.binding ?? null));
       }
-      if (key && (!slot || !slot.binding) && name !== "collab_session_start" && name !== "collab_arrive"
-        && !(name === "collab_done" && slot?.left)) {
-        return failure(new CollabError("session_not_bound", "The selected child binding is not bound"));
+      if (!slot?.binding && !STARTS_SESSION.has(name) && !(name === "collab_done" && slot?.left)) {
+        // A slot that lost its session fails closed until a new one starts:
+        // without this, the default slot's next call would be written in
+        // unauthenticated legacy mode. Reads that use no session still answer.
+        const writes = config.annotations?.readOnlyHint !== true && !PRESENCE_PLANE.has(name);
+        if (slot?.freed && (key || writes)) return failure(slotFreed(slot, slot.freed));
+        if (key) return failure(new CollabError("session_not_bound", "The selected child binding is not bound"));
       }
       if (!slot) {
         slot = { key, binding: null };
         slots.set(key, slot);
       }
-      return requestSlot.run(slot, () => callback(args, ctx));
+      const bound = slot.binding;
+      const result = await requestSlot.run(slot, () => callback(args, ctx));
+      return bound ? freeEndedSlot(slot, bound, result, isNoteVerb(name)) : result;
     })(), () => store.observedAt()));
   }) as McpServer["registerTool"];
+
+  /** What a freed slot's refusals carry: whose session it held, and how to start the next one. */
+  const freedFields = (slot: Slot, freed: FreedSession, note: boolean) => {
+    const what = freed.state === "ended" ? "was ended outside this process" : "was resumed by another process";
+    let start = note ? "collab_arrive" : "collab_session_start";
+    if (slot.key) {
+      // A named slot's new session needs a parent: the last one's while this
+      // process still holds it, else the default slot's.
+      const held = [...slots.values()].flatMap((other) => other.binding?.handle.session ?? []);
+      const parent = held.find((session) => session.id === freed.parent_session_id)
+        ?? slots.get("")?.binding?.handle.session;
+      start += note
+        ? ` with purpose, binding_key ${slot.key} and parent ${parent?.id ?? "(a session this MCP process holds: arrive on the default slot first)"}`
+        : ` with root_path, binding_key ${slot.key}, parent_session_id ${parent?.id ?? "(the session it descends from)"} and its own actor`;
+    }
+    const say =
+      `Session ${freed.session_id} ${what}, so this slot no longer holds it: the slot is free, and ${start} ` +
+      "starts a new session on it. Until then this slot writes nothing: it does not fall back to legacy actor mode.";
+    return {
+      slot_freed: true,
+      bound_session: { id: freed.session_id, state: freed.state },
+      remedy: note ? { say } : say,
+    };
+  };
+
+  /** The refusal for a call that needs a session on a slot that lost it, until a new one starts there. */
+  const slotFreed = (slot: Slot, freed: FreedSession): CollabError =>
+    new CollabError("session_not_bound", "This slot holds no session: its last one ended or was resumed outside this process", freedFields(slot, freed, false));
+
+  /**
+   * A slot whose session was ended, or resumed by another process, outside
+   * this process would otherwise stay wedged: every authenticated call fails
+   * with session_auth_failed and a new start is refused as
+   * session_already_bound until the MCP restarts. Only on a
+   * session_auth_failed result, only while the slot still holds the binding
+   * the call ran with, and only when the store confirms that credential can
+   * never act again (the session is ended, or its generation moved on) is the
+   * slot cleared, and the refusal's remedy says so; a call that ran beside
+   * the one that freed it gets the same remedy. Any other error, or an
+   * unconfirmed one, leaves the binding as it was. The credential file is
+   * left alone: a process that resumed the session reads it. An ended
+   * session's host binding goes, as on any end; a resumed one's belongs to
+   * the process that holds it now.
+   */
+  const freeEndedSlot = <R>(slot: Slot, bound: BoundSession, result: R, note: boolean): R => {
+    if (!isRecord(result) || result.isError !== true) return result;
+    const payload = result.structuredContent;
+    if (!isRecord(payload) || (note ? payload.code : payload.error) !== "session_auth_failed") return result;
+    const credential = bound.handle.credential;
+    if (slot.binding === bound) {
+      let current: ReturnType<CollabStore["getCoordinationSession"]>;
+      try {
+        current = store.getCoordinationSession(credential.session_id);
+      } catch {
+        return result;
+      }
+      if (!current) return result;
+      const ended = current.status === "ended";
+      if (!ended && current.generation === credential.generation) return result;
+      slot.binding = null;
+      slot.left = null;
+      slot.freed = {
+        session_id: credential.session_id,
+        state: ended ? "ended" : "resumed_elsewhere",
+        parent_session_id: bound.handle.session.parent_session_id,
+      };
+      if (ended) options.host_binding?.forget(credential.session_id);
+    }
+    if (slot.freed?.session_id !== credential.session_id) return result;
+    const freed: Record<string, unknown> = { ...payload, ...freedFields(slot, slot.freed, note) };
+    return {
+      ...result,
+      structuredContent: freed,
+      content: [{ type: "text" as const, text: JSON.stringify(freed, null, 2) }],
+    } as R;
+  };
 
   const waitShutdown = new AbortController();
   // One count for collab_events_wait and collab_inbox's wait together.
@@ -273,6 +389,8 @@ export function buildCollabMcpServer(
   const boundCredential = (allowCursorRecovery = false) => {
     const binding = state.binding;
     if (!binding) {
+      const slot = requestSlot.getStore()!;
+      if (slot.freed) throw slotFreed(slot, slot.freed);
       throw new CollabError(
         "session_not_bound",
         "Start a credential-bound session first or provide legacy actor mode explicitly",
@@ -329,7 +447,6 @@ export function buildCollabMcpServer(
     binding: () => state.binding,
     bind: (binding) => {
       state.binding = binding;
-      requestSlot.getStore()!.left = null;
       // As collab_session_start does, so the session can be tapped and woken
       // whichever tool started it. Best effort, never throws, default slot only.
       options.host_binding?.record(binding.handle.session.id, binding.credential_file);
@@ -478,7 +595,7 @@ export function buildCollabMcpServer(
       inputSchema: {
         task: z.string().optional().describe("An existing task: task#… or its id."),
         title: z.string().optional().describe("A new task's title, at most 300 characters."),
-        paths: z.array(z.string()).optional().describe("Repository-relative paths the new task edits."),
+        paths: z.array(z.string()).optional().describe("Literal repository-relative paths the new task edits (prefixes, not glob patterns: src, not src/**)."),
         purpose: z.string().optional().describe("Why you take it, at most 200 characters; written into a new task's description only."),
         review: z.string().optional().describe("required | none: override whether a new task waits for review."),
         because: z.string().optional().describe("Why you recover a lapsed lease (at most 4,000 characters)."),
@@ -695,7 +812,10 @@ export function buildCollabMcpServer(
         throw new CollabError(
           "session_already_bound",
           "This MCP process already has a bound session",
-          { session_id: state.binding.handle.session.id },
+          {
+            session_id: state.binding.handle.session.id,
+            remedy: ALREADY_BOUND_REMEDY,
+          },
         );
       }
       if (requestSlot.getStore()!.key && !input.parent_session_id) {
@@ -832,7 +952,10 @@ export function buildCollabMcpServer(
         throw new CollabError(
           "session_already_bound",
           "A bound MCP process cannot open or register another workspace",
-          { session_id: state.binding.handle.session.id },
+          {
+            session_id: state.binding.handle.session.id,
+            remedy: ALREADY_BOUND_REMEDY,
+          },
         );
       }
       return { workspace: store.openWorkspace(input) };
@@ -1009,15 +1132,38 @@ export function buildCollabMcpServer(
           "work_mode, completion_policy, and expected_base_sha require a bound v0.2 session",
         );
       }
-      const task = state.binding
-        ? store.createTaskForSession({ ...boundCredential(), ...input, id: task_id })
-        : store.createTask({
-            workspace_id,
-            actor: requireLegacyActor(actor),
-            ...input,
-            id: task_id,
-          });
-      return { task };
+      try {
+        const task = state.binding
+          ? store.createTaskForSession({ ...boundCredential(), ...input, id: task_id })
+          : store.createTask({
+              workspace_id,
+              actor: requireLegacyActor(actor),
+              ...input,
+              id: task_id,
+            });
+        return { task };
+      } catch (error) {
+        if (!(error instanceof CollabError) || error.code !== "invalid_path_scope" || error.details.remedy === undefined) throw error;
+        // The store's glob refusal, again with a ready call for this tool.
+        const slotKey = requestSlot.getStore()!.key;
+        throw globPathScopeRefusal(normalizePathScopes(input.path_scopes ?? []), {
+          ready: (literal) => ({
+            tool: "collab_task_create",
+            input: {
+              workspace_id,
+              ...(actor !== undefined ? { actor } : {}),
+              ...(task_id !== undefined ? { task_id } : {}),
+              ...input,
+              path_scopes: literal,
+              ...(slotKey ? { binding_key: slotKey } : {}),
+            },
+          }),
+          top_level: () => {
+            const root = state.binding?.handle.worktree.root_path ?? store.getWorkspace(workspace_id)?.root_path;
+            return root ? topLevelTrackedPaths(root) : null;
+          },
+        }) ?? error;
+      }
     }),
   );
 

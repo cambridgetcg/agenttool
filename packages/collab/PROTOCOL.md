@@ -408,7 +408,26 @@ before every input is checked, and nothing throws after a write.
 **Slots.** Only `collab_arrive` works on a slot with no session. The other seven
 return `not_arrived` with a ready `collab_arrive` call (carrying `binding_key` and
 `parent` when the call named a slot). A named slot is cooperative routing inside one
-MCP process, not isolation.
+MCP process, not isolation. When a slot's session was ended, or resumed by another
+process, outside this MCP process, the slot's next call that authenticates the session
+(`collab_arrive`, `collab_next` or `collab_session_end`, for example) is refused with
+`session_auth_failed`. If the journal confirms the slot's credential can never act again
+(the session is ended, or its generation moved on), that refusal also frees the slot: it
+carries `slot_freed: true`, `bound_session` (`id`, and `state` `ended` or
+`resumed_elsewhere`) and a remedy that says the slot is free and which call starts a new
+session on it: `collab_arrive`, or `collab_session_start`, with the same `binding_key`
+and a parent for a named slot. No other error frees a slot. Reads that use no session
+answer as before and free nothing; a `collab_inbox` whose session ends while it waits
+returns `waited.code` `session_auth_failed` and frees nothing; and `collab_session_start`
+and `collab_workspace_open` stay refused with `session_already_bound`, whose remedy names
+the call to make first. The credential file is left for the process that resumed it.
+
+A freed slot fails closed until a new session starts on it: a legacy tool that would
+write, or that needs a session, is refused with `session_not_bound` and the same three
+fields (`slot_freed`, `bound_session`, `remedy`), and a note verb with `not_arrived`, as
+on any slot with no session. So a retry on the default slot is never recorded in legacy
+actor mode. Reads that use no session, and the self-declared presence plane, still answer
+on the default slot.
 
 ### collab_arrive: arrive, or look around
 
@@ -696,6 +715,19 @@ With `title` it creates a task and claims it: an edit task whose completion wait
 a distinct reviewer when `paths` are given, else a coordination task you report done;
 `review` overrides that. With `task` it claims it, and when its lease has lapsed it
 recovers it, which needs `because`. `purpose` goes into a new task's description only.
+`paths` are literal repository-relative prefixes: `src` covers everything under `src/`.
+A new task's path holding a glob character (`*`, `?`, `{` or `}`) would reserve
+nothing, so it is refused with `invalid_path_scope` and a remedy naming the literal
+directory it is under (`src` for `src/**` or `src/*.ts`, also in `literal_path_scopes`).
+A pattern under no literal directory (`*.md`, `**/*.ts`, `*/foo`) gets a remedy asking
+for the directory or files it meant. Only `*`, `**` and `**/*` mean the whole
+repository: they get a ready `collab_take` with the worktree's top-level tracked paths,
+or a remedy asking for them when git cannot list them. `collab_task_create` refuses the
+same `path_scopes`. Only new input is refused: a recorded create sent again still
+replays, and a task an older build stored with such characters still reads, claims,
+recovers and reviews unchanged. `[` and `]` are literal, never a character class:
+`app/[id]` reserves exactly that directory. A real path whose name holds one of the
+refused characters is reserved through its parent; at the top level it cannot be.
 A path overlap names every holder, their purposes, and a ready `collab_note` to ask
 them; over paths you hold yourself, it says to finish or release that task. A lease is
 coordination, not ownership or a lock.
@@ -1286,7 +1318,8 @@ reviews a task (including one this build finished), and computes identical propo
 status; where the revision ships a host and an MCP bundle, that the doorbell idles over
 the new types, a host ends a session `collab_arrive` created, and the old MCP lists its
 tools and pages over the new types. In reverse, this build opens and verifies the file
-after the old build wrote to it and computes the same ballot result. A golden scenario
+after the old build wrote to it and computes the same ballot result, and reads, claims,
+recovers, reviews and replays the tasks the old build gave glob path scopes. A golden scenario
 using only `a8799aad`'s tools runs on both builds with the same clock, and the rows
 match after ids and tokens are replaced by numbered placeholders. Dropping the three
 new tables loses only view state, and `note_ballots` rebuilds. Each later change

@@ -2727,6 +2727,7 @@ export class CollabStoreCore {
       path_scopes: normalizePathScopes(input.path_scopes ?? []),
     };
     return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.create", normalized, () => {
+      refuseGlobPathScopes(normalized.path_scopes);
       this.requireWorkspace(input.workspace_id);
       const id = normalized.id ?? `task_${randomUUID()}`;
       if (normalized.dependencies.includes(id)) {
@@ -2807,6 +2808,7 @@ export class CollabStoreCore {
     }
     const request = { ...normalized, completion_policy: completionPolicy };
     return this.mutateAsSession(input, normalized.idempotency_key, "task.create.v2", request, (session) => {
+      refuseGlobPathScopes(normalized.path_scopes);
       const id = normalized.id ?? `task_${randomUUID()}`;
       if (normalized.dependencies.includes(id)) {
         throw new CollabError("invalid_dependency", "A task cannot depend on itself", {
@@ -8567,6 +8569,80 @@ export function normalizePathScopes(scopes: string[]): string[] {
     return clean;
   });
   return uniqueSorted(normalized);
+}
+
+/**
+ * Characters that mean a pattern was sent. Path scopes are literal prefixes,
+ * so `src/**` reserves only a path literally named `**` under src and
+ * conflicts with nothing a session edits. `[` and `]` are not among them: real
+ * paths hold them (`app/[id]`), and as a literal prefix they reserve exactly that.
+ */
+const PATH_SCOPE_GLOB = /[*?{}]/;
+
+/** The only patterns that mean the whole repository, and nothing narrower. */
+const WHOLE_REPOSITORY_GLOB = /^(\*|\*\*|\*\*\/\*)$/;
+
+/** How a caller turns a whole-repository pattern's literal scopes into a ready call for its own tool. */
+export interface GlobPathScopeRemedy {
+  ready?: (scopes: string[]) => { tool: string; input: Record<string, unknown> };
+  /** A repository's top-level paths, read only when every pattern is the whole repository. */
+  top_level?: () => string[] | null;
+}
+
+/**
+ * The refusal for a new task's normalized path scopes when one holds a glob
+ * character; null when none does. Scopes whose only patterns are `*`, `**` or
+ * `**\/*` mean the whole repository, so its top-level paths make a ready
+ * call. Any other pattern gets a remedy that names the literal directory it
+ * is under and leaves the choice to the caller: reserving that directory may
+ * be more than the pattern meant. New input only: it runs where a task is
+ * first written, after the idempotency receipt is read, so a recorded create
+ * still replays and a stored scope is read, claimed, recovered and reviewed
+ * unchanged.
+ */
+export function globPathScopeRefusal(scopes: readonly string[], options: GlobPathScopeRemedy = {}): CollabError | null {
+  const globs = scopes.filter((item) => PATH_SCOPE_GLOB.test(item));
+  if (globs.length === 0) return null;
+  const wholeRepository = globs.every((item) => WHOLE_REPOSITORY_GLOB.test(item));
+  const prefixes = scopes.map((item) => PATH_SCOPE_GLOB.test(item) ? literalPathPrefix(item) : item);
+  let literal: string[] | null = null;
+  try {
+    const top = wholeRepository ? options.top_level?.() ?? [] : [];
+    // Every top-level path, or no list: part of them would not be the whole repository.
+    const listed = wholeRepository ? top.length > 0 && !top.some((item) => PATH_SCOPE_GLOB.test(item)) : !prefixes.includes("");
+    if (listed) {
+      const all = normalizePathScopes([...top, ...prefixes.filter((item) => item !== "")]);
+      literal = all.filter((item) => !all.some((other) => item.startsWith(`${other}/`)));
+    }
+  } catch {
+    // Too many or unusable paths: the remedy says how to choose them instead.
+  }
+  const say = wholeRepository
+    ? "For the whole repository, list its top-level paths, such as [\"src\", \"tests\", \"README.md\"]; the root itself cannot be reserved."
+    : literal
+      ? `Send the literal scopes ${JSON.stringify(literal)} instead, or the exact files the pattern meant.`
+      : "Name the literal directory or files each pattern meant, such as [\"src\", \"README.md\"].";
+  return new CollabError(
+    "invalid_path_scope",
+    `Path scope '${globs[0]!}' holds a glob character (*, ?, { or }). Scopes are literal repository-relative prefixes: `
+      + "'src' reserves everything under src/, and 'src/**' would reserve nothing",
+    {
+      scope: globs[0]!,
+      ...(literal ? { literal_path_scopes: literal } : {}),
+      remedy: wholeRepository && literal && options.ready ? options.ready(literal) : { say: `${say} Nothing was written.` },
+    },
+  );
+}
+
+/** A normalized scope's segments before the first one holding a glob character. */
+function literalPathPrefix(scope: string): string {
+  const segments = scope.split("/");
+  return segments.slice(0, segments.findIndex((segment) => PATH_SCOPE_GLOB.test(segment))).join("/");
+}
+
+function refuseGlobPathScopes(scopes: readonly string[]): void {
+  const refusal = globPathScopeRefusal(scopes);
+  if (refusal) throw refusal;
 }
 
 function normalizeDependencies(dependencies: string[]): string[] {

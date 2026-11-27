@@ -208,6 +208,7 @@ async function inspect(request: InspectRequest): Promise<Record<string, unknown>
 
     let task: Record<string, unknown> | null = null;
     let reviewedNew: Record<string, unknown> | null = null;
+    let globTasks: Record<string, unknown> | null = null;
     const written: Array<{ id: string; body: string }> = [];
     const reviewer = check("start_reviewer", () => store.startSession({
       root_path: request.root_path,
@@ -253,6 +254,59 @@ async function inspect(request: InspectRequest): Promise<Record<string, unknown>
           review_status: reviewed.task.review_status ?? null,
         };
       });
+      // Every older build stored glob characters in path scopes literally. This
+      // build refuses them on new input only, so the tasks below must still
+      // read, claim, recover and review there (forward-compat.test.ts).
+      globTasks = check("glob_scoped_tasks", () => {
+        const open = store.createTaskForSession({
+          ...implementer.credential,
+          idempotency_key: "old-build-glob-open",
+          title: "Old build whole-repository pattern",
+          work_mode: "edit",
+          completion_policy: "accepted",
+          path_scopes: ["**"],
+        });
+        const next = store.createTaskForSession({
+          ...implementer.credential,
+          idempotency_key: "old-build-glob-next",
+          title: "Old build second whole-repository pattern",
+          work_mode: "edit",
+          completion_policy: "accepted",
+          path_scopes: ["**"],
+        });
+        const held = store.createTaskForSession({
+          ...implementer.credential,
+          idempotency_key: "old-build-glob-held",
+          title: "Old build file pattern",
+          work_mode: "edit",
+          completion_policy: "accepted",
+          path_scopes: ["compat/*.txt", "compat/[ab]?.md"],
+        });
+        const claimed = store.claimTaskForSession({
+          ...implementer.credential,
+          idempotency_key: "old-build-glob-claim",
+          task_id: held.id,
+          expected_version: held.version,
+          ttl_seconds: 30,
+        });
+        // Recorded creates this build must replay, not refuse, on a retry.
+        const legacy = store.createTask({
+          workspace_id: request.workspace_id,
+          actor: "old-build-legacy",
+          idempotency_key: "old-build-glob-legacy",
+          title: "Old build legacy pattern",
+          path_scopes: ["legacy/**"],
+        });
+        return {
+          implementer: implementer.credential,
+          legacy_task_id: legacy.id,
+          open_task_id: open.id,
+          open_path_scopes: open.path_scopes,
+          next_task_id: next.id,
+          held_task_id: claimed.id,
+          held_path_scopes: claimed.path_scopes,
+        };
+      });
       // The newer surface's completion is an ordinary completion to this build.
       check("review_new_surface_task", () => {
         const pending = store.getTask(request.workspace_id, request.review_task_id);
@@ -277,7 +331,7 @@ async function inspect(request: InspectRequest): Promise<Record<string, unknown>
         written.push({ id: report.id, body: report.body });
       });
     }
-    return { capabilities, verified, reports, proposals, v2, addressing, paging, task, reviewed_new: reviewedNew, written };
+    return { capabilities, verified, reports, proposals, v2, addressing, paging, task, reviewed_new: reviewedNew, glob_tasks: globTasks, written };
   } finally {
     store.close();
   }

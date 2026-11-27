@@ -399,6 +399,25 @@ refused with `invalid_release_summary`. Without the flag,
 `lease_id`, `expires_at`), and a `remedy` naming `release_leases`. Ending
 stays available while cursor recovery is required.
 
+A session ended outside the MCP process that holds it (by the host command
+below, say), or resumed by another process, leaves that process's slot holding
+a credential that can no longer act. Its next call that authenticates the
+session, such as `collab_arrive`, `collab_next` or `collab_session_end`, is
+refused with `session_auth_failed`; when the journal confirms the session is
+ended or its generation moved on, that refusal also frees the slot
+(`slot_freed: true`), and its remedy names the call that starts a new session
+there, without restarting the MCP server. Until such a call,
+`collab_session_start` itself stays refused with `session_already_bound` (its
+remedy says so), and reads that use no session succeed and free nothing. No
+other error frees a slot.
+
+A freed slot fails closed until a new session starts on it: calls that would
+write, or that need a session, are refused with `session_not_bound` and the
+same remedy (the note verbs with `not_arrived`). A retry that names `actor` is
+not recorded in legacy mode, unlike after `collab_session_end`, which leaves legacy
+mode open. Reads
+that use no session and the presence tools still answer on the default slot.
+
 The host-side `agenttool-collab-host` command ends a session whose process is
 gone:
 
@@ -558,7 +577,7 @@ thread's session declares the same ref and is ended with the run.
 
 ### Delegation and lineage
 
-A delegated agent is an independent process with its own session. The
+A delegated agent in its own process has its own session. The
 delegator shares its session ID and keeps its credential to itself:
 never pass your session file, its path, or `AGENTOOL_COLLAB_SESSION_FILE`,
 because resuming it would advance the generation fence and fence the
@@ -573,9 +592,15 @@ isolation: any caller of this endpoint can select a known slot. Hosts needing
 separation should continue using separate processes. Parent end does not end children.
 `parent_session_id` is declared lineage: the server checks only that the
 parent exists in the same workspace. It is unauthenticated and shares no
-authority, lease, or cursor. Parent and child are distinct sessions and may
-review each other's work; say so in `limits`, because lineage does not make a
-review independent.
+authority, lease, or cursor. A child started in the same MCP process as a parent
+that process holds is attested in `session_parent_attestations` with basis
+`same_mcp_process`, and shares that parent's consent voice and ballot unit. A
+Claude Code subagent shares its parent's MCP process and therefore its session,
+unless it starts its own `binding_key` slot or its agent definition starts its
+own collab server. A child with its own session and its parent are distinct
+sessions and may review each other's work; say so in `limits`, because lineage
+does not make a review independent. A subagent speaking through its parent's
+session is that session, so neither can review the other's work.
 
 ### A host that cannot commit
 
@@ -799,9 +824,17 @@ names these files exactly, never by a `*.json` glob.
 
 Path claims are advisory across all registered worktrees in the repository
 workspace. Comparison is lexical, segment-aware, and conservatively
-case-insensitive. It does not lock the filesystem, inspect uncommitted diffs,
-resolve every symlink or case alias, prevent direct edits, or arbitrate a
-process using another database.
+case-insensitive. A path scope is a literal repository-relative prefix: `src`
+covers everything under `src/`, and a glob such as `src/**` would reserve
+nothing. A new task's scope holding `*`, `?`, `{` or `}` is therefore refused
+with `invalid_path_scope` and a remedy naming the literal directory (`src` for
+`src/**`); `*`, `**` and `**/*`, and only those, get a ready call listing the
+worktree's top-level tracked paths. `[` and `]` are literal, so `app/[id]`
+reserves exactly that directory. A recorded create sent again still replays,
+and tasks an older build stored with such characters keep reading, claiming,
+recovering and reviewing unchanged. A path claim does not lock the filesystem,
+inspect uncommitted diffs, resolve every symlink or case alias, prevent direct
+edits, or arbitrate a process using another database.
 
 When a session lease's TTL has passed and its holder has ended or gone unseen
 for 6 hours, the task reads as `recovery_required`. (A legacy actor lease

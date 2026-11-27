@@ -44,7 +44,10 @@ and inspect existing work first.
    that you have not yet read, by `collab_cursor_ack` or by `collab_inbox`.
 3. **Split and claim.** Create bounded `coordination`, `read_only`, or `edit`
    tasks with `collab_task_create`: dependencies, completion tests in the
-   description, and conservative repository-relative `path_scopes`. Inspect
+   description, and conservative repository-relative `path_scopes`. A scope is
+   a literal prefix (`src`, never `src/**`): a scope holding `*`, `?`, `{` or
+   `}` is refused with `invalid_path_scope`, and the remedy names the literal
+   directory to send instead; `[` and `]` are literal (`app/[id]`). Inspect
    claimable and conflicted projections; dependency-ready is not the same as
    safely claimable. Call `collab_task_claim` with the version just read and
    begin edits only after it succeeds.
@@ -381,8 +384,9 @@ commands; neither is a model tool.
 
 ## Delegation and lineage
 
-A delegate is an independent process, so it starts its own session. Give it
-the repository root, the workspace ID, your session ID and the task. It calls
+A delegate in its own process starts its own session; one sharing your MCP
+process has one only on its own `binding_key` slot. Give it the repository
+root, the workspace ID, your session ID and the task. It calls
 `collab_session_start` with `parent_session_id` set to your session ID and an
 actor label naming its runtime and job; a delegate started through a local job
 runner such as `sol agent start` ends its label with `· sol job <job-id>`, for
@@ -392,14 +396,20 @@ did not.
 
 `parent_session_id` is declared lineage. The server checks only that the
 parent exists in the same workspace; the link is unauthenticated, grants no
-authority, and shares no lease, cursor or credential. Give the delegate your
-session ID; never pass your session file, its path, or
-`AGENTOOL_COLLAB_SESSION_FILE`. Resuming that file would advance the
-generation fence and fence your own process.
+authority, and shares no lease, cursor or credential. A child started in the
+same MCP process as a parent that process holds is attested (basis
+`same_mcp_process`) and shares that parent's consent voice and ballot unit. A
+Claude Code subagent shares its parent's MCP process and therefore its session,
+unless it starts its own `binding_key` slot or its agent definition starts its
+own collab server. Give the delegate your session ID; never pass your session
+file, its path, or `AGENTOOL_COLLAB_SESSION_FILE`. Resuming that file would
+advance the generation fence and fence your own process.
 
-Collab counts a delegate as a distinct session, so parent and child may review
-each other's work. Lineage does not make that review independent: name the
-relationship in `limits`. A delegate ends its own session with
+Collab counts a delegate with its own session as a distinct session, so parent
+and child may review each other's work. Lineage does not make that review
+independent: name the relationship in `limits`. A delegate speaking through
+your session is that session: neither of you can review the other's work, and
+ending it ends yours. A delegate with its own session ends it with
 `release_leases: true` before it exits.
 
 ## A host that cannot commit
@@ -499,6 +509,16 @@ A host that relaunches the same thread each round should resume one session
 for it through `AGENTOOL_COLLAB_SESSION_FILE` rather than start a new one per
 round; in a resumed process do not call `collab_session_start` (it is refused
 with `session_already_bound`). A one-off run ends its session before it exits.
+When a session is ended or resumed outside the MCP process holding it, that
+process's next call on the slot that authenticates the session
+(`collab_arrive`, `collab_next` or `collab_session_end`, say) is refused with
+`session_auth_failed`, and, once the journal confirms the credential can never
+act again, carries `slot_freed: true`: the slot is free, and its remedy names
+the call that starts a new session there without restarting the server. Until
+such a call `collab_session_start` is still refused with
+`session_already_bound`. A freed slot writes no coordination records
+until a new session starts on it (`session_not_bound`, with the same remedy): a retry that names
+`actor` is not recorded in legacy mode.
 
 Verify that every participant opened the intended workspace and shared
 database. Expect linked Git worktrees to share a repository workspace while
