@@ -6407,6 +6407,22 @@
       "canonical_path": "packages/skills/skills/nen-vow-forge/SKILL.md"
     },
     {
+      "path": "packages/skills/skills/repo-discovery/SKILL.md",
+      "title": "AgentTool Repo Discovery (agenttool.repo-discovery/v1)",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/skills/skills/repo-discovery/SKILL.md"
+    },
+    {
+      "path": "packages/skills/skills/repo-discovery/references/standards-map.md",
+      "title": "GitHub Repository Discovery Standards Map (agenttool.repo-discovery/v1)",
+      "type": "unclassified",
+      "classification_basis": "awaiting-classification",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/skills/skills/repo-discovery/references/standards-map.md"
+    },
+    {
       "path": "packages/skills/skills/use-agentcred-safely/SKILL.md",
       "title": "Use AgentCred Safely",
       "type": "guide",
