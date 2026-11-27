@@ -77,6 +77,7 @@ import {
   eventFromRow,
   type EventRow,
   GENESIS_HASH,
+  isOpenTableReport,
   MAX_REPORT_BODY,
   normalizeEvidenceRefs,
   normalizePathScopes,
@@ -641,22 +642,25 @@ export class CollabStore extends CollabStoreCore {
     session_token: string;
     generation: number;
     limit: number;
-    include: "for_me" | "all";
+    include: "for_me" | "open" | "all";
     peek?: boolean;
   }): NoteInboxData {
     const limit = input.limit;
     if (!Number.isInteger(limit) || limit < 1 || limit > NOTE_INBOX_MAX_LIMIT) {
       throw new CollabError("invalid_limit", `limit must be an integer from 1 to ${NOTE_INBOX_MAX_LIMIT}`);
     }
-    if (input.include !== "for_me" && input.include !== "all") {
-      throw new CollabError("invalid_include", "include must be for_me or all");
+    if (input.include !== "for_me" && input.include !== "open" && input.include !== "all") {
+      throw new CollabError("invalid_include", "include must be for_me, open, or all");
     }
     const plan = (session: CoordinationSessionRow, mark: NoteMarkState, record: boolean) => {
       const scan = this.scanNoteEvents(session, mark.sequence);
       // With include: "all", one line per thing; every item for this session stays.
+      // With include: "open", addressed items plus open table broadcasts (shared isOpenTableReport predicate).
       const shaped = input.include === "all"
         ? noteLines(scan.events.filter((event) => !event.own), true)
-        : { lines: scan.events.filter((event) => event.for_me), dropped: [] };
+        : input.include === "open"
+          ? { lines: scan.events.filter((event) => event.for_me || event.open_report), dropped: [] }
+          : { lines: scan.events.filter((event) => event.for_me), dropped: [] };
       const listed = shaped.lines;
       let through = scan.last_sequence;
       let more = scan.capped;
@@ -757,14 +761,14 @@ export class CollabStore extends CollabStoreCore {
     generation: number;
     since: number;
     limit: number;
-    include: "for_me" | "all";
+    include: "for_me" | "open" | "all";
   }): NoteInboxData {
     const limit = input.limit;
     if (!Number.isInteger(limit) || limit < 1 || limit > NOTE_INBOX_MAX_LIMIT) {
       throw new CollabError("invalid_limit", `limit must be an integer from 1 to ${NOTE_INBOX_MAX_LIMIT}`);
     }
-    if (input.include !== "for_me" && input.include !== "all") {
-      throw new CollabError("invalid_include", "include must be for_me or all");
+    if (input.include !== "for_me" && input.include !== "open" && input.include !== "all") {
+      throw new CollabError("invalid_include", "include must be for_me, open, or all");
     }
     if (!Number.isSafeInteger(input.since) || input.since < 0) {
       throw new CollabError("invalid_since", "since must be a whole number, 0 or more");
@@ -777,7 +781,11 @@ export class CollabStore extends CollabStoreCore {
       const scan = this.scanNoteEvents(session, after, this.endedNamesakes(session));
       // A record, not a log: one line per thing, whichever include.
       const shaped = noteLines(scan.events.filter((event) =>
-        input.include === "all" ? !event.own : event.for_me || event.for_name !== null), false);
+        input.include === "all"
+          ? !event.own
+          : input.include === "open"
+            ? event.for_me || event.for_name !== null || event.open_report
+            : event.for_me || event.for_name !== null), false);
       const listed = shaped.lines;
       let through = scan.last_sequence;
       let more = scan.capped;
@@ -1376,11 +1384,13 @@ export class CollabStore extends CollabStoreCore {
       const event = eventFromRow(row);
       const own = event.session_id === session.id;
       const forMe = !own && this.eventAddressesSession(event, session.id);
+      const openReport = !own && isOpenTableReport(event, session.id);
       return {
         sequence: event.sequence,
         type: event.type,
         own,
         for_me: forMe,
+        open_report: openReport,
         for_name: own || forMe ? null : this.namesakeAddressed(event, namesakes),
         thing: noteThingOf(event),
         attached: event.type === "evidence.cited" || event.type === "artifact.attached",
@@ -1530,7 +1540,10 @@ export class CollabStore extends CollabStoreCore {
     const payload = (event.payload ?? {}) as Record<string, unknown>;
     switch (event.type) {
       case "report.posted":
-        if (payload.to_session_id === sessionId) return "addressed";
+        if (
+          payload.to_session_id === sessionId
+          || (Array.isArray(payload.also_to_session_ids) && payload.also_to_session_ids.includes(sessionId))
+        ) return "addressed";
         if (typeof payload.about_proposal_id === "string") return "about_your_proposal";
         return "reply_to_you";
       case "handoff.offered":
@@ -3765,6 +3778,8 @@ interface NoteScannedEvent {
   type: CollabEventType;
   own: boolean;
   for_me: boolean;
+  /** Open table broadcast report (shared isOpenTableReport predicate with wait --addressed --open). */
+  open_report: boolean;
   /** In a look-back: the ended session carrying the reader's name that this event is addressed to. */
   for_name: string | null;
   /**

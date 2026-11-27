@@ -25,6 +25,7 @@ import {
   DEFAULT_WAIT_EVENT_LIMIT,
   EVIDENCE_REF_PREFIXES,
   EVIDENCE_REFS_DESCRIPTION,
+  MAX_ALSO_TO_SESSIONS,
   MAX_WAIT_ANCHOR_BYTES,
   MAX_WAIT_PAGE_BYTES,
   MAX_REST_REASON_LENGTH,
@@ -35,6 +36,7 @@ import {
   MAX_PROPOSAL_CONSULT_SECONDS,
   MIN_PROPOSAL_CONSULT_SECONDS,
   type AiSnapshot,
+  type CollabReportHeader,
   type ConsentRule,
   type PasskeyAssertion,
   type PasskeyProof,
@@ -3791,6 +3793,8 @@ export class CollabStoreCore {
     idempotency_key: string;
     task_id?: string;
     to_session_id?: string;
+    /** Optional additional session IDs to route this report to (payload-only, at most 8). */
+    also_to_session_ids?: string[];
     kind: ReportKind;
     body: string;
     evidence_refs?: string[];
@@ -3815,11 +3819,13 @@ export class CollabStoreCore {
     const expectedHead = input.expected_head_sequence === undefined
       ? undefined
       : validateExpectedHeadSequence(input.expected_head_sequence);
+    const toSessionId = input.to_session_id
+      ? validateId(input.to_session_id, "to_session_id")
+      : null;
+    const alsoToSessionIds = normalizeAlsoToSessionIds(input.also_to_session_ids, toSessionId);
     const normalized = {
       task_id: input.task_id ? validateId(input.task_id, "task_id") : null,
-      to_session_id: input.to_session_id
-        ? validateId(input.to_session_id, "to_session_id")
-        : null,
+      to_session_id: toSessionId,
       kind: validateReportKind(input.kind),
       body: cleanText(input.body, "body", MAX_REPORT_BODY),
       evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
@@ -3834,6 +3840,7 @@ export class CollabStoreCore {
       authority_basis: optionalText(input.authority_basis, "authority_basis", 2_000),
       // Present only when set, so earlier idempotency receipts keep their request hash.
       ...(input.to_person === true ? { to_person: true } : {}),
+      ...(alsoToSessionIds.length > 0 ? { also_to_session_ids: alsoToSessionIds } : {}),
     };
     return this.mutateAsSession(
       input,
@@ -4503,12 +4510,18 @@ export class CollabStoreCore {
     idempotency_key: string;
     body: string;
     proposal_report_id?: string;
+    to_session_id?: string;
   }): CollabReport {
+    const explicitTo = input.to_session_id
+      ? validateId(input.to_session_id, "to_session_id")
+      : undefined;
     const normalized = {
       body: cleanText(input.body, "body", MAX_REPORT_BODY),
       proposal_report_id: input.proposal_report_id
         ? validateId(input.proposal_report_id, "proposal_report_id")
         : null,
+      // Present only when set, so earlier idempotency receipts keep their request hash.
+      ...(explicitTo !== undefined ? { to_session_id: explicitTo } : {}),
     };
     const idempotencyKey = validateIdempotencyKey(input.idempotency_key);
     return this.mutate(input.workspace_id, PERSON_DESK_ACTOR, idempotencyKey, "person.note.v1", normalized, () => {
@@ -4516,6 +4529,13 @@ export class CollabStoreCore {
       if (normalized.proposal_report_id) {
         const terms = this.requireProposalTerms(input.workspace_id, normalized.proposal_report_id);
         toSessionId = this.requireReport(terms.report_id).from_session_id;
+      }
+      if (explicitTo !== undefined) {
+        const target = this.requireCoordinationSessionRow(explicitTo);
+        if (target.workspace_id !== input.workspace_id) {
+          throw new CollabError("report_target_mismatch", "Report target is in another workspace");
+        }
+        toSessionId = explicitTo;
       }
       return this.appendReportInternal({ workspace_id: input.workspace_id, actor: PERSON_DESK_ACTOR, id: null }, {
         task_id: null,
@@ -5959,17 +5979,27 @@ export class CollabStoreCore {
         current.id,
         this.timestamp(),
       ) as HandoffRow[];
-      const reportRows = this.db.query(`
+      const alsoToBySequence = new Map<number, string[]>();
+      for (const event of events.events) {
+        if (event.type !== "report.posted") continue;
+        const rawAlso = (event.payload as Record<string, unknown>).also_to_session_ids;
+        if (Array.isArray(rawAlso)) {
+          const ids = rawAlso.filter((item): item is string => typeof item === "string");
+          if (ids.length > 0) alsoToBySequence.set(event.sequence, ids);
+        }
+      }
+      const reportRows = (this.db.query(`
         SELECT * FROM reports
         WHERE workspace_id = ? AND event_sequence > ? AND event_sequence <= ?
-          AND (to_session_id IS NULL OR to_session_id = ?)
         ORDER BY event_sequence
       `).all(
         current.workspace_id,
         current.cursor_sequence,
         events.next_anchor.sequence,
-        current.id,
-      ) as ReportRow[];
+      ) as ReportRow[]).filter((row) =>
+        row.to_session_id === null
+        || row.to_session_id === current.id
+        || (alsoToBySequence.get(row.event_sequence)?.includes(current.id) ?? false));
       return {
         actor: current.actor,
         session: {
@@ -6267,6 +6297,9 @@ export class CollabStoreCore {
     switch (event.type) {
       case "report.posted": {
         if (payload.to_session_id === sessionId) return true;
+        if (Array.isArray(payload.also_to_session_ids) && payload.also_to_session_ids.includes(sessionId)) {
+          return true;
+        }
         if (typeof payload.about_proposal_id === "string") {
           return this.proposalAddressesSession(payload.about_proposal_id, sessionId);
         }
@@ -6275,7 +6308,8 @@ export class CollabStoreCore {
           .get(payload.target_report_id) as { from_session_id: string | null } | null;
         // An answer to this session's report is its mail unless the sender
         // chose another addressee: then it is that session's.
-        return target?.from_session_id === sessionId && typeof payload.to_session_id !== "string";
+        const hasAlsoTo = Array.isArray(payload.also_to_session_ids) && payload.also_to_session_ids.length > 0;
+        return target?.from_session_id === sessionId && typeof payload.to_session_id !== "string" && !hasAlsoTo;
       }
       case "handoff.offered":
         return field(payload.handoff, "to_session_id") === sessionId;
@@ -7472,6 +7506,7 @@ export class CollabStoreCore {
     input: {
       task_id: string | null;
       to_session_id: string | null;
+      also_to_session_ids?: string[];
       kind: ReportKind;
       relation: ReportRelation;
       target_report_id: string | null;
@@ -7483,6 +7518,12 @@ export class CollabStoreCore {
     if (input.task_id) this.requireTaskRow(session.workspace_id, input.task_id);
     if (input.to_session_id) {
       const targetSession = this.requireCoordinationSessionRow(input.to_session_id);
+      if (targetSession.workspace_id !== session.workspace_id) {
+        throw new CollabError("report_target_mismatch", "Report target is in another workspace");
+      }
+    }
+    for (const extraSessionId of input.also_to_session_ids ?? []) {
+      const targetSession = this.requireCoordinationSessionRow(extraSessionId);
       if (targetSession.workspace_id !== session.workspace_id) {
         throw new CollabError("report_target_mismatch", "Report target is in another workspace");
       }
@@ -7550,10 +7591,14 @@ export class CollabStoreCore {
   ): CollabReport {
     const id = `report_${randomUUID()}`;
     const now = this.timestamp();
+    const alsoTo = input.also_to_session_ids && input.also_to_session_ids.length > 0
+      ? input.also_to_session_ids
+      : undefined;
     const event = this.appendEvent(session.workspace_id, "report.posted", id, session.actor, {
       // Present only when set, so every other report keeps its earlier event bytes.
       ...(input.to_person ? { to_person: true } : {}),
       ...(input.about_proposal_id ? { about_proposal_id: input.about_proposal_id } : {}),
+      ...(alsoTo ? { also_to_session_ids: alsoTo } : {}),
       // The collab-note/1 marker (spec 4): reads parse a body only when it is present.
       ...(input.note ? { note: input.note } : {}),
       task_id: input.task_id,
@@ -7600,7 +7645,8 @@ export class CollabStoreCore {
       this.db.query(`INSERT INTO person_addressed_reports (report_id, workspace_id) VALUES (?, ?)`)
         .run(id, session.workspace_id);
     }
-    return this.requireReport(id);
+    const stored = this.requireReport(id);
+    return alsoTo ? { ...stored, also_to_session_ids: alsoTo } : stored;
   }
 
   protected requireReport(id: string): CollabReport {
@@ -9098,8 +9144,89 @@ export function isAddressedTo(event: AddressedEventRow, sessionId: string): bool
     return false;
   }
   if (!isRecordValue(payload)) return false;
-  if (event.type === "report.posted") return payload.to_session_id === sessionId;
+  if (event.type === "report.posted") {
+    return payload.to_session_id === sessionId
+      || (Array.isArray(payload.also_to_session_ids) && payload.also_to_session_ids.includes(sessionId));
+  }
   return isRecordValue(payload.handoff) && payload.handoff.to_session_id === sessionId;
+}
+
+/**
+ * Shared open-table broadcast predicate used by both `agenttool-collab-host wait --addressed --open`
+ * and `collab_inbox` (`include: "open"`). Matches a `report.posted` event from a peer or the
+ * person desk (`session_id: null`) that names no addressee (`to_session_id` / `also_to_session_ids`),
+ * no target report (`target_report_id`), no proposal (`about_proposal_id`), and is not `to_person`.
+ * Never matches an event authored by `sessionId`.
+ */
+export function isOpenTableReport(
+  event: Pick<CollabEvent, "type" | "session_id" | "payload">,
+  sessionId?: string,
+): boolean {
+  if (event.type !== "report.posted") return false;
+  if (sessionId !== undefined && event.session_id === sessionId) return false;
+  const payload = (event.payload ?? {}) as Record<string, unknown>;
+  if (typeof payload.to_session_id === "string" && payload.to_session_id.length > 0) return false;
+  if (Array.isArray(payload.also_to_session_ids) && payload.also_to_session_ids.length > 0) return false;
+  if (typeof payload.target_report_id === "string" && payload.target_report_id.length > 0) return false;
+  if (typeof payload.about_proposal_id === "string" && payload.about_proposal_id.length > 0) return false;
+  if (payload.to_person === true) return false;
+  return true;
+}
+
+function normalizeAlsoToSessionIds(ids: string[] | undefined, primaryTo: string | null): string[] {
+  if (ids === undefined) return [];
+  if (!Array.isArray(ids) || ids.length > MAX_ALSO_TO_SESSIONS) {
+    throw new CollabError(
+      "invalid_also_to_session_ids",
+      `also_to_session_ids must be an array of at most ${MAX_ALSO_TO_SESSIONS} session IDs`,
+    );
+  }
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of ids) {
+    const id = validateId(raw, "also_to_session_ids");
+    if (id === primaryTo || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+const REPORT_HEADER_SUMMARY_MAX = 200;
+
+function firstLineSummary(body: string): string {
+  const firstNonEmpty = body.split(/\r?\n/).map((line) => line.trim()).find((line) => line.length > 0) ?? "";
+  if (firstNonEmpty.length <= REPORT_HEADER_SUMMARY_MAX) return firstNonEmpty;
+  let end = REPORT_HEADER_SUMMARY_MAX;
+  // Never split a UTF-16 surrogate pair.
+  const last = firstNonEmpty.charCodeAt(end - 1);
+  if (last >= 0xd800 && last <= 0xdbff) end -= 1;
+  return `${firstNonEmpty.slice(0, end)}…`;
+}
+
+/** Compact header projection of a CollabReport for opt-in `fields: "headers"` legacy reads. */
+export function toReportHeader(report: CollabReport): CollabReportHeader {
+  return {
+    id: report.id,
+    workspace_id: report.workspace_id,
+    task_id: report.task_id,
+    from_session_id: report.from_session_id,
+    from_actor: report.from_actor,
+    to_session_id: report.to_session_id,
+    ...(report.also_to_session_ids && report.also_to_session_ids.length > 0
+      ? { also_to_session_ids: report.also_to_session_ids }
+      : {}),
+    kind: report.kind,
+    relation: report.relation,
+    target_report_id: report.target_report_id,
+    confidence: report.confidence,
+    evidence_refs: report.evidence_refs,
+    authority_scope: report.authority_scope,
+    created_at: report.created_at,
+    event_sequence: report.event_sequence,
+    summary: firstLineSummary(report.body),
+    body_chars: report.body.length,
+  };
 }
 
 /**
@@ -9328,6 +9455,8 @@ interface PersonPasskeyRow extends Omit<PersonPasskey, "algorithm"> {
 interface ReportInternalInput {
   task_id: string | null;
   to_session_id: string | null;
+  /** Optional additional addressed session IDs (payload-only, at most 8). */
+  also_to_session_ids?: string[];
   kind: ReportKind;
   body: string;
   evidence_refs: string[];

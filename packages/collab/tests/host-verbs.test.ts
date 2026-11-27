@@ -166,7 +166,7 @@ describe("agenttool-collab-host verbs and help", () => {
       "agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]",
       "agenttool-collab-host end --seat-ref <ref> [--seat-ref <ref>...] --reason <text> [--release-leases] [--db <path>]",
       "agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]",
-      "[--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]",
+      "[--wait-ms <ms>] [--include-own] [--addressed [--open]] [--db <path>]",
       "`agenttool-collab-host person`",
       "person-remote`",
     ]) expect(readme).toContain(usage);

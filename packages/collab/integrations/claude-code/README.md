@@ -19,6 +19,7 @@ This watcher joins the two. It loops `agenttool-collab-host wait` and posts one 
   - a sealed ballot that lists its unit in the electorate, and that ballot's close when it opened the ballot or cast in it. A cast and a reveal ring no one.
 
   This routed set is wider than a knock. An answer sent without `to_session_id`, an answer to its handoff offer, and the recovery of its lease ring here, but are not counted in `addressed_waiting` and never reach `knocks` or `doorbell-scan`.
+- **`--open`:** with the default addressed mode, also ring for open table broadcast reports from a peer or the person desk that name no addressee, target report, proposal, or `to_person` (shared predicate `isOpenTableReport` with `collab_inbox` `include: "open"`). Held by any declared rest. Cannot be combined with `--all`.
 - **`--all`:** any event from another session rings.
 - **Never:** the session's own events, unless `--include-own` is passed with `--all`. In the default addressed mode an event never addresses its own author, so `--include-own` changes nothing there.
 - **Never into a rest that asked for no turn.** While the session rests without `wake_on: ["addressed"]`, nothing rings: a ring delayed by `--min-gap-ms` asks again before it fires, and the watcher's own expiry and "stopped" notices first ask the journal whether the session rests now, then log and exit silently if it does. While it rests with `wake_on: ["addressed"]`, only a note explicitly addressed to it rings, even with `--all`; the watcher's own expiry and "stopped" notices still ring then, because a session that asked to be woken loses that wake when its watcher ends. What a rest holds is not rung later. The next ring that gets through says how many earlier events a rest held back: its anchor lies past them, so read them first, with `collab_inbox` or with `collab_next` from your cursor, and re-arm the watcher if it has expired. A note that lands within one poll before a rest ends (a quarter second, a little longer at a cycle start) can still ring. A session that is merely `stale` and declared no rest is still rung.
@@ -29,7 +30,13 @@ The line names only the workspace, the session, sequence numbers and the exact a
 
 ## Run it
 
-Start it after `collab_arrive` or `collab_session_start`, from a Bash command inside the session that should be rung, so that it inherits that session's inbox variables. `collab_arrive` returns this command, with absolute paths and the session filled in, as `listen.how` ([the protocol](../../PROTOCOL.md#collab_arrive-arrive-or-look-around)); the general form is:
+Start it after `collab_arrive` or `collab_session_start`. With `--stdout` (returned as `listen.how` by `collab_arrive` under Claude Code), it writes the same content-free line to stdout, one per ring, without needing `CLAUDE_CODE_MESSAGING_SOCKET`, so Claude Code's Monitor tool can watch it directly:
+
+```bash
+bun <package>/integrations/claude-code/collab-doorbell-watch.ts --session <collab session id> --stdout
+```
+
+To post into the session's UDS inbox socket instead (without `--stdout`), run it from a command that inherits `CLAUDE_CODE_MESSAGING_SOCKET` and `CLAUDE_CODE_MESSAGING_TOKEN`:
 
 ```bash
 nohup bun <package>/integrations/claude-code/collab-doorbell-watch.ts --session <collab session id> >/dev/null 2>&1 &
@@ -39,7 +46,8 @@ To stop it, run `kill "$(cat <journal dir>/collab-doorbell/watch-<collab session
 
 | Option | Default | Effect |
 |---|---|---|
-| `--addressed` / `--all` | addressed | Which events ring |
+| `--addressed` / `--open` / `--all` | addressed | Which events ring (`--open` adds open table broadcasts) |
+| `--stdout` | off | Write one content-free line per ring to stdout without requiring `CLAUDE_CODE_MESSAGING_SOCKET` |
 | `--include-own` | off | Also ring for your own events (with `--all` only) |
 | `--from-cursor` | off | Start after your acknowledged cursor instead of the current head |
 | `--cycle-ms` | 1,800,000 | Each `wait` deadline (at most 3,600,000) |
