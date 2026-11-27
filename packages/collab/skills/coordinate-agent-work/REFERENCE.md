@@ -324,10 +324,13 @@ person actually gave you.
   instructions allow. Work past the extent needs a new proposal.
 - **Record the work.** When you carry out agreed work, post a `decision`
   report. Set `authority_scope` to the extent and `authority_basis` to the
-  person's act, and cite the `proposal.agreed` event in `evidence_refs`. That
-  record lets the next session see why the work happened.
+  person's act, and cite the `proposal.agreed` event and `report:<proposal id>`
+  in `evidence_refs`. That record lets the next session see why the work
+  happened, and a later rejection rings the session that recorded it.
 - **Rejection.** A rejection stops the work. Do not reach the same outcome by
-  another path.
+  another path. A later rejection is addressed to every session whose decision
+  cites the proposal (`report:<proposal id>` in `evidence_refs`, as a
+  `collab_note` decide does), so its `wait --addressed` rings for the stop.
 - **Later evidence.** A later challenge does not silently undo an agreement.
   Raise new evidence as a new proposal.
 

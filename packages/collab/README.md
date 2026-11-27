@@ -821,9 +821,10 @@ flag, capture time, and hashes of the Git index plus the tracked binary diff
 and status-path stream. It also hashes the contents and executable bit of
 non-ignored untracked regular files, plus non-ignored untracked symlink
 targets. Only aggregate digests are journaled; filenames, targets, file
-contents, and diff bytes are not. A task may also require an exact base SHA
-before claim. Use these fields to notice worktree drift between claim,
-completion, and review.
+contents, and diff bytes are not. A task may also require an exact base SHA,
+checked on every claim, every recovery that takes it over and every handoff
+acceptance, not only the first claim. Use these fields to notice worktree drift
+between claim, completion, and review.
 
 A checkpoint is not a commit signature, merge-base analysis, task-scoped diff,
 test result, clean-tree guarantee, attribution proof, or lock. The state digest
@@ -913,8 +914,9 @@ because same-model agents tend to agree with each other. Agreement authorises
 only the `extent`, and never more than the host, the repository's rules or the
 person's other instructions allow. The session that carries out agreed work
 records a `decision` report with that extent as its `authority_scope` and the
-`proposal.agreed` event in its evidence. The agent-facing guidance is in
-`skills/coordinate-agent-work/SKILL.md` ("Decide direction with a person").
+`proposal.agreed` event and `report:<proposal id>` in its evidence. The
+agent-facing guidance is in `skills/coordinate-agent-work/SKILL.md` ("Decide
+direction with a person").
 
 `collab_proposal_open` posts an ordinary `proposal` report with fixed terms:
 `criteria`, `extent` (what agreement would authorise and where it stops),
@@ -1015,7 +1017,10 @@ else repeats. The latest person act decides `person.state`. `may_proceed` is
 `true` only while that act agrees and the proposal is still on the table; it
 authorises only the proposal's `extent`. A later challenge does not silently
 revoke an agreement. `proposal.agreed` and `proposal.rejected` are addressed to
-the author, or for a desk proposal to its consulted voices.
+the author, or for a desk proposal to its consulted voices. A rejection is also
+addressed to every session that recorded a decision citing the proposal before
+it (a `decide` on it does), so that session's `wait --addressed` rings for the
+stop unless it is resting. A session that recorded none is not rung.
 
 Before the person agrees, the desk shows the soft spots the agents' proposal
 views show (the owner's choice of 2026-11-12): awaited voices with no recorded

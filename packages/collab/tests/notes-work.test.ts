@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import { CollabError } from "../src/errors.js";
 import { parseNote } from "../src/note.js";
@@ -685,6 +686,247 @@ describe("refused before anything is written, or not refused at all", () => {
     expect(retry).toMatchObject({ replayed: true, ids: { completion: first.ids.completion } });
     expect(j.count()).toBe(before);
   });
+
+  test("base becomes a new task's expected_base_sha, which its claim checks; a malformed base writes nothing", async () => {
+    const { j, a, sa } = pair(journal({ git: true }));
+    const head = git(j.root, ["rev-parse", "HEAD"]);
+    const plain = await ok(sa, "collab_take", { title: "No base", paths: ["src/a.ts"] });
+    expect(j.store.getTask(a.workspace.id, plain.ids.task).expected_base_sha).toBeNull();
+    expect(Object.hasOwn(plain.task, "base")).toBe(false);
+    const based = await ok(sa, "collab_take", { title: "From here", paths: ["src/b.ts"], base: ` ${head.toUpperCase()} ` });
+    expect(j.store.getTask(a.workspace.id, based.ids.task)).toMatchObject({ expected_base_sha: head, assignee_session_id: a.session.id });
+    expect(based.task).toMatchObject({ base: head, state: "claimed" });
+    // A retry with the same base replays, also once the holder has committed: the base is not checked again.
+    git(j.root, ["commit", "-q", "--allow-empty", "-m", "work"]);
+    const mark = j.count();
+    expect((await ok(sa, "collab_take", { title: "From here", paths: ["src/b.ts"], base: head })).replayed).toBe(true);
+    expect(j.count()).toBe(mark);
+    // A blank base is not given.
+    const blank = await ok(sa, "collab_take", { title: "Blank base", base: "  " });
+    expect(j.store.getTask(a.workspace.id, blank.ids.task).expected_base_sha).toBeNull();
+    // Malformed: refused with a remedy before anything is written.
+    for (const base of ["abc123", "g".repeat(40), "a".repeat(65), 7]) {
+      const before = j.count();
+      const refusal = await refused(sa, "collab_take", { title: "Bad base", base });
+      expect(refusal.code).toBe("invalid_base");
+      expect(refusal.remedy.say).toContain("git rev-parse HEAD");
+      expect(j.count()).toBe(before);
+    }
+    // With task, base is not used and says so.
+    await ok(sa, "collab_done", { text: "Giving it back.", outcome: "released", task: plain.ids.task });
+    const retaken = await ok(sa, "collab_take", { task: plain.ids.task, base: head });
+    expect(retaken.advice).toContain("base applies only to a new task (title); the task keeps its own base.");
+    expect(j.store.getTask(a.workspace.id, plain.ids.task).expected_base_sha).toBeNull();
+  }, 20_000);
+
+  test("a base that is not the worktree's HEAD is refused before the task is created", async () => {
+    const { j, a, sa } = pair(journal({ git: true }));
+    const head = git(j.root, ["rev-parse", "HEAD"]);
+    const elsewhere = "0".repeat(40);
+    const before = j.count();
+    const mismatch = await refused(sa, "collab_take", { title: "From elsewhere", paths: ["src/c.ts"], base: elsewhere });
+    expect(mismatch).toMatchObject({ code: "expected_base_mismatch", expected_base_sha: elsewhere, observed_head_sha: head });
+    expect(mismatch.message).toContain(`would start from ${elsewhere}`);
+    expect(mismatch.message).toContain("Nothing was written.");
+    expect(mismatch.remedy.say).toContain(`Check out ${elsewhere}`);
+    expect(mismatch.remedy.say).toContain(`give base ${head}`);
+    expect(mismatch.recorded_steps).toBeUndefined();
+    expect(j.count()).toBe(before);
+    expect(j.store.listTasks(a.workspace.id)).toHaveLength(0);
+    // Corrected, the same call leaves one task, not one for each try.
+    await ok(sa, "collab_take", { title: "From elsewhere", paths: ["src/c.ts"], base: head });
+    expect(j.store.listTasks(a.workspace.id)).toHaveLength(1);
+  }, 20_000);
+
+  test("where no HEAD is observed, a base is refused with the same call without it, and nothing is written", async () => {
+    const outside = pair();
+    const unborn = journal();
+    git(unborn.root, ["init", "-q"]);
+    for (const { j, sa: server } of [outside, pair(unborn)]) {
+      const before = j.count();
+      const refusal = await refused(server, "collab_take", {
+        title: "No commits here", paths: ["src/a.ts"], purpose: "try it", review: "none", base: "a".repeat(40),
+      });
+      expect(refusal).toMatchObject({ code: "expected_base_mismatch", observed_head_sha: null });
+      expect(refusal.message).toContain("Leave base out");
+      expect(refusal.remedy).toEqual({
+        tool: "collab_take",
+        input: { title: "No commits here", paths: ["src/a.ts"], purpose: "try it", review: "none" },
+      });
+      expect(j.count()).toBe(before);
+      expect((await ok(server, "collab_take", refusal.remedy.input)).task.state).toBe("claimed");
+    }
+  }, 20_000);
+
+  test("the key holds the base: the same take from another base, or without one, is another task", async () => {
+    const { j, a, sa } = pair(journal({ git: true }));
+    const first = git(j.root, ["rev-parse", "HEAD"]);
+    const one = await ok(sa, "collab_take", { title: "Same words", base: first });
+    git(j.root, ["commit", "-q", "--allow-empty", "-m", "moved on"]);
+    const second = git(j.root, ["rev-parse", "HEAD"]);
+    const two = await ok(sa, "collab_take", { title: "Same words", base: second });
+    const three = await ok(sa, "collab_take", { title: "Same words" });
+    expect([one, two, three].map((take) => [take.replayed, j.store.getTask(a.workspace.id, take.ids.task).expected_base_sha]))
+      .toEqual([[undefined, first], [undefined, second], [undefined, null]]);
+    expect(new Set([one, two, three].map((take) => take.ids.task)).size).toBe(3);
+  }, 20_000);
+
+  test("a ready retry of a take keeps its base", async () => {
+    const { j, sa } = pair(journal({ git: true }));
+    const head = git(j.root, ["rev-parse", "HEAD"]);
+    (j.store as any).claimTaskForSession = () => {
+      throw new CollabError("version_conflict", "Task changed since it was read", { expected_version: 1, current_version: 2 });
+    };
+    const input = { title: "Overtaken", paths: ["src/a.ts"], purpose: "try it", review: "none", base: head };
+    const refusal = await refused(sa, "collab_take", input);
+    expect(refusal.code).toBe("changed_under_you");
+    expect(refusal.remedy).toEqual({ tool: "collab_take", input });
+  }, 20_000);
+
+  test("when HEAD moves between the check and the claim, the task is left open and its remedy takes it", async () => {
+    const { j, a, sa } = pair(journal({ git: true }));
+    const head = git(j.root, ["rev-parse", "HEAD"]);
+    const create = j.store.createTaskForSession.bind(j.store);
+    (j.store as any).createTaskForSession = (input: any) => {
+      const created = create(input);
+      git(j.root, ["commit", "-q", "--allow-empty", "-m", "moved on"]);
+      return created;
+    };
+    const take = async (title: string, path: string) => {
+      const input = { title, paths: [path], base: head };
+      const refusal = await refused(sa, "collab_take", input);
+      const moved = git(j.root, ["rev-parse", "HEAD"]);
+      expect(refusal).toMatchObject({ code: "expected_base_mismatch", expected_base_sha: head, observed_head_sha: moved });
+      expect(refusal.message).toContain(`starts from ${head}, and the HEAD of your session's worktree is ${moved}.`);
+      const [step] = refusal.recorded_steps;
+      expect(j.store.getTask(a.workspace.id, step.id)).toMatchObject({ status: "open", expected_base_sha: head });
+      expect(refusal.recorded_steps).toEqual([{ step: 1, what: `task ${step.id}, created and open`, id: step.id }]);
+      expect(refusal.remedy.say).toContain(`Check out ${head} in your session's worktree, then take ${step.id} again`);
+      git(j.root, ["checkout", "-q", head]);
+      return { input, id: step.id as string };
+    };
+    // Once the worktree is at the base, the task can be taken by its id, as the remedy says, or by the same call.
+    const byId = await take("Taken by id", "src/d.ts");
+    expect((await ok(sa, "collab_take", { task: byId.id })).task).toMatchObject({ id: byId.id, state: "claimed", base: head });
+    const bySameCall = await take("Taken by the same call", "src/e.ts");
+    expect((await ok(sa, "collab_take", bySameCall.input)).task).toMatchObject({ id: bySameCall.id, state: "claimed", base: head });
+  }, 20_000);
+
+  /** A git journal with a session that commits: its base, a commit, and a task by id. */
+  function committing() {
+    const made = pair(journal({ git: true }));
+    const { j, a } = made;
+    return {
+      ...made,
+      base: git(j.root, ["rev-parse", "HEAD"]),
+      commit() {
+        git(j.root, ["commit", "-q", "--allow-empty", "-m", "work"]);
+        return git(j.root, ["rev-parse", "HEAD"]);
+      },
+      task: (id: string) => j.store.getTask(a.workspace.id, id),
+    };
+  }
+
+  test("after a commit, retaking a released task or accepting its handoff still checks the base, and the remedy never moves HEAD off commits", async () => {
+    const { j, a, b, sa, base, commit, task } = committing();
+    const released = await ok(sa, "collab_take", { title: "Given back", paths: ["src/a.ts"], base });
+    const afterOne = commit();
+    await ok(sa, "collab_done", { text: "Giving it back.", outcome: "released", task: released.ids.task });
+    const before = j.count();
+    const retake = await refused(sa, "collab_take", { task: released.ids.task });
+    expect(retake).toMatchObject({ code: "expected_base_mismatch", expected_base_sha: base, observed_head_sha: afterOne });
+    expect(retake.message).toContain(`base is fixed at ${base}`);
+    expect(retake.remedy.say).not.toMatch(/Check out/);
+    expect(retake.remedy.say).toContain(`git worktree add --detach <path> ${base}`);
+    expect(retake.remedy.say).toContain(`base ${afterOne}`);
+    expect(retake.remedy.say).not.toContain("collab_task_recover");
+    expect(retake.next).toEqual({ tool: "collab_take", input: { task: released.ids.task } });
+    expect(j.count()).toBe(before);
+    expect(task(released.ids.task).status).toBe("open");
+    // Open work reserves no paths: a new task from here is taken as the remedy offers.
+    await ok(sa, "collab_take", { title: "From here", paths: ["src/a.ts"], base: afterOne });
+
+    // A handoff is checked at acceptance too.
+    const handed = await ok(sa, "collab_take", { title: "Handed over", base: afterOne });
+    const offer = j.store.offerHandoffForSession({
+      ...a.credential, idempotency_key: "offer", task_id: handed.ids.task, lease_id: task(handed.ids.task).lease_id!,
+      expected_version: task(handed.ids.task).version, to_session_id: b.session.id, summary: "Yours.",
+    });
+    commit();
+    const accept = () => j.store.respondHandoffForSession({
+      ...b.credential, idempotency_key: "accept", handoff_id: offer.handoff.id, response: "accept",
+      expected_version: task(handed.ids.task).version,
+    });
+    expect(accept).toThrow("does not match the task's required base");
+  }, 20_000);
+
+  test("after a commit, recovering a lapsed task still checks the base; the remedy keeps because, and both ways out work", async () => {
+    const { j, sa, base, commit, task } = committing();
+    // The holder's own recovery, with its because kept in the suggested call.
+    const lapsed = await ok(sa, "collab_take", { title: "Left behind", paths: ["src/b.ts"], base });
+    const committed = commit();
+    j.advance(7 * 60 * 60 * 1000);
+    expect(task(lapsed.ids.task).effective_status).toBe("recovery_required");
+    const before = j.count();
+    const because = "I was away for seven hours; my commit is on this branch.";
+    const recovery = await refused(sa, "collab_take", { task: lapsed.ids.task, because });
+    expect(recovery).toMatchObject({ code: "expected_base_mismatch", expected_base_sha: base, observed_head_sha: committed });
+    expect(recovery.next).toEqual({ tool: "collab_take", input: { task: lapsed.ids.task, because } });
+    expect(recovery.remedy.say).toContain(`git worktree add --detach <path> ${base}`);
+    expect(recovery.remedy.say).toContain("collab_task_recover with action release");
+    expect(task(lapsed.ids.task).effective_status).toBe("recovery_required");
+    expect(j.count()).toBe(before);
+    // The lapsed hold does reserve its paths, as the remedy says.
+    const reserved = await refused(sa, "collab_take", { title: "Instead", paths: ["src/b.ts"], base: committed });
+    expect(reserved.code).toBe("path_scope_conflict");
+    // The call in next, sent from a session in a worktree at the base, recovers it.
+    const linked = join(j.directory, "linked");
+    git(j.root, ["worktree", "add", "-q", "--detach", linked, base]);
+    const c = j.start("charlie", { root_path: linked });
+    const sc = j.serve(c);
+    expect((await ok(sc, recovery.next.tool, recovery.next.input)).task).toMatchObject({ id: lapsed.ids.task, state: "claimed" });
+    expect(task(lapsed.ids.task).assignee_session_id).toBe(c.session.id);
+    // Once held, HEAD may move on, and the hold ends as any other does.
+    git(linked, ["checkout", "-q", "--detach", committed]);
+    await ok(sc, "collab_done", { text: "Giving it back.", outcome: "released", task: lapsed.ids.task });
+
+    // The other way out: release the lapsed hold, which checks no base, and take new work from here.
+    const again = await ok(sc, "collab_take", { title: "Left behind again", paths: ["src/b.ts"], base: committed });
+    git(linked, ["commit", "-q", "--allow-empty", "-m", "more"]);
+    j.advance(7 * 60 * 60 * 1000);
+    j.store.recoverTaskForSession({
+      ...c.credential, idempotency_key: "free", task_id: again.ids.task, expected_version: task(again.ids.task).version,
+      recovery_note: "My commits stand; starting a new task from them.", action: "release",
+    });
+    await ok(sc, "collab_take", { title: "Instead", paths: ["src/b.ts"], base: git(linked, ["rev-parse", "HEAD"]) });
+  }, 20_000);
+
+  test("base reaches the verb through the registered schema, as a real client's call does", async () => {
+    const { j, a, sa } = pair(journal({ git: true }));
+    const head = git(j.root, ["rev-parse", "HEAD"]);
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    const answers = new Map<number, (message: any) => void>();
+    clientSide.onmessage = (message: any) => answers.get(message.id)?.(message);
+    await sa.connect(serverSide);
+    await clientSide.start();
+    const request = (id: number, method: string, params: Record<string, unknown>) =>
+      new Promise<any>((resolve) => {
+        answers.set(id, resolve);
+        void clientSide.send({ jsonrpc: "2.0", id, method, params });
+      });
+    const take = async (id: number, input: Record<string, unknown>) =>
+      (await request(id, "tools/call", { name: "collab_take", arguments: input })).result;
+    try {
+      await request(1, "initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "notes-work-test", version: "0.0.0" } });
+      await clientSide.send({ jsonrpc: "2.0", method: "notifications/initialized", params: {} });
+      const taken = await take(2, { title: "Over the wire", paths: ["src/a.ts"], base: head });
+      expect(taken.isError).toBeUndefined();
+      expect(j.store.getTask(a.workspace.id, taken.structuredContent.ids.task).expected_base_sha).toBe(head);
+      expect((await take(3, { title: "Elsewhere", base: "0".repeat(40) })).structuredContent.code).toBe("expected_base_mismatch");
+    } finally {
+      await sa.close();
+    }
+  }, 20_000);
 
   test("a take over paths you already hold says to finish or release that hold, not to ask yourself", async () => {
     const { j, sa } = pair();

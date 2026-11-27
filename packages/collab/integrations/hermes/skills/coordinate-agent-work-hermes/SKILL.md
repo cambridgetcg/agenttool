@@ -301,8 +301,9 @@ Relay only a rejection the person actually gave.
 - It never widens what Hermes's permissions, the repository or the person's
   other instructions allow.
 - Record agreed work as a `decision` report: `authority_scope` is the extent,
-  `authority_basis` is the person's act, and the `proposal.agreed` event goes
-  in `evidence_refs`.
+  `authority_basis` is the person's act, and the `proposal.agreed` event and
+  `report:<proposal id>` go in `evidence_refs`, so a later rejection rings the
+  session that recorded it.
 - A rejection stops the work by every path.
 - An agreed reading of a principle is a precedent, binding on nothing.
 

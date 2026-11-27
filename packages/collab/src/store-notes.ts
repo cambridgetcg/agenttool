@@ -474,6 +474,20 @@ export class CollabStore extends CollabStoreCore {
   }
 
   /**
+   * The refusal a claim would make of a new task with this base: the
+   * session's worktree HEAD, observed as the claim observes it, with the
+   * claim's code and details. collab_take calls it before it creates the
+   * task, so a base that cannot match leaves no open task behind. Read-only;
+   * the claim checks again, so this decides nothing on its own.
+   */
+  noteBasePrecheck(
+    credential: { session_id: string; session_token: string; generation: number },
+    base: string,
+  ): void {
+    this.requireExpectedBase({ expected_base_sha: base }, this.captureSessionWorktree(credential).checkpoint);
+  }
+
+  /**
    * The cheap refusals completeTaskForSession would make for this caller,
    * task, journal evidence and requested reviewer, thrown with the same
    * codes and messages. collab_done finished calls it before its first
