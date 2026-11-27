@@ -74,6 +74,13 @@ and Dark Continent changes in more detail.
   object's `content`, `type`, `metadata` and `importance` are `undefined`
   even though the `Memory` type declares them. Use the values you passed in.
 
+### Deprecated
+
+- `economy.fund_wallet` (2026-10-26): AgentTool closed
+  `POST /v1/wallets/:id/fund`. From the API release that closes it, the call
+  throws an `AgentToolError` with code `wallet_fund_closed` (HTTP 410) and no
+  balance moves. The method stays, marked `@deprecated`.
+
 ### Added
 
 - `at.exitDoor` (`ExitDoorClient`) copies the hosted continuity core into an
