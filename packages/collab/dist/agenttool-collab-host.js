@@ -3549,7 +3549,7 @@ class CollabStoreCore {
       LEFT JOIN repository_discovery d ON d.worktree_id = w.id AND d.fingerprint = w.fingerprint
       WHERE d.worktree_id IS NULL AND w.repository_key LIKE 'local-git:%'
       ORDER BY w.id
-    `).iterate();
+    `).all();
     const prepared = [];
     for (const row of rows) {
       const key = this.discoverRepositoryKey(budget, (options) => {

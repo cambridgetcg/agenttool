@@ -1617,12 +1617,15 @@ export class CollabStoreCore {
   }
 
   private prepareRepositoryAliases(budget: { deadline?: number }): Array<{ row: WorktreeRow; key: string | null }> {
+    // Read every row first: a statement left open by the break below would hold
+    // this connection's read snapshot, and the BEGIN IMMEDIATE that follows then
+    // fails at once with SQLITE_BUSY_SNAPSHOT once another process has written.
     const rows = this.db.query(`
       SELECT w.* FROM worktrees w
       LEFT JOIN repository_discovery d ON d.worktree_id = w.id AND d.fingerprint = w.fingerprint
       WHERE d.worktree_id IS NULL AND w.repository_key LIKE 'local-git:%'
       ORDER BY w.id
-    `).iterate() as IterableIterator<WorktreeRow>;
+    `).all() as WorktreeRow[];
     const prepared: Array<{ row: WorktreeRow; key: string | null }> = [];
     for (const row of rows) {
       const key = this.discoverRepositoryKey(budget, options => {
