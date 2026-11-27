@@ -217,6 +217,9 @@ describe("the emergency stop", () => {
       fleet.hub.answers.push("yes");
       const refused = await fleet.hub.run(...argv);
       expect({ argv, code: refused.code, stopped: refused.stderr.includes("hub_stopped") }).toEqual({ argv, code: 1, stopped: true });
+      expect(refused.stderr).toContain("Rotate the API key that issued the lobby grants");
+      expect(refused.stderr).toContain("bearer is in this hub's Keychain");
+      expect(refused.stderr).not.toContain("lobby-issuer");
     }
     // A second stop with --include-adopted revokes the hand-made season too.
     fleet.hub.answers.length = 0;

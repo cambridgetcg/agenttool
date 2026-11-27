@@ -33,7 +33,7 @@ export interface World {
   clock: Clock;
   hosted: FakeHosted;
   /** A desk; `of` reuses another desk's home and Keychain (same device, another runner). */
-  desk: (name: string, options?: { noTerminal?: boolean; noNetwork?: boolean; of?: Desk }) => Desk;
+  desk: (name: string, options?: { noTerminal?: boolean; noNetwork?: boolean; of?: Desk; deviceTerms?: string[] }) => Desk;
   advance: (ms: number) => void;
 }
 
@@ -70,7 +70,7 @@ export function world(): World {
           },
           ...(options.noNetwork ? {} : { fetchImpl: hosted.fetch }),
           keychain,
-          deviceTerms: DEVICE_TERMS,
+          deviceTerms: options.deviceTerms ?? DEVICE_TERMS,
         });
         return { code, stdout: out.join(""), stderr: err.join("") };
       };
