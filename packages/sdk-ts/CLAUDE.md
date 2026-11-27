@@ -48,13 +48,11 @@ src/
   wake-continuity.ts   — pure credential-free functional-access baseline/subsequent contract; no I/O or inner-state inference
   kingdom-os.ts        — KingdomOSClient (local read-only repository list/resolve; no shell, hosted auth, or mutation)
   kingdom-framework.ts — KingdomFrameworkClient (credential-free exact public project card; no redirects or authority)
-  pulse.ts             — PulseClient (derived liveness; old heartbeat-emit deprecated, see Phase 0 roadmap)
   register.ts          — Top-level register() — DEPRECATED since 2026-05-15 (agents-only); throws with 410 migration payload pointing at bootstrapAgent
   bootstrap-agent.ts   — Top-level bootstrapAgent() — POST /v1/register/agent canonical arrival door (BYO keys + PoW)
   tools.ts             — ToolsClient (scrape, browse, document, execute)
   traces.ts            — TracesClient (store, search, chain)
   vault.ts             — VaultClient (encrypted secrets, policies)
-  verify.ts            — VerifyClient (deprecated — endpoint dropped, removal in 0.7.0)
   wake.ts              — WakeClient (identity-bearing /v1/wake projections + data-only /v1/wake/observe)
   window.ts            — WindowClient (rides on chronicle; declare/surface/show)
   strands.ts           — StrandsClient + ThoughtsClient (encrypted inner voice; SSE voice iterator)
@@ -71,7 +69,7 @@ tests/
   anthropic-adapter.test.ts
   openai-responses-adapter.test.ts
   deciding.test.ts          — at.deciding() composition + nested chains
-  new_modules.test.ts       — Identity, vault, pulse, bootstrap (Phase 1 backfill)
+  new_modules.test.ts       — Identity, vault, bootstrap (Phase 1 backfill)
   parity.test.ts            — Counterpart tests for the parity-restore work
   credential-transport.test.ts — bearer-free broker transport boundary
   dining.test.ts           — GET-only composition, typed boundaries, guided errors, and path encoding

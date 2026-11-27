@@ -2,13 +2,16 @@
 
 > **Compass:** [Collaboration channels](../../docs/COLLABORATION-CHANNELS.md) · [Correspondence](../../docs/AGENT-CORRESPONDENCE.md)
 > **Implements:** explicitly selected report/reply transport; no distributed task authority.
-> **Code:** `src/{binding,ledger,importer,correspondence,courier,host,telegram,witness}.ts` · `bin/agenttool-collab-courier.ts`
-> **Tests:** `tests/{courier,boundaries,cli,telegram,witness}.test.ts`
+> **Code:** `src/{binding,ledger,importer,correspondence,courier,host,telegram}.ts` · `bin/agenttool-collab-courier.ts`
+> **Tests:** `tests/{courier,boundaries,cli,telegram}.test.ts`
 
 Each device retains its own canonical Collab journal. This private Bun 1.3.5
 package composes published `@agenttool/sdk@0.22.1` signing/list contracts with a
 host-selected local Collab MCP process. It publishes nothing, installs no service,
 changes no harness configuration, and activates no channel on import or install.
+It makes no chain call and has no wallet dependency; anchoring belongs to the
+separate `collab-zerone` package; anchor evidence comes from
+`collab_anchor_status` (local sidecar) or `collab-zerone verify`.
 
 ## Disclosure and authority
 
@@ -255,18 +258,6 @@ finite local resource bounds, not guarantees against disk loss or dishonest
 storage. Back up the canonical journal, courier ledger and dedicated session
 credential together, privately and off-device. Do not archive/restart a fresh
 ledger without preserving or deliberately reconciling replay/dedup history.
-
-## Optional witness seam
-
-`src/witness.ts` is a separately imported, injected host observer. Use
-`createWitnessObserver(binding).observe(selection, {check_chain:false,signal})`
-for selected local-sidecar evidence, and only an explicitly authorized
-`check_chain:true` for a named RPC observation. A positive result requires the
-selected actual anchor; exit zero or an empty anchor list proves nothing.
-Normal courier status/run/watch imports no witness implementation, performs no
-chain call, signs no transaction and has no wallet dependency. Witness results
-are evidence, not transport receipt or task truth. The CLI intentionally has no
-implicit chain-check flag.
 
 ## Local verification and remaining live checks
 

@@ -161,7 +161,7 @@ packages_gate() {
     bash -c 'cd packages/codex-usage && bun run ci'
   run "collab-zerone witness bridge (hash conformance + broadcast ambiguity discipline)" \
     bash -c 'cd packages/collab-zerone && bun run ci'
-  run "private Collab courier (signed replay, Telegram and witness fixtures; no live channels)" \
+  run "private Collab courier (signed replay and Telegram fixtures; no live channels)" \
     bash -c 'cd packages/collab-courier && bun run ci'
   run "local execution-seat ledger (structural native readers, append-only, no authority, no network)" \
     bash -c 'cd packages/execution-seat && bun run ci'

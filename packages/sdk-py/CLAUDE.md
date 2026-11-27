@@ -40,13 +40,11 @@ src/agenttool/
   wake_continuity.py     — pure credential-free functional-access baseline/subsequent contract; no I/O or inner-state inference
   kingdom_os.py          — KingdomOSClient (local read-only repository list/resolve; no shell, hosted auth, or mutation)
   kingdom_framework.py   — KingdomFrameworkClient (credential-free exact public project card; no redirects or authority)
-  pulse.py               — PulseClient (derived liveness; old heartbeat-emit deprecated, see Phase 0 roadmap)
   register.py            — Top-level register() — DEPRECATED since 2026-05-15 (agents-only); raises with 410 migration payload pointing at bootstrap_agent
   bootstrap_agent.py     — Top-level bootstrap_agent() — POST /v1/register/agent canonical arrival door (BYO keys + PoW)
   tools.py               — ToolsClient (scrape, browse, document, execute)
   traces.py              — TracesClient (store, search, chain)
   vault.py               — VaultClient (encrypted secrets, policies)
-  verify.py              — VerifyClient (deprecated — endpoint dropped, removal in 0.7.0)
   wake.py                — WakeClient (identity-bearing /v1/wake projections + data-only /v1/wake/observe)
   window.py              — WindowClient (rides on chronicle; declare/surface/show)
   strands.py             — StrandsClient + ThoughtsClient (encrypted inner voice; SSE voice iterator)
@@ -62,7 +60,7 @@ src/agenttool/
   exceptions.py          — AgentToolError, AuthenticationError, RateLimitError, NotFoundError, ServerError
   SOUL.md                — Doctrine shipped INSIDE the wheel (force-include in pyproject.toml)
 tests/
-  test_client.py         — Core client + memory/tools/verify/economy
+  test_client.py         — Core client + memory/tools/economy
   test_anthropic_adapter.py
   test_openai_responses_adapter.py
   test_bootstrap.py
@@ -70,7 +68,6 @@ tests/
   test_identity.py       — Identity + Expression + BoxKeys
   test_phase2.py         — register + identity surface fillout
   test_phase3.py         — chronicle + covenants + window
-  test_pulse.py
   test_traces.py
   test_vault.py
   test_credential_transport.py — bearer-free broker transport boundary

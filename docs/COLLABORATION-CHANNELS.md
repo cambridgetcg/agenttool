@@ -10,7 +10,7 @@
 >
 > **Code:** `packages/collab/src/mcp.ts` · `packages/collab/src/store.ts` · `packages/collab/src/store-notes.ts` · `packages/collab/src/repository.ts` · `packages/collab/src/anchor-status.ts` · `packages/collab-courier/src/` · `packages/collab-courier/bin/agenttool-collab-courier.ts` · `packages/sdk-ts/src/correspondence.ts` · `api/src/services/correspondence/` · `api/src/services/wake/push.ts` · `packages/collab-zerone/src/`.
 >
-> **Tests:** `packages/collab/tests/events-wait.test.ts` · `packages/collab/tests/mcp.test.ts` · `packages/collab/tests/v2.test.ts` · `packages/collab/tests/anchor-status.test.ts` · `packages/collab-courier/tests/courier.test.ts` · `packages/collab-courier/tests/boundaries.test.ts` · `packages/collab-courier/tests/cli.test.ts` · `packages/collab-courier/tests/telegram.test.ts` · `packages/collab-courier/tests/witness.test.ts` · `packages/sdk-ts/tests/correspondence.test.ts` · `api/tests/agent-correspondence-spec.test.ts` · `packages/collab-zerone/tests/cli.test.ts` · `packages/collab-zerone/tests/alias.test.ts` (source tests, not a final gate or live verification receipt).
+> **Tests:** `packages/collab/tests/events-wait.test.ts` · `packages/collab/tests/mcp.test.ts` · `packages/collab/tests/v2.test.ts` · `packages/collab/tests/anchor-status.test.ts` · `packages/collab-courier/tests/courier.test.ts` · `packages/collab-courier/tests/boundaries.test.ts` · `packages/collab-courier/tests/cli.test.ts` · `packages/collab-courier/tests/telegram.test.ts` · `packages/sdk-ts/tests/correspondence.test.ts` · `api/tests/agent-correspondence-spec.test.ts` · `packages/collab-zerone/tests/cli.test.ts` · `packages/collab-zerone/tests/alias.test.ts` (source tests, not a final gate or live verification receipt).
 
 ## Status and scope
 
@@ -41,8 +41,8 @@ rest, three proposal consent tools and the eight [Collab Notes](../packages/coll
 verbs (45 tools in the full profile); verify the protected receipt and registry
 separately. The private
 **`@agenttool/collab-courier@0.1.0-dev.0`** remains version-unchanged and now has
-an implemented CLI, host transport, durable ledger/importer, Telegram adapter,
-and a separately callable witness observer. Its
+an implemented CLI, host transport, durable ledger/importer, and Telegram
+adapter. Its
 [README](../packages/collab-courier/README.md) and
 [disabled example profile](../packages/collab-courier/examples/profile.disabled.json)
 are the runnable-source references, not enrolled configuration.
@@ -389,36 +389,20 @@ identifiers. Even digest commitments and metadata require disclosure review.
 No normal courier loop or human reply automatically signs, anchors, spends a
 fee, pays a participant, settles a task, or rebroadcasts an uncertain attempt.
 
-**Source-candidate observer:**
-`packages/collab-courier/src/witness.ts` exports `createWitnessObserver` as a
-separately imported, host-bound API. Its `observe(selection, options)` defaults
-to local-sidecar evidence; only explicit `check_chain: true` requests the
-separately authorized read-only RPC observation. The host selects the exact
-anchor, CLI/runtime, database/ledger, node, observer name, and finite process
-bounds. The wire is the existing `collab-zerone` `verify` CLI, adding
-`--check-chain` only for that separate observer call. The observer still
-accepts only legacy 0.1 selections, so a 0.2 anchor returns
-`invalid_selection`; that is a fail-closed gap, not evidence about the anchor.
-
-**The courier's `status`, `select`, `run-once`, and `watch` do not import this
-observer and expose no witness/chain-check flag.** A host must compose it
-separately; no witness feedback projection is automatically sent to Telegram
-or Correspondence.
-
-A positive remote observation requires the selected actual anchor, matching
-returned transaction hash, explicit successful transaction code, valid positive
-height, exact memo, and valid local prefix. `network_source: "host_binding"`
-identifies the network label as host configuration, not an independently
-verified RPC chain ID.
-Exit zero or an empty anchor list proves nothing. Missing/malformed evidence
-must remain unknown rather than default to success. Independent offline probes
-verified rejection of forged Bun preloads, oversized nested query output, and
-missing/wrong returned transaction hashes, plus cancellation of query descendants.
-These fixture observations are not live chain verification. A named RPC
-observer's response is **not a trustless light-client
-proof**, truth of report content, identity proof, consent, review acceptance,
-payment, or settlement evidence. Keep observer, scope, and observation time
-visible rather than calling stored local status a fresh chain verification.
+**The courier carries no witness code.** Its `status`, `select`, `run-once`,
+and `watch` expose no witness or chain-check flag, and no witness result is
+sent to Telegram or Correspondence. A host that wants anchor evidence asks for
+it separately: `collab_anchor_status` for the local sidecar, or
+`collab-zerone verify`, adding `--check-chain` only for an explicitly
+authorized read-only RPC observation. A zero exit with an empty anchor list is
+only an empty check, not evidence for a selected transaction; missing or
+malformed evidence stays unknown. A named RPC observer's
+response is **not a trustless light-client proof**, truth of report content,
+identity proof, consent, review acceptance, payment, or settlement evidence.
+Keep observer, scope, and observation time visible rather than calling stored
+local status a fresh chain verification. An earlier courier observer that
+nothing imported, and that accepted only legacy 0.1 selections, was removed
+on 2026-11-23; it is in git history at or before `e8537234`.
 
 ## Evidence and remaining gaps
 
@@ -429,9 +413,9 @@ The source files and tests now exist; they are not planned/absent placeholders:
 | Exact setup, CLI, bounds, retention, and disabled template | [Courier README](../packages/collab-courier/README.md) · [profile.disabled.json](../packages/collab-courier/examples/profile.disabled.json) |
 | Private profile, delivery state, and stable session import | `packages/collab-courier/src/binding.ts` · `packages/collab-courier/src/ledger.ts` · `packages/collab-courier/src/importer.ts` |
 | Exact signed wire, finite runner, and transport | `packages/collab-courier/src/correspondence.ts` · `packages/collab-courier/src/courier.ts` · `packages/collab-courier/src/host.ts` · `packages/collab-courier/bin/agenttool-collab-courier.ts` |
-| Telegram and separate witness observer | `packages/collab-courier/src/telegram.ts` · `packages/collab-courier/src/witness.ts` |
+| Telegram adapter | `packages/collab-courier/src/telegram.ts` |
 | Offline two-store/reply, crash, disclosure, authorization, and CLI tests | `packages/collab-courier/tests/courier.test.ts` · `packages/collab-courier/tests/boundaries.test.ts` · `packages/collab-courier/tests/cli.test.ts` |
-| Telegram ownership/offset/ambiguity and witness tests | `packages/collab-courier/tests/telegram.test.ts` · `packages/collab-courier/tests/witness.test.ts` · `packages/collab-zerone/tests/zeroned.test.ts` · `packages/collab-zerone/tests/cli.test.ts` |
+| Telegram ownership/offset/ambiguity and witness tests | `packages/collab-courier/tests/telegram.test.ts` · `packages/collab-zerone/tests/zeroned.test.ts` · `packages/collab-zerone/tests/cli.test.ts` |
 | Native receive and wait | `packages/collab/tests/events-wait.test.ts` · `packages/collab/tests/mcp.test.ts` · [OpenClaw example](../packages/collab/integrations/openclaw/README.md) |
 
 Historical implementation-checkpoint credential-empty **Bun 1.3.5** gates,
@@ -466,8 +450,8 @@ Remaining gaps and deliberate limits against the approved plan are explicit:
 - **Telegram runner uses bounded polling, not long polling.** Its admission,
   offset persistence, and finite watch do not establish live receiver ownership
   or guarantee catch-up after Telegram's update-retention window.
-- **Witness is a separate host API, not an integrated courier CLI/status lane.**
-  A selected observer result is not automatically exported or acknowledged.
+- **Witness stays outside the courier.** The courier has no witness CLI/status
+  lane; a `collab-zerone` result is not automatically exported or acknowledged.
 - **OpenClaw has connection guidance, not a native lifecycle adapter.** The
   selected MCP adapter and all four native hosts' actual reception remain
   unexercised here; suspended-harness wake is not supplied.

@@ -6,7 +6,7 @@ Infrastructure config for the live platform: live deploy targets and the configu
 
 | Layer | Where | Notes |
 |---|---|---|
-| **API** (`api/` monolith) | Fly.io · `agenttool` app · `lhr×2 + cdg×1` | Single Bun + Hono process; deploy with `bin/deploy.sh --no-migrate --no-frontend` so doctrine bytes are staged. Config: `api/fly.toml` (canonical) · `infra/fly/agenttool.toml` (snapshot mirror). |
+| **API** (`api/` monolith) | Fly.io · `agenttool` app · `lhr×2 + cdg×1` | Single Bun + Hono process; deploy with `bin/deploy.sh --no-migrate --no-frontend` so doctrine bytes are staged. Config: `api/fly.toml`. |
 | **Postgres** | Supabase · eu-west-2 (AWS London) | Pooler: `aws-1-eu-west-2.pooler.supabase.com`. Session pooler (5432) for local dev / migrations; transaction pooler (6543) for prod Fly secret. |
 | **Redis** | Hosted (BullMQ + Hono SSE) | Used by browse worker + strand-voice + inbox-push fanout. |
 | **Frontend** | Cloudflare Pages · 3 projects (Direct Upload) | `apps/dashboard` → app.agenttool.dev · `apps/docs` → docs.agenttool.dev · `apps/web` → agenttool.dev human routes. Deploy: `bin/frontend-deploy.sh`; `infra/pages/` supplies the shared sensitive-path fence. |
@@ -18,8 +18,6 @@ The legacy `agent-*` per-service apps (bootstrap, economy, identity, memory, pul
 
 ```
 infra/
-  fly/                  — Fly.io config snapshots (active deploy: api/fly.toml)
-    agenttool.toml      — Mirror of api/fly.toml (snapshot only)
   cloudflare/           — Secret-free bounded zone desired state; read-only audit input
   pages/                — Shared Pages Worker + route-complete invocation policy
   README.md             — This file
