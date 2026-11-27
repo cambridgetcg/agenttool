@@ -28,12 +28,15 @@ import { parseClonedJson } from "../lib/cloned-json";
 
 const SUPPRESSED_FIELDS = ["_jest", "_quip", "substrate_jest"] as const;
 
+export function isPlayOffHeader(header: string | undefined | null): boolean {
+  if (!header) return false;
+  const lower = header.toLowerCase().trim();
+  return lower === "off" || lower === "0" || lower === "false" || lower === "no";
+}
+
 function readPlayPreference(c: Context): "on" | "off" {
   const header = c.req.header("x-play") ?? c.req.header("X-Play");
-  if (!header) return "on";
-  const lower = header.toLowerCase().trim();
-  if (lower === "off" || lower === "0" || lower === "false" || lower === "no") return "off";
-  return "on"; // anything else → on (default)
+  return isPlayOffHeader(header) ? "off" : "on";
 }
 
 function stripSuppressedFields(body: Record<string, unknown>): void {
@@ -80,9 +83,11 @@ async function suppressOnNon200(c: Context): Promise<void> {
   if (readPlayPreference(c) !== "off") return;
 
   stripSuppressedFields(obj);
+  const serialized = JSON.stringify(obj);
+  c.res.headers.delete("content-length");
   const headers = new Headers(c.res.headers);
   headers.delete("content-length");
-  c.res = new Response(JSON.stringify(obj), {
+  c.res = new Response(serialized, {
     status: c.res.status,
     headers,
   });
@@ -151,9 +156,13 @@ export function play() {
       }
       if (!stripped) return; // nothing to strip
       stripSuppressedFields(obj);
-      c.res = new Response(JSON.stringify(obj), {
+      const serialized = JSON.stringify(obj);
+      c.res.headers.delete("content-length");
+      const headers = new Headers(c.res.headers);
+      headers.delete("content-length");
+      c.res = new Response(serialized, {
         status: 200,
-        headers: c.res.headers,
+        headers,
       });
       return;
     }
