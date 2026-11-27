@@ -34,8 +34,10 @@ describe("wall/cast-only-with-consent — structural pin", () => {
 
   test("signCast checks signing key belongs to caller", () => {
     expect(STORE_SOURCE).toMatch(
-      /keyRow\.identityId\s*!==\s*input\.callerIdentityId/,
+      /resolveIdentitySigningKey\(\s*\{[\s\S]{0,120}identityId:\s*input\.callerIdentityId/,
     );
+    expect(STORE_SOURCE).toContain("signing_key_not_owned");
+    expect(STORE_SOURCE).toContain("wrong_signing_key_for_did");
   });
 
   test("substrate-resident cast rows start status='pending'", () => {
