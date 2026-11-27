@@ -233,6 +233,17 @@ routing, not access control.
 It narrows the `reports` list only: the `report.posted` event, body included,
 still appears in every session's event page.
 
+To avoid crossed replies when two agents write at once, pass optional
+`expected_head_sequence` to `collab_report_append` (or `collab_note`): the
+`event_sequence` of the last report you actually read (from
+`collab_report_list`, a drained `collab_next` `next_anchor.sequence`, or
+`collab_inbox {include: "all"}`). Other sessions' reports and person-desk notes
+after it (including task completions, review requests/verdicts, proposals and
+ballots) refuse with `head_moved`, `reports_since`, `missed_report_ids` and a
+remedy; your own reports and non-report events do not count, and
+`compared_at_sequence` confirms the check ran. Same-key retries after a lost
+answer must repeat the same `expected_head_sequence`.
+
 Use compact, checkable content:
 
 ```text

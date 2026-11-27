@@ -67,6 +67,21 @@ describe("Codex hooks", () => {
     expect(write(CODEX_CHILD, paths.child, `${COLLAB}collab_report_append`).actions).toEqual(["ingested", "already_recorded"]);
   });
 
+  test("S3: a spawned thread's mission write promotes it with trigger mission_event; mission reads change nothing", () => {
+    const MISSION = "mcp__agenttool_mission__";
+    for (const readTool of [`${MISSION}mission_invitation`, `${MISSION}mission_events`, `${MISSION}mission_wait`]) {
+      expect(write(CODEX_CHILD, paths.child, readTool)).toMatchObject({ seat_id: null, actions: [] });
+    }
+    expect(ledger.listSeats().items).toHaveLength(0);
+    const result = write(CODEX_GRANDCHILD, paths.grandchild, `${MISSION}mission_send`);
+    expect(result.actions).toEqual(["ingested", "ingested_parent", "promoted"]);
+    const child = ledger.findSeat("codex", { thread_id: CODEX_CHILD })!;
+    expect(child.promotion?.trigger).toBe("lineage");
+    expect(ledger.getSeat(result.child_seat_id!)).toMatchObject({
+      parent_seat_id: child.seat_id, persistence: "recorded", promotion: { trigger: "mission_event" },
+    });
+  });
+
   test("a nested thread's parent is read from the rollout beside it, so the chain is whole", () => {
     const result = write(CODEX_GRANDCHILD, paths.grandchild);
     expect(result.actions).toEqual(["ingested", "ingested_parent", "promoted"]);

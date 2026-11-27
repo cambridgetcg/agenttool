@@ -454,6 +454,13 @@ export function buildCollabMcpServer(
         outcome: z.string().optional().describe("For decide only: proceed (the default), do_not_proceed or no_decision."),
         replaces: z.string().optional().describe("With act challenge: your earlier challenge this one replaces; it is withdrawn in the same transaction."),
         dry_run: z.boolean().optional().describe("Parse, check and render; write nothing."),
+        expected_head_sequence: z.number().optional().describe(
+          "Optional compare-and-swap: a whole number 0 or more — the event_sequence of the last report you read "
+          + "(for example from collab_inbox with include all; not a default inbox read_through that skipped unaddressed items). "
+          + "If another session or the person desk posted any report after it, nothing is written and head_moved returns "
+          + "reports_since, missed_report_ids and a ready collab_inbox call. Your own reports and non-report events do not count. "
+          + "On write, compared_at_sequence echoes the checked value.",
+        ),
       },
     },
     async (input) => noteCall(() => noteVerb(noteContext(), input), input),
@@ -1324,16 +1331,26 @@ export function buildCollabMcpServer(
           + "Routing, not access control or authority.",
         ),
         expected_head_sequence: z.number().int().nonnegative().optional().describe(
-          "Optional compare-and-swap: the journal head sequence you last read. If a report was posted after it, "
-          + "nothing is written and the call is refused with head_moved; read what is new, then send again. "
-          + "Sessions, tasks and leases moving the head do not count.",
+          "Optional compare-and-swap: the event_sequence of the last report you read (from collab_report_list, "
+          + "events.next_anchor.sequence, or collab_inbox with include all; not head_sequence). If another session or "
+          + "the person desk posted any report after it (notes, reports, task completion summaries, review requests or "
+          + "verdicts, proposals or ballots, whoever addressed), nothing is written and head_moved returns reports_since "
+          + "and missed_report_ids; read them with collab_report_list, then send again. Your own reports and non-report "
+          + "events (sessions, claims, leases, task creation/progress/blockers, handoff offers, person proposal acts) do "
+          + "not count. On success, compared_at_sequence echoes the checked value.",
         ),
       },
     },
     async ({ workspace_id, ...input }) => call(() => {
       requireWorkspace(workspace_id);
       const report = store.appendReportForSession({ ...boundCredential(), ...input });
-      return withAddressee({ report }, report.workspace_id, report.to_session_id);
+      return withAddressee(
+        input.expected_head_sequence === undefined
+          ? { report }
+          : { report, compared_at_sequence: input.expected_head_sequence },
+        report.workspace_id,
+        report.to_session_id,
+      );
     }),
   );
 

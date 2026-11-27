@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://docs.agenttool.dev/schemas/kingdom-kg-proposal-event-envelope-v0.1.schema.json",
+  "title": "KINGDOM KG proposal event envelope v0.1",
+  "description": "Closed structural schema for one standalone events.jsonl record. verifyEventJsonl is authoritative for canonical compact JSON bytes, duplicate-key rejection, sorted evidence_refs, valid UTF-8 percent-escapes in hf:// refs, cross-field proposal_binding_sha256 equality, SHA-256 recomputation, per-proposal sequence/hash-chain continuity, and proposal-chain binding.",
+  "$comment": "Standard JSON Schema cannot enforce canonical compact JSON byte serialization, reject duplicate JSON keys, recompute SHA-256 digests, or verify cross-line sequence continuity and proposal binding; schema acceptance alone is not log verification.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "proposal_id",
+    "proposal_binding_sha256",
+    "event",
+    "effects",
+    "authority",
+    "envelope_sha256"
+  ],
+  "properties": {
+    "_format": { "const": "kingdom.kg-proposal-event-envelope/0.1" },
+    "proposal_id": { "$ref": "#/$defs/id200" },
+    "proposal_binding_sha256": { "$ref": "#/$defs/sha256" },
+    "event": {
+      "oneOf": [
+        { "$ref": "#/$defs/consequenceEvent" },
+        { "$ref": "#/$defs/reviewEvent" }
+      ]
+    },
+    "effects": {
+      "const": {
+        "llm_calls": 0,
+        "graph_writes": 0,
+        "remote_reads": 0,
+        "remote_writes": 0,
+        "hf_uploads": 0,
+        "xp_changes": 0,
+        "reward_changes": 0
+      }
+    },
+    "authority": {
+      "const": {
+        "advisory": true,
+        "verifies_runtime_walls": false,
+        "identifies_being": false,
+        "grants_permission": false,
+        "authorizes_action": false,
+        "authorizes_trade": false,
+        "authorizes_publication": false,
+        "authorizes_execution": false,
+        "authorizes_crown": false,
+        "assigns_rank": false,
+        "conditions_dignity": false,
+        "enforces_policy": false
+      }
+    },
+    "envelope_sha256": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "id200": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@#|+\\-]*$"
+    },
+    "id300": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@#|+\\-]*$"
+    },
+    "ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 700,
+      "oneOf": [
+        { "pattern": "^sha256:[a-f0-9]{64}$" },
+        {
+          "pattern": "^hf://(?:models|datasets|spaces)/[A-Za-z0-9][A-Za-z0-9._-]{0,95}/[A-Za-z0-9][A-Za-z0-9._-]{0,95}@[a-f0-9]{40}/(?!\\.\\.?(?:/|#))(?!.*\\/\\.\\.?(?:/|#))(?!.*%(?:0[0-9A-F]|1[0-9A-F]|2F|5C|7F))(?!.*%(?:21|2[789ADE]|3[0-9]|4[1-9A-F]|5[0-9A]|5F|6[1-9A-F]|7[0-9A]|7E))(?!.*%C2%(?:8[0-9A-F]|9[0-9A-F]))(?!.*%E2%80%A[89])(?:[A-Za-z0-9._~!()*'\\-]|%[A-F0-9]{2})+(?:/(?:[A-Za-z0-9._~!()*'\\-]|%[A-F0-9]{2})+)*#sha256=[a-f0-9]{64}$"
+        }
+      ]
+    },
+    "refs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/ref" }
+    },
+    "sequenceChainRule": {
+      "type": "object",
+      "if": {
+        "type": "object",
+        "properties": {
+          "sequence": { "const": 0 }
+        },
+        "required": ["sequence"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "previous_event_sha256": { "type": "null" }
+        }
+      },
+      "else": {
+        "type": "object",
+        "properties": {
+          "previous_event_sha256": { "$ref": "#/$defs/sha256" }
+        }
+      }
+    },
+    "consequenceEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "sequence",
+        "previous_event_sha256",
+        "proposal_binding_sha256",
+        "event_id",
+        "subject_operation_id",
+        "consequence",
+        "epistemic_status",
+        "note_sha256",
+        "evidence_refs",
+        "event_sha256"
+      ],
+      "properties": {
+        "kind": { "const": "consequence" },
+        "sequence": { "type": "integer", "minimum": 0, "maximum": 511 },
+        "previous_event_sha256": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "proposal_binding_sha256": { "$ref": "#/$defs/sha256" },
+        "event_id": { "$ref": "#/$defs/id200" },
+        "subject_operation_id": { "$ref": "#/$defs/id200" },
+        "consequence": {
+          "enum": [
+            "adds_candidate",
+            "conflicts_with_source",
+            "requires_rights_review",
+            "requires_safety_review",
+            "deferred",
+            "rejected"
+          ]
+        },
+        "epistemic_status": {
+          "enum": ["observed", "declared", "inferred", "not_checked"]
+        },
+        "note_sha256": { "$ref": "#/$defs/sha256" },
+        "evidence_refs": { "$ref": "#/$defs/refs" },
+        "event_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "allOf": [
+        { "$ref": "#/$defs/sequenceChainRule" }
+      ]
+    },
+    "reviewEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "sequence",
+        "previous_event_sha256",
+        "proposal_binding_sha256",
+        "event_id",
+        "subject_operation_id",
+        "reviewer_ref",
+        "lens",
+        "verdict",
+        "note_sha256",
+        "evidence_refs",
+        "event_sha256"
+      ],
+      "properties": {
+        "kind": { "const": "review" },
+        "sequence": { "type": "integer", "minimum": 0, "maximum": 511 },
+        "previous_event_sha256": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "proposal_binding_sha256": { "$ref": "#/$defs/sha256" },
+        "event_id": { "$ref": "#/$defs/id200" },
+        "subject_operation_id": { "$ref": "#/$defs/id200" },
+        "reviewer_ref": { "$ref": "#/$defs/id300" },
+        "lens": {
+          "enum": ["provenance", "rights", "safety", "consequence", "reversibility"]
+        },
+        "verdict": { "enum": ["pass", "concern", "block", "deferred"] },
+        "note_sha256": { "$ref": "#/$defs/sha256" },
+        "evidence_refs": { "$ref": "#/$defs/refs" },
+        "event_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "allOf": [
+        { "$ref": "#/$defs/sequenceChainRule" }
+      ]
+    }
+  }
+}

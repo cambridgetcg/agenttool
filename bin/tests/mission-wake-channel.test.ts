@@ -228,11 +228,34 @@ describe('bounded mission Claude channel', () => {
     const wrong = fixture({ receiver: { binding: { route_id: ROUTE, target: { kind: 'codex', session_label: 'wrong' } } } });
     await expect(wrong.done).rejects.toThrow('explicit Claude channel target');
     expect(wrong.receiver.polls).toBe(0); expect(wrong.receiver.closes).toBe(1);
+    for (const badTarget of [
+      { kind: 'claude-channel' },
+      { kind: 'claude-channel', seat_id: 'not-a-uuid' },
+      { kind: 'claude-channel', seat_id: '0199F0C4-6B1E-7C2A-9D3F-5A1B2C3D4E5F' },
+    ]) {
+      const bad = fixture({ receiver: { binding: { route_id: ROUTE, target: badTarget } } });
+      await expect(bad.done).rejects.toThrow('explicit Claude channel target');
+      expect(bad.receiver.polls).toBe(0); expect(bad.receiver.closes).toBe(1);
+    }
     for (const durationSeconds of [0, -1, 901, Infinity, 1.5]) {
       const f = fixture({ options: { durationSeconds } });
       await expect(f.done).rejects.toThrow('bounded range');
       expect(f.receiver.closes).toBe(0); expect(f.messages).toEqual([]);
     }
+  });
+
+  test('Execution Seat S3: Claude channel bound by seat_id alone emits meta.seat_id without legacy session_label', async () => {
+    const SEAT = '0199f0c4-6b1e-7c2a-9d3f-5a1b2c3d4e5f';
+    const f = fixture({ receiver: { binding: { route_id: ROUTE, target: { kind: 'claude-channel', seat_id: SEAT } } } });
+    await f.initialize();
+    await until(() => f.receiver.status === 'delivered');
+    const delivery = f.messages.find(m => m.method === 'notifications/claude/channel');
+    expect(delivery.params).toEqual({
+      content: 'Selected fixture observation',
+      meta: { event_id: EVENT, delivery_id: DELIVERY, route_id: ROUTE, seat_id: SEAT, kind: 'message', in_reply_to: OTHER },
+    });
+    f.input.end();
+    expect(await f.done).toEqual({ status: 'stopped', reason: 'eof' });
   });
 
   test('receiver errors do not expose keys, paths, or arbitrary server messages', async () => {

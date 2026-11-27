@@ -31,6 +31,24 @@ test('strict binding rejects extra authority, credentials, endpoints, recipients
     }
     const changed=structuredClone(f.b);changed.destinations[0].alias='new';expect(()=>new Ledger(changed)).toThrow('binding_changed');
     const disabled={...f.b,enabled:false};expect(bindingKey(disabled)).toBe(bindingKey(f.b));
+    // Execution Seat S3: optional seat_id on local and pinned peers is validated, pinned into bindingKey, and surfaced in status.
+    const SEAT='0199f0c4-6b1e-7c2a-9d3f-5a1b2c3d4e5f', PEER_SEAT='0199f0c4-6b1e-7c2a-9d3f-5a1b2c3d4e60';
+    const withSeat=parseBinding({...f.b,ledgerPath:f.root+'/seat-bound.sqlite',local:{...f.b.local,seat_id:SEAT},correspondence:{...f.b.correspondence,peers:f.b.correspondence.peers.map(p=>({...p,seat_id:PEER_SEAT}))}});
+    expect(withSeat.local.seat_id).toBe(SEAT);
+    expect(withSeat.correspondence.peers[0].seat_id).toBe(PEER_SEAT);
+    expect(bindingKey(withSeat)).not.toBe(bindingKey(f.b));
+    expect(()=>parseBinding({...f.b,local:{...f.b.local,seat_id:'not-a-uuid'}})).toThrow('invalid_binding');
+    expect(()=>parseBinding({...f.b,local:{...f.b.local,seat_id:SEAT.toUpperCase()}})).toThrow('invalid_binding');
+    expect(()=>parseBinding({...f.b,correspondence:{...f.b.correspondence,peers:f.b.correspondence.peers.map(p=>({...p,seat_id:'bad'}))}})).toThrow('invalid_binding');
+    const seatLedger=new Ledger(withSeat);
+    try {
+      expect(seatLedger.status()).toHaveProperty('seat_id',SEAT);
+      const drifted=structuredClone(withSeat);drifted.local.seat_id=PEER_SEAT;
+      expect(()=>seatLedger.observeBinding(drifted)).toThrow('binding_changed');
+      const peerDrifted=structuredClone(withSeat);peerDrifted.correspondence.peers[0].seat_id=SEAT;
+      expect(()=>seatLedger.observeBinding(peerDrifted)).toThrow('binding_changed');
+    } finally { seatLedger.close(); }
+    expect(f.ledger.status()).not.toHaveProperty('seat_id');
     chmodSync(f.profile,0o644);expect(()=>readBinding(f.profile)).toThrow('unsafe_file');
   }finally{await f.close();}
 });

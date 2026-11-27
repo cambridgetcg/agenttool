@@ -6,5 +6,5 @@ export { CLAUDE_CODE, readClaudeSession, readClaudeTranscript, type ClaudeChild,
 export { CODEX, readCodexRollout, type CodexRollout } from "./codex.js";
 export { handleClaudeHook, readClaudeHookInput, type ClaudeHookInput, type ClaudeHookOptions, type ClaudeHookResult, type CollabRun } from "./claude-hook.js";
 export { handleCodexHook, readCodexHookInput, type CodexHookInput, type CodexHookResult } from "./codex-hook.js";
-export { COLLAB_WRITES, collabWrite } from "./collab-writes.js";
+export { COLLAB_WRITES, collabWrite, MISSION_WRITES, missionWrite } from "./collab-writes.js";
 export { ingestClaudeSession, ingestCodexRollout, type IngestResult } from "./ingest.js";

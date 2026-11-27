@@ -865,6 +865,16 @@ author, when the author should be rung.
 It narrows the reports list only: the `report.posted` event, body included,
 still appears in every session's event page.
 
+Both `collab_report_append` and `collab_note` accept an optional
+`expected_head_sequence` compare-and-swap (time/1): pass the `event_sequence`
+of the last report you read (not a truncated page's `head_sequence`). If
+another session or the person desk posted any report after it (including task
+completions, review requests/verdicts, proposals and ballots), nothing is
+written and `head_moved` returns `reports_since`, `missed_report_ids` and a
+remedy naming `collab_report_list` or `collab_inbox {include: "all"}`; your own
+reports and non-report events do not count, and `compared_at_sequence` echoes
+the checked value on success (see [PROTOCOL.md](PROTOCOL.md)).
+
 Acceptance records the independent reviewer's snapshot at that journal order.
 A later correction or withdrawal remains visible but does not silently revoke
 an already accepted task. Record a new explicit coordination decision or

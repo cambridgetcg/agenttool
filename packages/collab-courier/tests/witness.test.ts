@@ -66,6 +66,11 @@ describe("read-only witness selection and evidence", () => {
       PATH: "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin", ZERONED_BIN: "/fixture/zeroned",
       COLLAB_ZERONE_QUERY_MAX_OUTPUT_BYTES: "262144", COLLAB_ZERONE_QUERY_TIMEOUT_MS: "10000" });
     expect(fixture.kills()).toBe(1);
+    // Execution Seat S3: optional seat_id on WitnessBinding is validated as a lowercase UUID.
+    const SEAT = "0199f0c4-6b1e-7c2a-9d3f-5a1b2c3d4e5f";
+    expect(() => createWitnessObserver({ ...binding(), seat_id: SEAT }, fixture)).not.toThrow();
+    expect(() => createWitnessObserver({ ...binding(), seat_id: "not-a-uuid" }, fixture)).toThrow("invalid witness binding");
+    expect(() => createWitnessObserver({ ...binding(), seat_id: SEAT.toUpperCase() }, fixture)).toThrow("invalid witness binding");
   });
 
   test("remote evidence is an explicit observation by a named RPC, never finality", async () => {

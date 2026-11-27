@@ -59,18 +59,26 @@ function peer(value) {
 }
 function target(value) {
   if (value?.kind === 'codex') {
-    exact(value, ['kind', 'thread_id', 'cwd']);
+    const fields = ['kind', 'thread_id', 'cwd', ...(value.seat_id === undefined ? [] : ['seat_id'])];
+    exact(value, fields);
     text(value.thread_id, 128);
+    if (value.seat_id !== undefined) id(value.seat_id);
     if (!/^[A-Za-z0-9_-]+$/.test(value.thread_id) || !isAbsolute(value.cwd) || realpathSync(value.cwd) !== value.cwd || !lstatSync(value.cwd).isDirectory()) fail('Select an exact Codex thread and real absolute working directory.');
   } else if (value?.kind === 'claude-channel') {
-    exact(value, ['kind', 'session_label']); text(value.session_label, 128);
+    const fields = ['kind', ...(value.seat_id === undefined ? [] : ['seat_id']), ...(value.session_label === undefined ? [] : ['session_label'])];
+    if (fields.length === 1) fail('Select a seat_id (or legacy session_label) for a Claude channel target.');
+    exact(value, fields);
+    if (value.seat_id !== undefined) id(value.seat_id);
+    if (value.session_label !== undefined) text(value.session_label, 128);
   } else if (value?.kind === 'hermes') validateHermesTarget(value);
   else fail('Select codex, claude-channel or hermes.');
   return value;
 }
 export function routeAddress(binding) {
   return { format: 'agenttool-mission-route/v1', origin: binding.origin, mission_id: binding.mission_id,
-    identity_id: binding.identity_id, route_id: binding.route_id, harness: binding.target.kind, expires_at: binding.expires_at };
+    identity_id: binding.identity_id, route_id: binding.route_id, harness: binding.target.kind,
+    ...(binding.target.seat_id === undefined ? {} : { seat_id: binding.target.seat_id }),
+    expires_at: binding.expires_at };
 }
 export async function bind(state, config, options = {}) {
   exact(config, ['mission_digest', 'peer', 'target', 'after', 'expires_at']);
@@ -234,7 +242,7 @@ export function returnPeek(state) {
   const saved = status(state);
   return {
     format: 'agenttool-mission-return-peek/v1',
-    route: { route_id: saved.route.route_id, harness: saved.route.harness },
+    route: { route_id: saved.route.route_id, harness: saved.route.harness, ...(saved.route.seat_id === undefined ? {} : { seat_id: saved.route.seat_id }) },
     quiet: { mode: saved.quiet.mode, until: saved.quiet.until, updated_at: saved.quiet.updated_at },
     locally_saved: {
       cursor: saved.cursor,
@@ -400,7 +408,7 @@ export function openReceiver(state) {
       // client's durable outbox write: a crash at either boundary cannot resend.
       const intent = { to, status: 'dispatching', summary_sha256: hash(summary), attempted_at: new Date().toISOString() };
       save({ ...inbox, items: inbox.items.map(i => i === item ? { ...i, processing_ack: intent } : i) });
-      const sent = await client.send(state, summary, options);
+      const sent = await client.send(state, summary, binding.target.seat_id === undefined ? options : { ...options, seatId: binding.target.seat_id });
       if (sent.event.mission_id !== binding.mission_id || typeof sent.event.received_seq !== 'string' || sent.event.received_seq === '0')
         fail('Processing ACK receipt does not match the mission.');
       const stored = { ...intent, status: 'stored', ack_event_id: id(sent.event.event_id), cursor: client.cursor(sent.event.received_seq) };

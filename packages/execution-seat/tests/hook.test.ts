@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "../bin/agenttool-execution-seat.js";
 import { handleClaudeHook, HOSTS_DIRECTORY, type ClaudeHookOptions, type CollabRun } from "../src/claude-hook.js";
-import { COLLAB_WRITES } from "../src/collab-writes.js";
+import { COLLAB_WRITES, MISSION_WRITES } from "../src/collab-writes.js";
 import { DATABASE_FILE } from "../src/home.js";
 import { SeatLedger } from "../src/ledger.js";
 import { CLAUDE_NEXT, CLAUDE_SESSION, expectNoMarkers, hookInput, writeClaudeProject } from "./fixtures.js";
@@ -246,6 +246,29 @@ describe("a subagent's collab write", () => {
     ];
     expect(tools.length).toBeGreaterThan(30);
     expect([...tools].sort()).toEqual([...COLLAB_WRITES, ...notCited].sort());
+  });
+
+  test("S3: a subagent's mission write promotes it with trigger mission_event, and every mission MCP tool is classified", () => {
+    const transcript = writeClaudeProject(directory);
+    hook("SessionStart", CLAUDE_SESSION, { source: "startup", model: "claude-opus-5-5" });
+    const MISSION = "mcp__agenttool-mission__";
+    for (const readTool of [`${MISSION}mission_invitation`, `${MISSION}mission_events`, `${MISSION}mission_wait`]) {
+      expect(write("aplain01", readTool, { transcript_path: transcript })).toMatchObject({ seat_id: null, actions: [] });
+    }
+    const promoted = write("anested02", `${MISSION}mission_send`, { transcript_path: transcript });
+    expect(promoted.actions).toEqual(["ingested", "promoted"]);
+    const child = ledger.getSeat(promoted.child_seat_id!)!;
+    const middle = ledger.findSeat("claude-code", { session_id: CLAUDE_SESSION, agent_id: "aplain01" })!;
+    expect(child).toMatchObject({ relation: "child", parent_seat_id: middle.seat_id, persistence: "recorded", promotion: { trigger: "mission_event" } });
+    expect(middle).toMatchObject({ promotion: { trigger: "lineage" } });
+
+    // Exhaustive classification of bin/agenttool-mission.mjs MCP tools.
+    const missionSource = readFileSync(join(import.meta.dir, "..", "..", "..", "bin", "agenttool-mission.mjs"), "utf8");
+    const toolsBlock = missionSource.slice(missionSource.indexOf("const TOOLS = ["), missionSource.indexOf("export async function callTool"));
+    const missionTools = [...toolsBlock.matchAll(/\[\s*'(mission_[a-z_]+)',\s*'/g)].map((match) => match[1]!);
+    const missionNotCited = ["mission_invitation", "mission_events", "mission_wait"];
+    expect(missionTools.length).toBe(6);
+    expect([...missionTools].sort()).toEqual([...MISSION_WRITES, ...missionNotCited].sort());
   });
 
   test("no hook free text reaches the ledger", () => {

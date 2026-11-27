@@ -16,6 +16,7 @@
       "import": "./dist/index.js"
     },
     "./schema": "./schema/kingdom-kg-proposal-v0.1.schema.json",
+    "./event-envelope-schema": "./schema/kingdom-kg-proposal-event-envelope-v0.1.schema.json",
     "./source/karma": "./sources/karma-2502.06472v2.json",
     "./hf-export-profile": "./exports/hf-kingdom-lab.json"
   },

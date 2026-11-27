@@ -141,6 +141,6 @@ export class Ledger {
   status():unknown {
     const counts=this.db.query('SELECT kind,state,count(*) AS count FROM items GROUP BY kind,state ORDER BY kind,state').all();
     const updated=this.db.query("SELECT max(json_extract(value,'$.updatedAt')) AS lastDeliveryObservationAt FROM items WHERE kind='out'").get();
-    return {format:'agenttool.collab-courier.status/0.1',configured:true,enabled:this.binding.enabled,observedAt:Date.now(),counts,...updated as object,networkProbed:false,readByAgent:'unknown',authorityEffects:false};
+    return {format:'agenttool.collab-courier.status/0.1',configured:true,enabled:this.binding.enabled,...(this.binding.local.seat_id===undefined?{}:{seat_id:this.binding.local.seat_id}),observedAt:Date.now(),counts,...updated as object,networkProbed:false,readByAgent:'unknown',authorityEffects:false};
   }
 }
