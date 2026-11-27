@@ -18,7 +18,7 @@ import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync
 import { basename, isAbsolute, join } from "node:path";
 import { CLAUDE_CODE } from "./claude-code.js";
 import { SeatError } from "./errors.js";
-import { collabWrite } from "./collab-writes.js";
+import { collabWrite, missionWrite } from "./collab-writes.js";
 import { ref, token, uuid } from "./fields.js";
 import { assertPrivateDirectory, assertPrivateFile } from "./home.js";
 import { ingestClaudeSession } from "./ingest.js";
@@ -42,6 +42,8 @@ export interface ClaudeHookInput {
   effort: string | null;
   /** PostToolUse: the collab write that was called, e.g. `collab_task_claim`. Null for any other tool. */
   collab_write: string | null;
+  /** PostToolUse: the mission write that was called, e.g. `mission_send`. Null for any other tool. */
+  mission_write: string | null;
   /** PostToolUse inside a subagent: the subagent's id. */
   agent_id: string | null;
   /** The session's own transcript, only when its file name is `<session_id>.jsonl`. */
@@ -65,6 +67,7 @@ export function readClaudeHookInput(raw: unknown): ClaudeHookInput {
     model: token(input.model),
     effort: token(effort),
     collab_write: collabWrite(input.tool_name),
+    mission_write: missionWrite(input.tool_name),
     agent_id: ref(input.agent_id),
     transcript_path: ownTranscript ? transcript : null,
   };
@@ -210,7 +213,8 @@ const UNPLACED = new Set(["child_unknown", "parent_row_unknown", "lineage_cycle"
  * write gives the subagent its own `recorded` record (trigger `collab_write`), chain first.
  */
 function promoteCollabWriter(ledger: SeatLedger, input: ClaudeHookInput, result: ClaudeHookResult): ClaudeHookResult {
-  if (!input.agent_id || !input.collab_write) return result;
+  const trigger = input.collab_write ? "collab_write" : input.mission_write ? "mission_event" : null;
+  if (!input.agent_id || !trigger) return result;
   const agentId = input.agent_id;
   const { seat, created } = ledger.openSeat({ harness: CLAUDE_CODE, native_ref: { session_id: input.session_id! } });
   result.seat_id = seat.seat_id;
@@ -228,7 +232,7 @@ function promoteCollabWriter(ledger: SeatLedger, input: ClaudeHookInput, result:
     return result;
   }
   try {
-    result.child_seat_id = ledger.promote(seat.seat_id, agentId, "collab_write").seat_id;
+    result.child_seat_id = ledger.promote(seat.seat_id, agentId, trigger).seat_id;
     result.actions.push("promoted");
   } catch (error) {
     if (!(error instanceof SeatError) || !UNPLACED.has(error.code)) throw error;

@@ -42,3 +42,23 @@ export function collabWrite(toolName: unknown): string | null {
   const tool = typeof toolName === "string" ? MCP_TOOL.exec(toolName)?.[1] : undefined;
   return tool && COLLAB_WRITES.has(tool) ? tool : null;
 }
+
+/**
+ * Mission MCP tools whose call leaves a cited mission event: sending an observation,
+ * explicitly accepting a mission digest, or retrying a saved observation. Read-only
+ * inspection and polling tools (`mission_invitation`, `mission_events`, `mission_wait`)
+ * are left out.
+ */
+export const MISSION_WRITES: ReadonlySet<string> = new Set([
+  "mission_accept",
+  "mission_retry",
+  "mission_send",
+]);
+
+const MISSION_MCP_TOOL = /^mcp__.{1,128}__(mission_[a-z_]{1,64})$/;
+
+/** The mission write a hook's `tool_name` names, or null for any other tool. */
+export function missionWrite(toolName: unknown): string | null {
+  const tool = typeof toolName === "string" ? MISSION_MCP_TOOL.exec(toolName)?.[1] : undefined;
+  return tool && MISSION_WRITES.has(tool) ? tool : null;
+}

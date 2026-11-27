@@ -312,6 +312,36 @@ describe.skipIf(process.platform === "win32")("portable mission participant", ()
     expect(calls).toBe(1);
   });
 
+  test("Execution Seat S3: send and retry carry validated seat_id without mutating exact saved bytes", async () => {
+    const f = fixture();
+    const SEAT = "0199f0c4-6b1e-7c2a-9d3f-5a1b2c3d4e5f";
+    let sentRaw = "";
+    await expect(client.send(f.state, "bad seat", { seatId: "not-a-uuid", fetchImpl: async () => response({}) })).rejects.toThrow("UUID");
+    expect(readdirSync(join(f.state, "outbox"))).toEqual([]);
+    const sent = await client.send(f.state, "Observation from S3 seat", {
+      seatId: SEAT,
+      fetchImpl: async (_url: string, init: RequestInit) => {
+        sentRaw = String(init.body);
+        expect(JSON.parse(sentRaw)).toEqual({
+          event_id: JSON.parse(sentRaw).event_id,
+          summary: "Observation from S3 seat",
+          seat: { seat_id: SEAT },
+        });
+        return response(receipt(sentRaw));
+      },
+    });
+    const eventId = sent.event.event_id;
+    expect(readFileSync(join(f.state, "outbox", `${eventId}.json`), "utf8")).toBe(sentRaw);
+    // Exact retry replays the saved seat-bearing bytes unchanged.
+    const retried = await client.retry(f.state, eventId, {
+      fetchImpl: async (_url: string, init: RequestInit) => {
+        expect(String(init.body)).toBe(sentRaw);
+        return response(receipt(sentRaw));
+      },
+    });
+    expect(retried.event.event_id).toBe(eventId);
+  });
+
   test("event paging preserves bigint cursors and requires complete ordered pages", async () => {
     const f = fixture(); const after = "9007199254740993";
     const seq = "9007199254740994";

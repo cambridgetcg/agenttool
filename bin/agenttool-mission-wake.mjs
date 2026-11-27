@@ -13,7 +13,7 @@ return-peek --state DIR                  Local counts and unresolved IDs; no pol
 pause --state DIR [--until UTC]           Private pause of new receiver admissions; no announcement
 resume --state DIR                       Reopen admission; does not start a receiver or replay
 poll --state DIR                         Save one verified page, without invoking a harness
-send --state DIR --to ROUTE_UUID --text-file FILE [--kind message|ack] [--in-reply-to EVENT_UUID]
+send --state DIR --to ROUTE_UUID --text-file FILE [--kind message|ack] [--in-reply-to EVENT_UUID] [--seat-id UUID]
 watch --state DIR [--seconds 60] [--max-deliveries 1] [--ack-to ROUTE_UUID]
                                         Finite Codex/Hermes delivery (maximum 20)
                                         --ack-to opts into signed Hermes read ACKs
@@ -83,7 +83,7 @@ export async function watch(state, durationSeconds, { createAdapter, pollInterva
 export async function main(argv) {
   const [command, ...args] = argv;
   if (!command || command === '--help' || command === 'help') { process.stdout.write(HELP); return; }
-  const allowed = { 'prepare-codex': ['cwd', 'name'], bind: ['config-file'], status: [], 'return-peek': [], pause: ['until'], resume: [], poll: [], send: ['to', 'text-file', 'kind', 'in-reply-to'],
+  const allowed = { 'prepare-codex': ['cwd', 'name'], bind: ['config-file'], status: [], 'return-peek': [], pause: ['until'], resume: [], poll: [], send: ['to', 'text-file', 'kind', 'in-reply-to', 'seat-id'],
     watch: ['seconds', 'max-deliveries', 'ack-to'], channel: ['seconds'], resolve: ['event-id', 'delivery-id', 'outcome'], 'recover-lock': ['lock-id'], 'recover-quiet-lock': ['lock-id'] };
   if (!Object.hasOwn(allowed, command)) throw new Error('Unknown wake command.');
   const options = {};
@@ -112,7 +112,8 @@ export async function main(argv) {
   if (command === 'recover-quiet-lock') result = recoverQuietLock(options.state, options['lock-id']);
   if (command === 'send') {
     const envelope = message(options.to, options.kind ?? 'message', client.privateRead(options['text-file'], 8192), options['in-reply-to']);
-    const sent = await client.send(options.state, JSON.stringify(envelope));
+    const sent = await client.send(options.state, JSON.stringify(envelope),
+      options['seat-id'] === undefined ? undefined : { seatId: options['seat-id'] });
     result = { event_id: sent.event.event_id, cursor: sent.event.received_seq, status: 'stored' };
   }
   if (command === 'poll' || command === 'resolve') {

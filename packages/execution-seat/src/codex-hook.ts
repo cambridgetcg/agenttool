@@ -14,7 +14,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { CODEX } from "./codex.js";
-import { collabWrite } from "./collab-writes.js";
+import { collabWrite, missionWrite } from "./collab-writes.js";
 import { SeatError } from "./errors.js";
 import { token, uuid } from "./fields.js";
 import { ingestCodexRollout } from "./ingest.js";
@@ -32,6 +32,8 @@ export interface CodexHookInput {
   reason: string | null;
   /** PostToolUse: the collab write that was called, e.g. `collab_task_claim`. Null for any other tool. */
   collab_write: string | null;
+  /** PostToolUse: the mission write that was called, e.g. `mission_send`. Null for any other tool. */
+  mission_write: string | null;
   /** Set in a spawned thread: its thread id. */
   agent_id: string | null;
   /** The rollout of the thread the hook is about (`agent_id`, else `session_id`), only when its file name says so. */
@@ -56,6 +58,7 @@ export function readCodexHookInput(raw: unknown): CodexHookInput {
     source: token(input.source),
     reason: token(input.reason),
     collab_write: collabWrite(input.tool_name),
+    mission_write: missionWrite(input.tool_name),
     agent_id: agentId,
     transcript_path: thread !== null && rolloutId(input.transcript_path) === thread ? (input.transcript_path as string) : null,
   };
@@ -128,7 +131,8 @@ export function handleCodexHook(ledger: SeatLedger, raw: unknown, options: { now
  * beside it, and a chain that cannot be placed is reported, not guessed.
  */
 function promoteCollabWriter(ledger: SeatLedger, input: CodexHookInput, result: CodexHookResult): CodexHookResult {
-  if (!input.agent_id || !input.collab_write) return result;
+  const trigger = input.collab_write ? "collab_write" : input.mission_write ? "mission_event" : null;
+  if (!input.agent_id || !trigger) return result;
   if (!input.transcript_path) {
     result.actions.push("rollout_unknown");
     return result;
@@ -163,7 +167,7 @@ function promoteCollabWriter(ledger: SeatLedger, input: CodexHookInput, result: 
     parent = row.parent_ref;
   }
   try {
-    result.child_seat_id = ledger.promote(placed.seat_id, input.agent_id, "collab_write").seat_id;
+    result.child_seat_id = ledger.promote(placed.seat_id, input.agent_id, trigger).seat_id;
     result.actions.push("promoted");
   } catch (error) {
     if (!(error instanceof SeatError) || !UNPLACED.has(error.code)) throw error;

@@ -140,6 +140,20 @@ test("immutable descriptor references and self-declared seats are closed and bou
     expect(missionDescriptorSchema.safeParse(invalid).success).toBe(false);
   }
   expect(missionObservationSchema.safeParse({ event_id: M, summary: "🙂".repeat(1000), seat: { device_id: "declared device", session_id: "session", harness: "codex" } }).success).toBe(true);
+  // Execution Seat S3: seat_id replaces the three unverified strings (legacy tuple remains accepted with optional seat_id).
+  const SEAT = "0199f0c4-6b1e-7c2a-9d3f-5a1b2c3d4e5f";
+  expect(missionObservationSchema.safeParse({ event_id: M, summary: "S3 seat observation", seat: { seat_id: SEAT } }).success).toBe(true);
+  expect(missionObservationSchema.safeParse({ event_id: M, summary: "transitional seat", seat: { device_id: "declared device", session_id: "session", harness: "codex", seat_id: SEAT } }).success).toBe(true);
+  for (const badSeat of [
+    {},
+    { seat_id: "not-a-uuid" },
+    { seat_id: SEAT.toUpperCase() },
+    { seat_id: SEAT, extra: "no" },
+    { device_id: "declared device", seat_id: SEAT },
+    { device_id: "declared device", session_id: "session", harness: "codex", seat_id: "bad" },
+  ]) {
+    expect(missionObservationSchema.safeParse({ event_id: M, summary: "bad seat", seat: badSeat }).success).toBe(false);
+  }
   expect(missionObservationSchema.safeParse({ event_id: M, summary: "🙂".repeat(1001) }).success).toBe(false);
   expect(missionObservationSchema.safeParse({ event_id: M, summary: "\ud800" }).success).toBe(false);
 });

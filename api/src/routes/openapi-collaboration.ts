@@ -94,7 +94,16 @@ export const COLLABORATION_OPENAPI_PATHS = {
     post: operation("Append one signed observation with durable replay", true, { create: true, body: {
       type: "object", additionalProperties: false, required: ["event_id", "summary"], properties: {
         event_id: uuid, summary: { type: "string", minLength: 1, maxLength: 1000 },
-        seat: { type: "object", additionalProperties: false, required: ["device_id", "session_id", "harness"], properties: Object.fromEntries(["device_id", "session_id", "harness"].map(name => [name, { type: "string", minLength: 1, maxLength: 128 }])) },
+        seat: {
+          description: "Optional declared execution seat. S3 carries { seat_id }; the legacy three-string tuple remains accepted for compatibility (with optional seat_id). Seat labels convey no authority.",
+          oneOf: [
+            { type: "object", additionalProperties: false, required: ["seat_id"], properties: { seat_id: uuid } },
+            { type: "object", additionalProperties: false, required: ["device_id", "session_id", "harness"], properties: {
+              ...Object.fromEntries(["device_id", "session_id", "harness"].map(name => [name, { type: "string", minLength: 1, maxLength: 128 }])),
+              seat_id: uuid,
+            } },
+          ],
+        },
       },
     }, description: "Requires accepted mission.observe. At most 8 KiB. Same event UUID, grant, key, identity and exact raw body bytes returns original receipt; changed bytes/author conflicts. Fresh proof allowed for retry, but current authority always rechecked." }),
   },

@@ -33,7 +33,9 @@ function canonical(value) {
 
 /** Validation never imports Hermes or opens native credentials/session contents. */
 export function validateHermesTarget(target) {
-  if (!exact(target, ['kind', 'cwd', 'sol_executable', 'python_executable', 'state_db']) || target.kind !== 'hermes') throw failure('INVALID_BINDING');
+  const fields = ['kind', 'cwd', 'sol_executable', 'python_executable', 'state_db', ...(target?.seat_id === undefined ? [] : ['seat_id'])];
+  if (!exact(target, fields) || target.kind !== 'hermes') throw failure('INVALID_BINDING');
+  if (target.seat_id !== undefined && (typeof target.seat_id !== 'string' || !UUID.test(target.seat_id))) throw failure('INVALID_BINDING');
   try {
     for (const key of ['cwd', 'sol_executable', 'python_executable', 'state_db']) {
       if (!safeText(target[key], 4096) || !isAbsolute(target[key])) throw failure('INVALID_BINDING');

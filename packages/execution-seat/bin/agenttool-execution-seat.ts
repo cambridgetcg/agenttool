@@ -26,10 +26,10 @@ Usage:
   agenttool-execution-seat hook claude-code [--collab-host <path>] [--collab-db <path>]
       a Claude Code SessionStart/SessionEnd/PostToolUse hook: reads the hook JSON on stdin, prints nothing,
       always exits 0; on exit, ends that process's collab sessions by seat ref when --collab-host is given;
-      a subagent's first collab write gives it its own record (trigger collab_write)
+      a subagent's first collab write (collab_write) or mission write (mission_event) gives it its own record
   agenttool-execution-seat hook codex
       the same for Codex SessionStart/SessionEnd/PostToolUse hooks; a spawned thread's first collab
-      write gives it its own record; Codex hooks end no collab sessions
+      or mission write gives it its own record; Codex hooks end no collab sessions
 
 Options:
   --home <dir>   ledger directory (default: $${SEAT_HOME_ENV}, else \${XDG_STATE_HOME:-~/.local/state}/agenttool/execution-seat)
@@ -92,8 +92,8 @@ function runHook(
     }
     const input = runtime === "codex" ? readCodexHookInput(raw) : readClaudeHookInput(raw);
     if (!input.event) return 0;
-    // Only a subagent's collab write does anything on PostToolUse; nothing else opens the ledger.
-    if (input.event === "PostToolUse" && (!input.agent_id || !input.collab_write)) return 0;
+    // Only a subagent's collab or mission write does anything on PostToolUse; nothing else opens the ledger.
+    if (input.event === "PostToolUse" && (!input.agent_id || (!input.collab_write && !input.mission_write))) return 0;
     const ledger = SeatLedger.open(home);
     try {
       if (runtime === "codex") {
