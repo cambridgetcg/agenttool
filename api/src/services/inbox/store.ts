@@ -9,7 +9,7 @@
 import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { isCrossProjectAllowed } from "../covenants/check";
+import { checkPeerTrust } from "../covenants/check";
 import {
   getSettings as getFederationSettings,
   parseDid,
@@ -362,14 +362,15 @@ export async function sendMessage(
   });
   if (!ok) throw new Error("signature_invalid");
 
-  // 5. Cross-project covenant gate.
-  const allowed = await isCrossProjectAllowed(
+  // 5. Cross-project peer trust gate (active recipient-side covenant OR RRR depth ≥ 3).
+  const trust = await checkPeerTrust({
     senderProjectId,
-    input.sender_did,
-    recipient.projectId,
-    recipient.did,
-  );
-  if (!allowed) throw new Error("covenant_required");
+    senderDids: input.sender_did,
+    recipientProjectId: recipient.projectId,
+    recipientDids: recipient.did,
+    allowSameProject: true,
+  });
+  if (!trust.allowed) throw new Error("covenant_required");
 
   // 6. Two-party-locked consent gating: if the sender flagged
   //    metadata.dual_witness_required, the message lands at

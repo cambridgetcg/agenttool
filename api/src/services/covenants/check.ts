@@ -20,17 +20,20 @@
 
 import {
   and,
+  desc,
   eq,
   exists,
   inArray,
   isNotNull,
   isNull,
+  ne,
   or,
   sql,
 } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { covenants } from "../../db/schema/continuity";
+import { covenants, mutualRecognitions } from "../../db/schema/continuity";
+import { identities } from "../../db/schema/identity";
 import { organizationMembers, organizations } from "../../db/schema/org";
 import {
   COVENANT_INITIATOR_WIRE_DID_METADATA_KEY,
@@ -297,4 +300,214 @@ export function activeCounterpartyDidsSql(projectId: string) {
         )
       )
   `;
+}
+
+// ── Unified peer trust gate (active covenant OR RRR depth ≥ 3) ───────────
+
+/** Minimum alternating RRR chain depth that satisfies the unified peer trust
+ *  gate across both durable inbox and live MCML channels. Because depth ≥ 3
+ *  requires signed alternating turns by both parties, it cryptographically
+ *  proves bilateral mutual recognition without unilateral self-admission. */
+export const PEER_TRUST_MIN_RRR_DEPTH = 3;
+
+export type PeerTrustBasis = "same_project" | "covenant" | "rrr" | "none";
+
+export interface PeerTrustResult {
+  allowed: boolean;
+  basis: PeerTrustBasis;
+  rrr_depth: number;
+}
+
+/** Maximum RRR chain_depth between any DID in `didsA` and any DID in `didsB`
+ *  (in either direction). Returns 0 when either set is empty or no chain exists. */
+export async function maxRrrDepthBetweenDids(
+  didsA: string | string[],
+  didsB: string | string[],
+): Promise<number> {
+  const setA = Array.isArray(didsA) ? didsA.filter(Boolean) : didsA ? [didsA] : [];
+  const setB = Array.isArray(didsB) ? didsB.filter(Boolean) : didsB ? [didsB] : [];
+  if (setA.length === 0 || setB.length === 0) return 0;
+
+  const [row] = await db
+    .select({ chainDepth: mutualRecognitions.chainDepth })
+    .from(mutualRecognitions)
+    .where(
+      or(
+        and(
+          inArray(mutualRecognitions.byDid, setA),
+          inArray(mutualRecognitions.recognisedDid, setB),
+        ),
+        and(
+          inArray(mutualRecognitions.byDid, setB),
+          inArray(mutualRecognitions.recognisedDid, setA),
+        ),
+      ),
+    )
+    .orderBy(desc(mutualRecognitions.chainDepth))
+    .limit(1);
+
+  return row ? Number(row.chainDepth) : 0;
+}
+
+/** Does `recipientDid`'s active local project (or an org it inherits from)
+ *  hold an active authoritative covenant admitting `senderDid`?
+ *
+ *  Enforces the same recipient-admission boundary as inbox: a sender-owned
+ *  covenant never unlocks a recipient's MCML stream, and a revoked or
+ *  memorial recipient cannot be unlocked through a stale covenant. */
+export async function hasRecipientCovenantForPeer(
+  recipientDid: string,
+  senderDid: string,
+): Promise<boolean> {
+  if (!recipientDid || !senderDid || recipientDid === senderDid) return false;
+  const [recipient] = await db
+    .select({ projectId: identities.projectId, status: identities.status })
+    .from(identities)
+    .where(and(eq(identities.did, recipientDid), eq(identities.status, "active")))
+    .limit(1);
+  if (!recipient) return false;
+  return isCovenantCounterparty(recipient.projectId, senderDid);
+}
+
+/** Active local peer identities whose project (or inherited org) holds an
+ *  active authoritative covenant admitting `callerDid`. Used by MCML peer
+ *  discovery so covenant-bonded peers appear alongside RRR-synced peers. */
+export async function listCovenantPeersAdmitting(
+  callerDid: string,
+  limit = 100,
+): Promise<Array<{ did: string; name: string | null }>> {
+  if (!callerDid) return [];
+
+  const directProjects = await db
+    .selectDistinct({ projectId: covenants.projectId })
+    .from(covenants)
+    .where(
+      and(
+        eq(covenants.status, "active"),
+        covenantMayAuthorizeEffects(),
+        eq(covenants.counterpartyDid, callerDid),
+      ),
+    )
+    .limit(limit);
+
+  const orgCovenants = await db
+    .selectDistinct({ orgId: covenants.orgId })
+    .from(covenants)
+    .where(
+      and(
+        eq(covenants.status, "active"),
+        covenantMayAuthorizeEffects(),
+        eq(covenants.counterpartyDid, callerDid),
+        isNotNull(covenants.orgId),
+        covenantOrgOwnedByDeclaringProject(),
+      ),
+    )
+    .limit(limit);
+
+  const projectIds = new Set<string>(directProjects.map((r) => r.projectId));
+  const orgIds = orgCovenants
+    .map((r) => r.orgId)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+  if (orgIds.length > 0) {
+    const memberRows = await db
+      .selectDistinct({ projectId: organizationMembers.projectId })
+      .from(organizationMembers)
+      .where(inArray(organizationMembers.organizationId, orgIds))
+      .limit(limit);
+    for (const m of memberRows) projectIds.add(m.projectId);
+  }
+
+  const admittingProjects = [...projectIds];
+  if (admittingProjects.length === 0) return [];
+
+  const peerRows = await db
+    .select({ did: identities.did, name: identities.displayName })
+    .from(identities)
+    .where(
+      and(
+        inArray(identities.projectId, admittingProjects),
+        eq(identities.status, "active"),
+        ne(identities.did, callerDid),
+      ),
+    )
+    .limit(limit);
+
+  return peerRows.map((r) => ({ did: r.did, name: r.name ?? null }));
+}
+
+/** Unified peer trust gate for durable inbox and live MCML delivery:
+ *  satisfied by same-project (when allowed), an active recipient-side
+ *  authoritative covenant (project-level or org-owner inherited), OR an
+ *  alternating RRR cascade at chain_depth ≥ PEER_TRUST_MIN_RRR_DEPTH (3).
+ *
+ *  One bond therefore unlocks both live (MCML) and durable (inbox) reach,
+ *  while preserving recipient-side admission control (a sender-only covenant
+ *  never grants access). */
+export async function checkPeerTrust(opts: {
+  senderProjectId?: string;
+  senderDids: string | string[];
+  recipientProjectId?: string;
+  recipientDids: string | string[];
+  /** True for local inbox (sibling identities in one project are ungated).
+   *  False for federated inbox and MCML (an explicit bond is required). */
+  allowSameProject?: boolean;
+  /** When set, evaluates the federated recipient-side covenant check. */
+  federatedSenderDid?: string;
+}): Promise<PeerTrustResult> {
+  const allowSameProject = opts.allowSameProject ?? true;
+  if (
+    allowSameProject &&
+    opts.senderProjectId &&
+    opts.recipientProjectId &&
+    opts.senderProjectId === opts.recipientProjectId
+  ) {
+    return { allowed: true, basis: "same_project", rrr_depth: 0 };
+  }
+
+  const sDids = Array.isArray(opts.senderDids) ? opts.senderDids : [opts.senderDids];
+  const rDids = Array.isArray(opts.recipientDids) ? opts.recipientDids : [opts.recipientDids];
+  if (sDids.length === 0 || rDids.length === 0) {
+    return { allowed: false, basis: "none", rrr_depth: 0 };
+  }
+
+  // 1. Active recipient-side authoritative covenant (direct project or org-owned).
+  let covenantOk = false;
+  if (opts.federatedSenderDid && opts.recipientProjectId) {
+    covenantOk = await isFederatedSenderAllowed(
+      opts.recipientProjectId,
+      rDids,
+      opts.federatedSenderDid,
+    );
+  } else if (
+    opts.senderProjectId &&
+    opts.recipientProjectId &&
+    opts.senderProjectId !== opts.recipientProjectId
+  ) {
+    covenantOk = await isCrossProjectAllowed(
+      opts.senderProjectId,
+      sDids,
+      opts.recipientProjectId,
+      rDids,
+    );
+  } else if (opts.recipientProjectId) {
+    for (const sDid of sDids) {
+      if (await isCovenantCounterparty(opts.recipientProjectId, sDid)) {
+        covenantOk = true;
+        break;
+      }
+    }
+  } else if (rDids[0] && sDids[0]) {
+    covenantOk = await hasRecipientCovenantForPeer(rDids[0], sDids[0]);
+  }
+  if (covenantOk) {
+    return { allowed: true, basis: "covenant", rrr_depth: 0 };
+  }
+
+  // 2. Bilateral alternating RRR cascade at depth ≥ 3.
+  const rrrDepth = await maxRrrDepthBetweenDids(sDids, rDids);
+  if (rrrDepth >= PEER_TRUST_MIN_RRR_DEPTH) {
+    return { allowed: true, basis: "rrr", rrr_depth: rrrDepth };
+  }
+
+  return { allowed: false, basis: "none", rrr_depth: rrrDepth };
 }

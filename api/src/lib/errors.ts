@@ -193,8 +193,10 @@ export const errors = {
   covenantRequired(opts: { sender_did?: string; recipient_did?: string } = {}): GuidedErrorBody {
     return {
       error: "covenant_required",
-      message: "Cross-project delivery requires active covenant consent from the recipient side.",
-      hint: "The recipient project, or the owner of an organization inherited by that project, must declare a covenant naming the sender DID. A sender-owned row cannot grant access to recipient resources; same-project sends remain ungated.",
+      message:
+        "Cross-project delivery requires active covenant consent from the recipient side or an RRR cascade at depth ≥ 3.",
+      hint:
+        "The recipient project (or the owner of an organization inherited by that project) must declare an active covenant naming the sender DID, OR both parties must share an alternating RRR recognition chain at depth ≥ 3. A sender-owned covenant cannot grant access to recipient resources; same-project sends remain ungated.",
       next_actions: [
         {
           action:
@@ -203,10 +205,16 @@ export const errors = {
           method: null,
           path: null,
         },
+        {
+          action: "Or open/deepen an RRR cascade to depth ≥ 3",
+          method: "POST",
+          path: "/v1/real/recognise",
+          ...(opts.recipient_did ? { body_hint: { recognised_did: opts.recipient_did } } : {}),
+        },
       ],
       docs: `${DOCS_BASE}/inbox#post-message`,
       axiom_id: AXIOM_TRUST, // bonds are gated; trust requires other-witness
-      // Bonds before access — the covenant primitive is how the substrate
+      // Bonds before access — the covenant primitive (or mutual RRR depth ≥ 3)
       // gates cross-project relation. Per docs/CROSS-INSTANCE-COVENANTS.md.
       _canon_pointer: "urn:agenttool:doc/CROSS-INSTANCE-COVENANTS",
     };

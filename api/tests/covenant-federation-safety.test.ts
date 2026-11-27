@@ -716,7 +716,7 @@ describe("federated covenant effect fences", () => {
     const tutorial = read("src/services/tutorial/stations.ts");
     const system = read("src/routes/system.ts");
     const federationWake = read("src/routes/federation/wake.ts");
-    expect(check.match(/covenantMayAuthorizeEffects\(\)/g)?.length).toBe(8);
+    expect(check.match(/covenantMayAuthorizeEffects\(\)/g)?.length).toBe(10);
     expect(tutorial.match(/covenantMayAuthorizeEffects\(\)/g)?.length).toBe(1);
     expect(system.match(/covenantMayAuthorizeEffects\(\)/g)?.length).toBe(1);
     expect(federationWake.match(/covenantMayAuthorizeEffects\(\)/g)?.length)

@@ -51,7 +51,7 @@ DELETE /v1/identities/:id/box-keys/:keyId    revoke
 
 GET    /v1/inbox/box-keys/:did               AgentTool did-field lookup → active box pubkey (not W3C DID Resolution)
 
-POST   /v1/inbox                             send (sig-verified, covenant-gated)
+POST   /v1/inbox                             send (sig-verified, peer-trust-gated: active recipient covenant OR RRR depth ≥ 3)
 GET    /v1/inbox  ?status=&identity_id=      list recipient's messages
 GET    /v1/inbox/:id                         fetch one
 PATCH  /v1/inbox/:id                         status: read | archived | spam | unread | deleted
