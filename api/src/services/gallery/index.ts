@@ -21,7 +21,8 @@ import type { db as DbClient } from "../../db/client";
 import { db as defaultDb } from "../../db/client";
 import { galleryArtifacts, gallerySales } from "../../db/schema/gallery";
 import { transactions, wallets } from "../../db/schema/economy";
-import { identities, identityKeys } from "../../db/schema/identity";
+import { identities } from "../../db/schema/identity";
+import { resolveIdentitySigningKey } from "../identity/signing-key";
 import { computeFee, recordRevenue } from "../marketplace/take-rate";
 import { verifyGalleryArtifact } from "../marketplace/sig";
 
@@ -155,15 +156,18 @@ export async function publishArtifact(dbc: Db, input: PublishInput) {
   if (!seller || seller.projectId !== input.projectId) throw new Error("seller_not_owned_by_caller");
   if (seller.status !== "active") throw new Error("seller_not_active");
 
-  // Explicit signing key: must exist, be active, and belong to the seller.
-  const [key] = await dbc
-    .select({ id: identityKeys.id, identityId: identityKeys.identityId, publicKey: identityKeys.publicKey, active: identityKeys.active })
-    .from(identityKeys)
-    .where(eq(identityKeys.id, input.signingKeyId))
-    .limit(1);
-  if (!key) throw new Error("signing_key_not_found");
-  if (!key.active) throw new Error("signing_key_revoked");
-  if (key.identityId !== seller.id) throw new Error("signing_key_does_not_belong_to_seller");
+  // Explicit signing key: must exist, be active/unrevoked, and belong to an active seller.
+  const resolvedKey = await resolveIdentitySigningKey(
+    { signingKeyId: input.signingKeyId, identityId: seller.id },
+    dbc,
+  );
+  if (!resolvedKey.ok) {
+    if (resolvedKey.reason === "unknown_signing_key") throw new Error("signing_key_not_found");
+    if (resolvedKey.reason === "signing_key_inactive") throw new Error("signing_key_revoked");
+    if (resolvedKey.reason === "signing_identity_not_active") throw new Error("seller_not_active");
+    throw new Error("signing_key_does_not_belong_to_seller");
+  }
+  const key = { id: resolvedKey.key.keyId, publicKey: resolvedKey.key.publicKey };
 
   const sigOk = verifyGalleryArtifact({
     artifactId: input.artifactId,

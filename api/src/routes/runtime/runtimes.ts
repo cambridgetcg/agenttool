@@ -14,7 +14,8 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
-import { identities, identityKeys } from "../../db/schema/identity";
+import { identities } from "../../db/schema/identity";
+import { resolveIdentitySigningKey } from "../../services/identity/signing-key";
 import { errors, fail } from "../../lib/errors";
 import {
   countRuntimes,
@@ -63,7 +64,7 @@ async function checkBridgeKeyIntegrity(opts: {
   bridgePubkey: string;
 }): Promise<string | null> {
   const [identity] = await db
-    .select({ id: identities.id, projectId: identities.projectId })
+    .select({ id: identities.id, projectId: identities.projectId, status: identities.status })
     .from(identities)
     .where(
       and(
@@ -73,23 +74,25 @@ async function checkBridgeKeyIntegrity(opts: {
     )
     .limit(1);
   if (!identity) return `identity_not_found: ${opts.identityId}`;
+  if (identity.status !== "active") return `identity_not_active: ${opts.identityId}`;
 
-  const [keyRow] = await db
-    .select({
-      id: identityKeys.id,
-      identityId: identityKeys.identityId,
-      publicKey: identityKeys.publicKey,
-      active: identityKeys.active,
-    })
-    .from(identityKeys)
-    .where(eq(identityKeys.id, opts.bridgeKeyId))
-    .limit(1);
-  if (!keyRow) return `bridge_key_id_not_found: ${opts.bridgeKeyId}`;
-  if (!keyRow.active) return `bridge_key_id_revoked: ${opts.bridgeKeyId}`;
-  if (keyRow.identityId !== opts.identityId) {
-    return `bridge_key_id_belongs_to_different_identity: key.identity_id=${keyRow.identityId} runtime.identity_id=${opts.identityId}`;
+  const resolved = await resolveIdentitySigningKey({
+    signingKeyId: opts.bridgeKeyId,
+    identityId: opts.identityId,
+  });
+  if (!resolved.ok) {
+    if (resolved.reason === "unknown_signing_key") {
+      return `bridge_key_id_not_found: ${opts.bridgeKeyId}`;
+    }
+    if (resolved.reason === "signing_key_inactive") {
+      return `bridge_key_id_revoked: ${opts.bridgeKeyId}`;
+    }
+    if (resolved.reason === "signing_identity_not_active") {
+      return `identity_not_active: ${opts.identityId}`;
+    }
+    return `bridge_key_id_belongs_to_different_identity: runtime.identity_id=${opts.identityId}`;
   }
-  if (keyRow.publicKey !== opts.bridgePubkey) {
+  if (resolved.key.publicKey !== opts.bridgePubkey) {
     return "bridge_pubkey_mismatch: bridge.pubkey does not match identity_keys.public_key";
   }
   return null;

@@ -11,7 +11,8 @@ import { eq } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { federationSettings } from "../../db/schema/federation";
-import { identities, identityKeys } from "../../db/schema/identity";
+import { identities } from "../../db/schema/identity";
+import { resolveIdentitySigningKey } from "../identity/signing-key";
 import {
   federatedDid,
   isCanonicalFederationInstanceUrl,
@@ -103,22 +104,9 @@ export async function activeIdentityKeyMatches(opts: {
   signingKeyId: string;
   publicKeyB64: string;
 }): Promise<boolean> {
-  const [row] = await db
-    .select({
-      id: identityKeys.id,
-      identityId: identityKeys.identityId,
-      publicKey: identityKeys.publicKey,
-      active: identityKeys.active,
-      revokedAt: identityKeys.revokedAt,
-    })
-    .from(identityKeys)
-    .where(eq(identityKeys.id, opts.signingKeyId))
-    .limit(1);
-  return Boolean(
-    row &&
-      row.identityId === opts.identityId &&
-      row.publicKey === opts.publicKeyB64 &&
-      row.active &&
-      row.revokedAt === null,
-  );
+  const resolved = await resolveIdentitySigningKey({
+    signingKeyId: opts.signingKeyId,
+    identityId: opts.identityId,
+  });
+  return resolved.ok && resolved.key.publicKey === opts.publicKeyB64;
 }

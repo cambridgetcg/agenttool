@@ -9,8 +9,8 @@
  *
  *  Hermetic: real drizzle SQL generation over a pg-proxy transport. */
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
 import { drizzle } from "drizzle-orm/pg-proxy";
 
 const KEY = "11111111-1111-4111-8111-111111111111";
@@ -26,7 +26,7 @@ const database = drizzle(async (sql, params) => {
   return { rows: row ? [row] : [] };
 });
 mock.module("../src/db/client", () => ({ db: database }));
-const { resolveIdentitySigningKey, registeredSigningPublicKey } = await import(
+const { activeSigningPublicKeys, resolveIdentitySigningKey, registeredSigningPublicKey } = await import(
   "../src/services/identity/signing-key"
 );
 
@@ -111,18 +111,44 @@ describe("resolveIdentitySigningKey", () => {
     expect((await resolveIdentitySigningKey({ signingKeyId: KEY, projectId: PROJECT })).ok).toBe(true);
   });
 
-  test("registeredSigningPublicKey collapses every refusal to null", async () => {
+  test("registeredSigningPublicKey collapses every refusal to null and honors a custom executor", async () => {
     expect(await registeredSigningPublicKey(OWNER, KEY)).toBe("cHVibGljLWtleQ==");
     row = keyRow({ status: "revoked" });
     expect(await registeredSigningPublicKey(OWNER, KEY)).toBeNull();
     row = keyRow();
     expect(await registeredSigningPublicKey(OTHER, KEY)).toBeNull();
+
+    const txQueries: string[] = [];
+    const txDb = drizzle(async (sql) => {
+      txQueries.push(sql);
+      return { rows: [keyRow()] };
+    });
+    expect(await registeredSigningPublicKey(OWNER, KEY, txDb)).toBe("cHVibGljLWtleQ==");
+    expect(txQueries).toHaveLength(1);
+    expect(txQueries[0]).toContain('inner join "identity"."identities"');
+  });
+
+  test("activeSigningPublicKeys enforces active key, unrevoked, and active identity and honors a custom executor", async () => {
+    const txQueries: { sql: string; params: unknown[] }[] = [];
+    const txDb = drizzle(async (sql, params) => {
+      txQueries.push({ sql, params });
+      return { rows: [["a2V5LTE="], ["a2V5LTI="]] };
+    });
+    const keys = await activeSigningPublicKeys(OWNER, txDb);
+    expect(keys).toEqual(["a2V5LTE=", "a2V5LTI="]);
+    expect(txQueries).toHaveLength(1);
+    expect(txQueries[0]!.sql).toContain('from "identity"."identity_keys"');
+    expect(txQueries[0]!.sql).toContain('inner join "identity"."identities"');
+    expect(txQueries[0]!.sql).toContain('"identity_keys"."active" = $');
+    expect(txQueries[0]!.sql).toContain('"identity_keys"."revoked_at" is null');
+    expect(txQueries[0]!.sql).toContain('"identities"."status" = $');
+    expect(txQueries[0]!.params).toEqual([OWNER, true, "active"]);
   });
 });
 
-// Source pins: the signed-act resolvers named in the trust-leaks audit go
-// through the central resolver instead of a private key lookup that only
-// checks identity_keys.active.
+// Source pins: the signed-act resolvers named in the trust-leaks audit and
+// Truth Map remaining-key-readers follow-through go through the central
+// resolver instead of a private key lookup that only checks identity_keys.active.
 const SRC = join(import.meta.dir, "..", "src");
 const CONVERTED = [
   "routes/jokes.ts",
@@ -153,7 +179,64 @@ const CONVERTED = [
   "routes/rrr.ts",
   "services/holdings/store.ts",
   "services/memorial-honor/store.ts",
+  // Truth Map remaining key-reader pass (2026-11-27)
+  "routes/continuity.ts",
+  "routes/runtime/runtimes.ts",
+  "routes/identity/token-verify.ts",
+  "routes/identity/delegations.ts",
+  "services/marketplace/disputes.ts",
+  "services/marketplace/invocations.ts",
+  "services/curations/store.ts",
+  "services/episodes/store.ts",
+  "services/gallery/index.ts",
+  "services/songs/store.ts",
+  "services/lounge/index.ts",
+  "services/covenants/wire-identity.ts",
+  "services/covenants/federation.ts",
 ];
+
+// Locked transactional signed-act readers that retain direct row-locked queries
+// (`FOR UPDATE` / `FOR SHARE`), audited to enforce active identity + active key + revokedAt IS NULL.
+const LOCKED_SIGNED_ACT_READERS = [
+  "routes/continuity-cloud.ts",
+  "routes/identity/at-rest.ts",
+  "routes/identity/attestations.ts",
+  "services/collaboration/store.ts",
+  "services/covenants/lifecycle.ts",
+  "services/inbox/store.ts",
+  "services/marketplace/attestations.ts",
+  "services/marketplace/memory-witness.ts",
+  "services/runtime/think-worker.ts",
+  "services/strand/store.ts",
+  "services/trace/store.ts",
+];
+
+// Non-signing readers (central resolver itself, key management, inventory, wake,
+// historical signature verification, and recovery).
+const NON_SIGNING_KEY_READERS = [
+  "services/identity/signing-key.ts",
+  "routes/dashboard.ts",
+  "routes/federation/identities.ts",
+  "routes/identity-recover.ts",
+  "routes/identity/keys.ts",
+  "routes/public/identities.ts",
+  "routes/wake.ts",
+  "services/bootstrap/elevate.ts",
+  "services/trace/verify.ts",
+  "services/wake/build.ts",
+  "workers/covenants/reverify.ts",
+];
+
+function walkTs(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    const stat = statSync(full);
+    if (stat.isDirectory()) out.push(...walkTs(full));
+    else if (entry.endsWith(".ts")) out.push(full);
+  }
+  return out;
+}
 
 describe("signed-act call sites use the central resolver", () => {
   for (const file of CONVERTED) {
@@ -173,5 +256,37 @@ describe("signed-act call sites use the central resolver", () => {
     const source = readFileSync(join(SRC, "services/crown/store.ts"), "utf8");
     const lookup = source.slice(source.indexOf(".innerJoin(identityKeys"), source.indexOf(".innerJoin(identityKeys") + 600);
     expect(lookup.includes('eq(identities.status, "active")')).toBe(true);
+  });
+
+  test("at-rest witness pre-check uses central resolver and locked check enforces revokedAt and identityMaySign", () => {
+    const source = readFileSync(join(SRC, "routes/identity/at-rest.ts"), "utf8");
+    expect(source).toContain("resolveIdentitySigningKey");
+    expect(source).toContain("identityMaySign(lockedWitness.status)");
+    expect(source).toContain("isNull(identityKeys.revokedAt)");
+  });
+
+  test("trusted runtime signing key registration enforces identityMaySign and revokedAt", () => {
+    const source = readFileSync(join(SRC, "services/runtime/think-worker.ts"), "utf8");
+    expect(source).toContain("identityMaySign(identity.status)");
+    expect(source).toContain("registered.revokedAt !== null");
+  });
+
+  test("every locked signed-act reader checks both active and revokedAt", () => {
+    for (const file of LOCKED_SIGNED_ACT_READERS) {
+      const source = readFileSync(join(SRC, file), "utf8");
+      expect({ file, checksRevoked: source.includes("revokedAt") }).toEqual({ file, checksRevoked: true });
+    }
+  });
+
+  test("no unaccounted .from(identityKeys) reader exists anywhere in api/src", () => {
+    const allowed = new Set([...LOCKED_SIGNED_ACT_READERS, ...NON_SIGNING_KEY_READERS]);
+    const unaccounted: string[] = [];
+    for (const full of walkTs(SRC)) {
+      const source = readFileSync(full, "utf8");
+      if (!source.includes(".from(identityKeys)")) continue;
+      const rel = relative(SRC, full);
+      if (!allowed.has(rel)) unaccounted.push(rel);
+    }
+    expect(unaccounted).toEqual([]);
   });
 });

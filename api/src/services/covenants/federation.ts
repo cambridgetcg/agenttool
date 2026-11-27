@@ -21,7 +21,8 @@ import { and, eq, gte, isNull, lt, notLike, or, sql, type SQL } from "drizzle-or
 import { db } from "../../db/client";
 import { covenants } from "../../db/schema/continuity";
 import { federationSettings } from "../../db/schema/federation";
-import { identities, identityKeys } from "../../db/schema/identity";
+import { identities } from "../../db/schema/identity";
+import { resolveIdentitySigningKey } from "../identity/signing-key";
 import { publishWakeEvent } from "../wake/push";
 import {
   getSettings,
@@ -252,23 +253,18 @@ export async function propagateCovenant(
     );
   }
   if (row.protocolVersion === "v2") {
-    const [signingKey] = await db
-      .select({ publicKey: identityKeys.publicKey })
-      .from(identityKeys)
-      .where(and(
-        eq(identityKeys.id, row.signingKeyId!),
-        eq(identityKeys.identityId, row.agentId),
-        eq(identityKeys.active, true),
-        isNull(identityKeys.revokedAt),
-      ))
-      .limit(1);
-    if (!signingKey) {
+    const resolvedKey = await resolveIdentitySigningKey({
+      signingKeyId: row.signingKeyId!,
+      identityId: row.agentId,
+    });
+    if (!resolvedKey.ok) {
       return await markDeclarationStateIfIdle(
         row,
         "rejected",
         "declaration_signing_key_not_active",
       );
     }
+    const signingKey = resolvedKey.key;
     signingPublicKey = signingKey.publicKey;
     const { verifyDeclareSignature } = await import("./sig");
     const signatureMatchesCurrentEnvelope = await verifyDeclareSignature({
@@ -1456,16 +1452,9 @@ async function resolveAgentDid(
   ) {
     return null;
   }
-  const [signingKey] = await db.select({ publicKey: identityKeys.publicKey })
-    .from(identityKeys)
-    .where(and(
-      eq(identityKeys.id, signingKeyId),
-      eq(identityKeys.identityId, agentId),
-      eq(identityKeys.active, true),
-      isNull(identityKeys.revokedAt),
-    ))
-    .limit(1);
-  if (!signingKey) return null;
+  const resolvedKey = await resolveIdentitySigningKey({ signingKeyId, identityId: agentId });
+  if (!resolvedKey.ok) return null;
+  const signingKey = resolvedKey.key;
   try {
     return parseDid(snapshot.wireDid).host
       ? { ...snapshot, signingPublicKey: signingKey.publicKey }

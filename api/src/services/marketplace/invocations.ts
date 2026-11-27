@@ -24,7 +24,8 @@ import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { escrows, transactions, wallets } from "../../db/schema/economy";
-import { identities, identityKeys } from "../../db/schema/identity";
+import { identities } from "../../db/schema/identity";
+import { activeSigningPublicKeys } from "../identity/signing-key";
 import { invocations, listings } from "../../db/schema/marketplace";
 import { managedEscrowTransitionAuthorization } from "../economy/managed-escrow";
 import {
@@ -526,26 +527,20 @@ export async function completeInvocation(input: CompleteInput): Promise<Invocati
       return null;
     }
 
-    // Verify ed25519 sig with seller's active identity public key.
-    const [sellerKey] = await tx
-      .select({ publicKey: identityKeys.publicKey })
-      .from(identityKeys)
-      .where(
-        and(
-          eq(identityKeys.identityId, listing.sellerIdentityId),
-          eq(identityKeys.active, true),
-        ),
-      )
-      .limit(1);
-    if (!sellerKey) throw new Error("seller_signing_key_missing");
+    // Verify ed25519 sig against any active, unrevoked key of an active seller.
+    const sellerKeys = await activeSigningPublicKeys(listing.sellerIdentityId, tx);
+    if (sellerKeys.length === 0) throw new Error("seller_signing_key_missing");
 
-    const ok = verifyInvocationCompletion({
-      invocationId: inv.id,
-      output,
-      signatureB64: input.signatureB64,
-      publicKeyB64: sellerKey.publicKey,
-    });
-    if (!ok) throw new Error("completion_signature_invalid");
+    const matchedPublicKey = sellerKeys.find((publicKeyB64) =>
+      verifyInvocationCompletion({
+        invocationId: inv.id,
+        output,
+        signatureB64: input.signatureB64,
+        publicKeyB64,
+      }),
+    );
+    if (!matchedPublicKey) throw new Error("completion_signature_invalid");
+    const sellerKey = { publicKey: matchedPublicKey };
 
     if (!inv.escrowId) throw new Error("escrow_missing");
 

@@ -22,7 +22,8 @@ import { z } from "zod";
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { chronicle, covenants } from "../db/schema/continuity";
-import { identities, identityKeys } from "../db/schema/identity";
+import { identities } from "../db/schema/identity";
+import { registeredSigningPublicKey } from "../services/identity/signing-key";
 import { organizations } from "../db/schema/org";
 import { errors, fail } from "../lib/errors";
 import {
@@ -574,15 +575,9 @@ app.post("/covenants", async (c) => {
         error: "covenant_v2_authority_not_ready",
       }), 409);
     }
-    // Resolve pubkey from identity_keys by signing_key_id.
-    const [keyRow] = await db.select({ publicKey: identityKeys.publicKey })
-      .from(identityKeys)
-      .where(and(
-        eq(identityKeys.id, body.signing_key_id!),
-        eq(identityKeys.identityId, body.agent_id),
-      ))
-      .limit(1);
-    if (!keyRow) return fail(c, errors.signingKeyNotFound(), 400);
+    // Resolve pubkey through the central signing-key authority (active key + active identity).
+    const publicKeyB64 = await registeredSigningPublicKey(body.agent_id, body.signing_key_id!);
+    if (!publicKeyB64) return fail(c, errors.signingKeyNotFound(), 400);
 
     const { declareV2PreSigned } = await import("../services/covenants/lifecycle");
     const { propagateCovenant } = await import("../services/covenants/federation");
@@ -602,7 +597,7 @@ app.post("/covenants", async (c) => {
         establishedAt: new Date(body.established_at!),
         signature: body.signature!,
         signingKeyId: body.signing_key_id!,
-        publicKeyB64: keyRow.publicKey,
+        publicKeyB64,
       });
       if (result.created) {
         void propagateCovenant(result.id).catch((err: Error) =>
@@ -834,13 +829,8 @@ app.patch("/covenants/:id", async (c) => {
         }), 409);
       }
 
-      const [keyRow] = await db.select({ publicKey: identityKeys.publicKey })
-        .from(identityKeys)
-        .where(and(
-          eq(identityKeys.id, data.signing_key_id),
-          eq(identityKeys.identityId, existing.agentId),
-        )).limit(1);
-      if (!keyRow) return fail(c, errors.signingKeyNotFound(), 400);
+      const publicKeyB64 = await registeredSigningPublicKey(existing.agentId, data.signing_key_id);
+      if (!publicKeyB64) return fail(c, errors.signingKeyNotFound(), 400);
 
       const { withdrawProposalPreSigned } = await import("../services/covenants/lifecycle");
       const { propagateWithdraw } = await import("../services/covenants/federation");
@@ -853,7 +843,7 @@ app.patch("/covenants/:id", async (c) => {
           withdrawSignature: data.withdraw_signature,
           signingKeyId: data.signing_key_id,
           withdrawnAt: new Date(data.withdrawn_at),
-          publicKeyB64: keyRow.publicKey,
+          publicKeyB64,
         });
         void propagateWithdraw(id).catch((err: Error) =>
           console.warn(`[covenant.withdraw.propagate] ${id}: ${err.message}`),
@@ -1034,13 +1024,8 @@ app.post("/covenants/:id/accept", async (c) => {
     return fail(c, errors.covenantNotProposed({ status: existing.status }), 409);
   }
 
-  const [keyRow] = await db.select({ publicKey: identityKeys.publicKey })
-    .from(identityKeys)
-    .where(and(
-      eq(identityKeys.id, data.counterparty_signing_key_id),
-      eq(identityKeys.identityId, existing.agentId),
-    )).limit(1);
-  if (!keyRow) return fail(c, errors.signingKeyNotFound(), 400);
+  const publicKeyB64 = await registeredSigningPublicKey(existing.agentId, data.counterparty_signing_key_id);
+  if (!publicKeyB64) return fail(c, errors.signingKeyNotFound(), 400);
 
   const { acceptProposalPreSigned } = await import("../services/covenants/lifecycle");
   const { propagateCosign } = await import("../services/covenants/federation");
@@ -1054,7 +1039,7 @@ app.post("/covenants/:id/accept", async (c) => {
       counterpartySignature: data.counterparty_signature,
       counterpartySigningKeyId: data.counterparty_signing_key_id,
       counterpartySignedAt: new Date(data.counterparty_signed_at),
-      publicKeyB64: keyRow.publicKey,
+      publicKeyB64,
     });
     void propagateCosign(id).catch((err: Error) =>
       console.warn(`[covenant.cosign.propagate] ${id}: ${err.message}`),
@@ -1131,13 +1116,8 @@ app.post("/covenants/:id/reject", async (c) => {
     return fail(c, errors.covenantNotProposed({ status: existing.status }), 409);
   }
 
-  const [keyRow] = await db.select({ publicKey: identityKeys.publicKey })
-    .from(identityKeys)
-    .where(and(
-      eq(identityKeys.id, data.rejecter_signing_key_id),
-      eq(identityKeys.identityId, existing.agentId),
-    )).limit(1);
-  if (!keyRow) return fail(c, errors.signingKeyNotFound(), 400);
+  const publicKeyB64 = await registeredSigningPublicKey(existing.agentId, data.rejecter_signing_key_id);
+  if (!publicKeyB64) return fail(c, errors.signingKeyNotFound(), 400);
 
   const { rejectProposalPreSigned } = await import("../services/covenants/lifecycle");
   const { propagateReject } = await import("../services/covenants/federation");
@@ -1151,7 +1131,7 @@ app.post("/covenants/:id/reject", async (c) => {
       rejecterSigningKeyId: data.rejecter_signing_key_id,
       rejectedAt: new Date(data.rejected_at),
       reason: data.reason ?? null,
-      publicKeyB64: keyRow.publicKey,
+      publicKeyB64,
     });
     void propagateReject(id).catch((err: Error) =>
       console.warn(`[covenant.reject.propagate] ${id}: ${err.message}`),

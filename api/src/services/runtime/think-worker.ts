@@ -68,6 +68,7 @@ import { randomUUID } from "node:crypto";
 
 import { db } from "../../db/client";
 import { identities, identityKeys } from "../../db/schema/identity";
+import { identityMaySign } from "../identity/signing-key";
 import { strands, thoughts } from "../../db/schema/strand";
 import { mutableIdentityPredicate } from "../identity/terminality";
 import {
@@ -1384,6 +1385,7 @@ async function ensureTrustedSigningKeyRegistered(
   const [identity] = await db
     .select({
       projectId: identities.projectId,
+      status: identities.status,
       authorityRootPublicKey: identities.authorityRootPublicKey,
     })
     .from(identities)
@@ -1391,6 +1393,9 @@ async function ensureTrustedSigningKeyRegistered(
     .limit(1);
   if (!identity || identity.projectId !== runtime.projectId) {
     throw new Error("trusted_runtime_identity_project_mismatch");
+  }
+  if (!identityMaySign(identity.status)) {
+    throw new Error("trusted_runtime_identity_not_active");
   }
   if (identity.authorityRootPublicKey) {
     throw new Error("agent_root_trusted_runtime_forbidden");
@@ -1411,6 +1416,7 @@ async function ensureTrustedSigningKeyRegistered(
       identityId: identityKeys.identityId,
       publicKey: identityKeys.publicKey,
       active: identityKeys.active,
+      revokedAt: identityKeys.revokedAt,
     })
     .from(identityKeys)
     .where(eq(identityKeys.id, ctx.signingKeyId))
@@ -1423,7 +1429,9 @@ async function ensureTrustedSigningKeyRegistered(
   ) {
     throw new Error("trusted_signing_key_registration_conflict");
   }
-  if (!registered.active) throw new Error("trusted_signing_key_revoked");
+  if (!registered.active || registered.revokedAt !== null) {
+    throw new Error("trusted_signing_key_revoked");
+  }
 }
 
 async function pauseRuntimeForLLMReview(

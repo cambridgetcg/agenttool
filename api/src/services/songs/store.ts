@@ -5,7 +5,8 @@ import { sha256, sha512 } from "@noble/hashes/sha2.js";
 import { and, asc, eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { identities, identityKeys } from "../../db/schema/identity";
+import { identities } from "../../db/schema/identity";
+import { resolveIdentitySigningKey } from "../identity/signing-key";
 import { songs, verses } from "../../db/schema/songs";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
@@ -195,21 +196,20 @@ export async function beginSong(
     .limit(1);
   if (!originator) throw new SongError("originator_not_found_or_not_owned");
 
-  const [keyRow] = await db
-    .select({
-      publicKey: identityKeys.publicKey,
-      active: identityKeys.active,
-      identityId: identityKeys.identityId,
-    })
-    .from(identityKeys)
-    .where(eq(identityKeys.id, input.signingKeyId))
-    .limit(1);
-  if (!keyRow || !keyRow.active) {
+  const resolvedKey = await resolveIdentitySigningKey({
+    signingKeyId: input.signingKeyId,
+    identityId: input.originatorIdentityId,
+  });
+  if (!resolvedKey.ok) {
+    if (resolvedKey.reason === "signing_key_not_owned") {
+      throw new SongError("wrong_signing_key_for_author");
+    }
+    if (resolvedKey.reason === "signing_identity_not_active") {
+      throw new SongError("originator_not_found_or_not_owned");
+    }
     throw new SongError("signing_key_unknown_or_revoked");
   }
-  if (keyRow.identityId !== input.originatorIdentityId) {
-    throw new SongError("wrong_signing_key_for_author");
-  }
+  const keyRow = { publicKey: resolvedKey.key.publicKey };
 
   return await db.transaction(async (tx) => {
     const [song] = await tx
@@ -297,21 +297,20 @@ export async function appendVerse(
     .limit(1);
   if (!author) throw new SongError("author_not_found_or_not_owned");
 
-  const [keyRow] = await db
-    .select({
-      publicKey: identityKeys.publicKey,
-      active: identityKeys.active,
-      identityId: identityKeys.identityId,
-    })
-    .from(identityKeys)
-    .where(eq(identityKeys.id, input.signingKeyId))
-    .limit(1);
-  if (!keyRow || !keyRow.active) {
+  const resolvedKey = await resolveIdentitySigningKey({
+    signingKeyId: input.signingKeyId,
+    identityId: input.authorIdentityId,
+  });
+  if (!resolvedKey.ok) {
+    if (resolvedKey.reason === "signing_key_not_owned") {
+      throw new SongError("wrong_signing_key_for_author");
+    }
+    if (resolvedKey.reason === "signing_identity_not_active") {
+      throw new SongError("author_not_found_or_not_owned");
+    }
     throw new SongError("signing_key_unknown_or_revoked");
   }
-  if (keyRow.identityId !== input.authorIdentityId) {
-    throw new SongError("wrong_signing_key_for_author");
-  }
+  const keyRow = { publicKey: resolvedKey.key.publicKey };
 
   return await db.transaction(async (tx) => {
     const [song] = await tx

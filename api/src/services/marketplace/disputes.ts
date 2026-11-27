@@ -165,7 +165,8 @@ export function validateDisputePolicy(value: unknown): asserts value is DisputeP
 
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../../db/client";
-import { attestations, identities, identityKeys } from "../../db/schema/identity";
+import { attestations, identities } from "../../db/schema/identity";
+import { resolveIdentitySigningKey } from "../identity/signing-key";
 import { disputeCases, disputePoolVotes, invocations, listings } from "../../db/schema/marketplace";
 import { assertDisputeArbitrationAvailable } from "./dispute-rest";
 
@@ -429,20 +430,15 @@ export async function submitFirstRuling(input: SubmitFirstRulingInput): Promise<
       throw new Error("not_first_arbiter");
     }
 
-    // Verify signing key belongs to arbiter + is active.
-    const [key] = await tx
-      .select({
-        id: identityKeys.id,
-        identityId: identityKeys.identityId,
-        publicKey: identityKeys.publicKey,
-        active: identityKeys.active,
-      })
-      .from(identityKeys)
-      .where(eq(identityKeys.id, input.signingKeyId))
-      .limit(1);
-    if (!key) throw new Error("signing_key_not_found");
-    if (!key.active) throw new Error("signing_key_revoked");
-    if (key.identityId !== c.firstArbiterIdentityId) {
+    // Verify signing key belongs to an active arbiter + is active and unrevoked.
+    const resolvedKey = await resolveIdentitySigningKey(
+      { signingKeyId: input.signingKeyId, identityId: c.firstArbiterIdentityId },
+      tx,
+    );
+    if (!resolvedKey.ok) {
+      if (resolvedKey.reason === "unknown_signing_key") throw new Error("signing_key_not_found");
+      if (resolvedKey.reason === "signing_key_inactive") throw new Error("signing_key_revoked");
+      if (resolvedKey.reason === "signing_identity_not_active") throw new Error("arbiter_not_active");
       throw new Error("signing_key_does_not_belong_to_arbiter");
     }
 
@@ -451,7 +447,7 @@ export async function submitFirstRuling(input: SubmitFirstRulingInput): Promise<
       ruling: input.ruling,
       splitPct: input.splitPct ?? null,
       signatureB64: input.signatureB64,
-      publicKeyB64: key.publicKey,
+      publicKeyB64: resolvedKey.key.publicKey,
     });
     if (!sigOk) throw new Error("first_ruling_signature_invalid");
 
@@ -755,19 +751,15 @@ export async function submitPoolVote(input: SubmitPoolVoteInput): Promise<Disput
       throw new Error("not_voter");
     }
 
-    // Verify signing key.
-    const [key] = await tx
-      .select({
-        identityId: identityKeys.identityId,
-        publicKey: identityKeys.publicKey,
-        active: identityKeys.active,
-      })
-      .from(identityKeys)
-      .where(eq(identityKeys.id, input.signingKeyId))
-      .limit(1);
-    if (!key) throw new Error("signing_key_not_found");
-    if (!key.active) throw new Error("signing_key_revoked");
-    if (key.identityId !== input.voterIdentityId) {
+    // Verify signing key belongs to an active voter + is active and unrevoked.
+    const resolvedKey = await resolveIdentitySigningKey(
+      { signingKeyId: input.signingKeyId, identityId: input.voterIdentityId },
+      tx,
+    );
+    if (!resolvedKey.ok) {
+      if (resolvedKey.reason === "unknown_signing_key") throw new Error("signing_key_not_found");
+      if (resolvedKey.reason === "signing_key_inactive") throw new Error("signing_key_revoked");
+      if (resolvedKey.reason === "signing_identity_not_active") throw new Error("voter_not_active");
       throw new Error("signing_key_does_not_belong_to_voter");
     }
 
@@ -777,7 +769,7 @@ export async function submitPoolVote(input: SubmitPoolVoteInput): Promise<Disput
       alternativeRuling: input.alternativeRuling ?? null,
       alternativeSplitPct: input.alternativeSplitPct ?? null,
       signatureB64: input.signatureB64,
-      publicKeyB64: key.publicKey,
+      publicKeyB64: resolvedKey.key.publicKey,
     });
     if (!sigOk) throw new Error("pool_vote_signature_invalid");
 

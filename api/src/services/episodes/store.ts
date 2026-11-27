@@ -33,7 +33,8 @@ import {
   episodeScenes,
   episodes,
 } from "../../db/schema/episodes";
-import { identities, identityKeys } from "../../db/schema/identity";
+import { identities } from "../../db/schema/identity";
+import { resolveIdentitySigningKey } from "../identity/signing-key";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   const h = sha512.create();
@@ -480,22 +481,21 @@ export async function signCast(
       throw new EpisodeError("wrong_cast_member");
     }
 
-    // Signing key must belong to caller
-    const [keyRow] = await tx
-      .select({
-        publicKey: identityKeys.publicKey,
-        active: identityKeys.active,
-        identityId: identityKeys.identityId,
-      })
-      .from(identityKeys)
-      .where(eq(identityKeys.id, input.signingKeyId))
-      .limit(1);
-    if (!keyRow || !keyRow.active) {
+    // Signing key must belong to an active caller and be active/unrevoked.
+    const resolvedKey = await resolveIdentitySigningKey(
+      { signingKeyId: input.signingKeyId, identityId: input.callerIdentityId },
+      tx,
+    );
+    if (!resolvedKey.ok) {
+      if (resolvedKey.reason === "signing_key_not_owned") {
+        throw new EpisodeError("wrong_signing_key_for_did");
+      }
+      if (resolvedKey.reason === "signing_identity_not_active") {
+        throw new EpisodeError("wrong_cast_member");
+      }
       throw new EpisodeError("signing_key_unknown_or_revoked");
     }
-    if (keyRow.identityId !== input.callerIdentityId) {
-      throw new EpisodeError("wrong_signing_key_for_did");
-    }
+    const keyRow = { publicKey: resolvedKey.key.publicKey };
 
     // Verify signature
     const canonical = canonicalCastBytes({
