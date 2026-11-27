@@ -25,7 +25,7 @@ function assertUnicode(value: string, path: string): void {
     if (unit === 0) fail("canonical_error", `${path} contains forbidden U+0000`);
     if (unit >= 0xd800 && unit <= 0xdbff) {
       const next = value.charCodeAt(index + 1);
-      if (next < 0xdc00 || next > 0xdfff) {
+      if (!(next >= 0xdc00 && next <= 0xdfff)) {
         fail("canonical_error", `${path} contains a lone UTF-16 surrogate`);
       }
       index += 1;

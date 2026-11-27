@@ -43,8 +43,8 @@
     {
       "role": "runtime_input",
       "path": "packages/love-bomb/dist/canonical.js",
-      "bytes": 5839,
-      "sha256": "02fa4308c0a96c5fb9f78d15be80d8836317b18bf344805a96b62768de285f93"
+      "bytes": 5844,
+      "sha256": "012546c5821b9b14a7dbf13f05a23f2f89d28d697cc1e85c8c72819292d534d9"
     },
     {
       "role": "runtime_input",
@@ -97,8 +97,8 @@
     {
       "role": "source_definition",
       "path": "packages/love-bomb/src/canonical.ts",
-      "bytes": 5645,
-      "sha256": "423b5d5c62eb2a204637fa0d4b378205e0a5e680f7605a45ecebeedd53d3fa58"
+      "bytes": 5650,
+      "sha256": "98ac1d38913a1b983f551a8fa0a5c02be40289f9240f872190074f676e38f268"
     },
     {
       "role": "source_definition",
@@ -150,5 +150,5 @@
   "provider_effect": "none",
   "publication_effect": "none",
   "deployment_effect": "none",
-  "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9"
+  "source_manifest_ref": "sha256:b57cee7d51d7b5060c9b081e6542fdb0ad3fbf742389f10b91b7fd8271c06f4f"
 }

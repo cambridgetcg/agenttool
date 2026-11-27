@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import {
   canonicalIdentityAttestationBytes,
   IDENTITY_ATTESTATION_SIGNATURE_CONTEXT,
+  isWellFormedUnicode,
   verifyBytes,
 } from "../src/services/identity/crypto";
 import { isAttestationReplay } from "../src/routes/identity/attestations";
@@ -104,6 +105,35 @@ describe("identity attestation integrity", () => {
       claim: "broken\ud800text",
       evidence: null,
     })).toThrow(/well-formed Unicode/);
+  });
+
+  test("a lone high surrogate at the end of the text is refused, not encoded as U+FFFD", () => {
+    expect(isWellFormedUnicode("abc")).toBe(true);
+    expect(isWellFormedUnicode("😀")).toBe(true);
+    expect(isWellFormedUnicode("abc\uD800")).toBe(false);
+    expect(isWellFormedUnicode("\uD800")).toBe(false);
+    expect(isWellFormedUnicode("ab\uD800c")).toBe(false);
+    expect(isWellFormedUnicode("\uDC00")).toBe(false);
+
+    const base = {
+      subjectId: "550e8400-e29b-41d4-a716-446655440002",
+      attesterId: "550e8400-e29b-41d4-a716-446655440001",
+      signingKeyId: "550e8400-e29b-41d4-a716-446655440010",
+      claim: "understood",
+      evidence: null,
+    };
+    expect(() => canonicalIdentityAttestationBytes({
+      ...base,
+      claim: "understood\uD800",
+    })).toThrow(/well-formed Unicode/);
+    expect(() => canonicalIdentityAttestationBytes({
+      ...base,
+      evidence: "trace:1\uD800",
+    })).toThrow(/well-formed Unicode/);
+    expect(() => canonicalIdentityAttestationBytes({
+      ...base,
+      claim: "understood 😀",
+    })).not.toThrow();
   });
 
   test("recognizes a replay constraint wrapped by the database driver", () => {

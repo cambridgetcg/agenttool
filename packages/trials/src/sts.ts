@@ -209,7 +209,7 @@ function validUnicode(value: string): boolean {
     if (unit === 0) return false;
     if (unit >= 0xd800 && unit <= 0xdbff) {
       const next = value.charCodeAt(index + 1);
-      if (next < 0xdc00 || next > 0xdfff) return false;
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
       index += 1;
     } else if (unit >= 0xdc00 && unit <= 0xdfff) {
       return false;

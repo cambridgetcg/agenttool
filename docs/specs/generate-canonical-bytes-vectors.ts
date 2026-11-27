@@ -1672,6 +1672,20 @@ const FORMATS: FormatSpec[] = [
         },
         rejects: "sponsor_did must not contain NUL — it is the field separator",
       },
+      {
+        name: "claim-ends-in-lone-high-surrogate-rejected",
+        note:
+          "A lone high surrogate as the last code unit has no partner to check. UTF-8 encoding would write it as U+FFFD, so two different strings would sign the same bytes; it is refused before hashing.",
+        input: {
+          agent_id: UUID_A,
+          sponsor_did: ASCII,
+          sponsor_kid: UUID_B,
+          initial_credits: 1000,
+          claim: "sponsorship\uD800",
+          evidence: null,
+        },
+        rejects: "claim must be well-formed Unicode — a lone surrogate has no UTF-8 form",
+      },
     ],
   },
   {
@@ -1747,6 +1761,19 @@ const FORMATS: FormatSpec[] = [
           evidence: null,
         },
         rejects: "claim must not contain NUL — it is the field separator",
+      },
+      {
+        name: "claim-ends-in-lone-high-surrogate-rejected",
+        note:
+          "A lone high surrogate as the last code unit has no partner to check. UTF-8 encoding would write it as U+FFFD, so two different strings would sign the same bytes; it is refused before hashing.",
+        input: {
+          subject_id: UUID_A,
+          attester_id: UUID_B,
+          kid: UUID_C,
+          claim: "sponsorship\uD800",
+          evidence: null,
+        },
+        rejects: "claim must be well-formed Unicode — a lone surrogate has no UTF-8 form",
       },
       {
         name: "uuid-uppercase-rejected",

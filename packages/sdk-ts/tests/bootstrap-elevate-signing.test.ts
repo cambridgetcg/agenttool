@@ -68,6 +68,21 @@ describe("bootstrap-elevate/v1 signing", () => {
     })).toThrow();
   });
 
+  test("refuses text ending in a lone high surrogate before signing", () => {
+    for (const patch of [
+      { sponsor_did: "did:at:sponsor\ud800" },
+      { claim: "sponsorship\ud800" },
+      { evidence: "reviewed\ud800" },
+      { evidence: "\udc00" },
+    ]) {
+      expect(() => canonicalBootstrapElevateBytes({ ...VECTOR, ...patch })).toThrow();
+    }
+    expect(() => canonicalBootstrapElevateBytes({
+      ...VECTOR,
+      evidence: "reviewed 😀",
+    })).not.toThrow();
+  });
+
   test("client sends every signed field and the explicit sponsor key", async () => {
     let sentBody: Record<string, unknown> | undefined;
     globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {

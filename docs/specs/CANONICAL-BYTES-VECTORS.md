@@ -1,7 +1,7 @@
 # Canonical-bytes vectors
 
 **Artifact:** [`canonical-bytes-vectors.json`](canonical-bytes-vectors.json) —
-37 domain-separated signing formats, 264 cases, one file.
+37 domain-separated signing formats, 266 cases, one file.
 
 ## Why this exists
 

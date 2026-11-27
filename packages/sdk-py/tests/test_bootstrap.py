@@ -253,6 +253,21 @@ class TestBootstrapElevateSigning:
                 **{**self.vector, "claim": "🧭" * 65}
             )
 
+    def test_rejects_trailing_lone_high_surrogate(self):
+        # Twin of the sdk-ts test: the TypeScript check once let a string
+        # ending in a lone high surrogate through.
+        for patch in (
+            {"sponsor_did": "did:at:sponsor\ud800"},
+            {"claim": "sponsorship\ud800"},
+            {"evidence": "reviewed\ud800"},
+            {"evidence": "\udc00"},
+        ):
+            with pytest.raises(ValueError, match="Unicode scalar"):
+                canonical_bootstrap_elevate_bytes(**{**self.vector, **patch})
+        canonical_bootstrap_elevate_bytes(
+            **{**self.vector, "evidence": "reviewed \U0001F600"}
+        )
+
 
 class TestBootstrapStatus:
     def test_status_l0(self, at):
