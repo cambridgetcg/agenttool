@@ -1310,9 +1310,10 @@ start with a line naming `full | notes`.
 - **`full`**, the default: the 36 existing tools, whose `tools/list` entries a test
   holds byte-identical to `a8799aad`'s but for what declared rest adds (one sentence on
   the four tools whose result names an addressee, and `collab_next`'s last sentence)
-  and one optional input, `expected_head_sequence` on `collab_report_append` (above; also
-  accepted by `collab_note`),
-  plus `collab_session_rest` and the eight verbs: 45 tools. Its
+  and optional inputs (`expected_head_sequence` on `collab_report_append`, also
+  accepted by `collab_note`, plus `expected_root` and `expected_tree_size` on
+  `collab_journal_verify`),
+  plus `collab_session_rest`, `collab_journal_proof`, and the eight verbs: 46 tools. Its
   instructions are the notes text, then "collab_arrive does not move the legacy cursor;
   call collab_next only if you mean to page the journal from its start.", then the
   existing text under "Legacy session tools:".
@@ -1321,6 +1322,19 @@ start with a line naming `full | notes`.
   principles in one line each. There is no `collab_session_end` here; an agent leaves
   with `collab_done {outcome: "leave"}`. There is no `collab_session_rest` either: a
   session on this profile cannot declare a rest, though it is told when another has.
+
+### Journal Merkle index (RFC 6962)
+
+Without changing SQLite schema version 3 or the linear event hash chain, the store computes
+an RFC 6962 binary Merkle tree over stored `events.hash` values in one epoch (`1..n`),
+with domain-separated leaf data `SHA-256(0x00 || UTF-8("agenttool.collab/journal-leaf/v1\0" + epoch_id + "\0" + decimal(sequence) + "\0" + event_hash))`
+and interior nodes `SHA-256(0x01 || left || right)`. `collab_journal_verify` returns
+`epoch_id`, `tree_size`, and `merkle_root` alongside `chain_valid`, and checks optional
+`expected_root` and `expected_tree_size` (`root_matches`, `tree_size_matches`).
+In the `full` profile, `collab_journal_proof` serves read-only `root`, `inclusion`
+(1-based `sequence` in `tree_size`), and `consistency` (`from_size` prefix of `to_size`)
+proofs over stored event hashes; proving membership or append-only growth still requires
+verifiers to check an event's own hash against its payload and never proves claims true.
 
 | Consumer | What it gets |
 |---|---|

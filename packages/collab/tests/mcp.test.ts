@@ -166,6 +166,7 @@ describe("MCP surface", () => {
       "collab_handoff_offer",
       "collab_handoff_respond",
       "collab_inbox",
+      "collab_journal_proof",
       "collab_journal_verify",
       "collab_next",
       "collab_note",
@@ -264,6 +265,7 @@ describe("MCP surface", () => {
       "collab_anchor_status",
       "collab_events_since",
       "collab_events_wait",
+      "collab_journal_proof",
       "collab_journal_verify",
       "collab_proposal_status",
       "collab_report_list",
@@ -1151,8 +1153,11 @@ describe("MCP surface", () => {
       // time/1: every result names the store clock's now.
       observed_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
       workspace_id: workspaceId,
+      epoch_id: opened.structuredContent.workspace.epoch_id,
       chain_valid: true,
       verification_scope: "full_journal",
+      tree_size: 1,
+      merkle_root: expect.stringMatching(/^[0-9a-f]{64}$/),
     });
 
     store.db.query(`UPDATE events SET payload_json = ? WHERE workspace_id = ? AND sequence = 1`)
@@ -1496,11 +1501,11 @@ describe("MCP surface", () => {
     cleanup.push(() => sender.close());
     await sender.initialize();
 
-    // A bundle built before the rest tool fails here (the full profile without it has 44 tools).
+    // A bundle built before the rest and Merkle tools fails here (the full profile now has 46 tools).
     const tools = new Map<string, any>(
       (await rester.listTools()).tools.map((tool: any) => [tool.name, tool]),
     );
-    expect(tools.size).toBe(45);
+    expect(tools.size).toBe(46);
     const rest = tools.get("collab_session_rest");
     expect(Object.keys(rest.inputSchema.properties).sort()).toEqual([
       "binding_key",

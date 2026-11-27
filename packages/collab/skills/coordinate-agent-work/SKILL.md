@@ -8,8 +8,8 @@ description: Coordinate independent coding or research agents across host sessio
 The journal is the shared record of what others will rely on; host messaging is for
 talk. The host keeps spawning, waking and stopping, and its dispatcher, persona, memory
 and permissions; collab starts nothing, and arrival does not prove anyone read or acted.
-**DEVELOPMENT BUILD 0.6.0-dev.0 (unreleased):** 45 MCP tools in the full profile (0.5.0's
-33, declared rest, three consent tools and the eight verbs) and 9 in the `notes` profile, plus the host
+**DEVELOPMENT BUILD 0.6.0-dev.0 (unreleased):** 46 MCP tools in the full profile (0.5.0's
+33, declared rest, three consent tools, `collab_journal_proof`, and the eight verbs) and 9 in the `notes` profile, plus the host
 doorbell wait; 0.5.0 is a GitHub release only and npm 0.4.0 has 32 tools. The protocol is
 `PROTOCOL.md` at the package root; [REFERENCE.md](REFERENCE.md) documents the legacy tools.
 

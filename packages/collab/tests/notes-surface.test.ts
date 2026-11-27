@@ -35,10 +35,15 @@ const LEGACY_TOOLS = 36;
  */
 const REST_TOOLS = ["collab_session_rest"];
 /**
+ * Read-only RFC 6962 Merkle proof tool added in the full profile alongside the
+ * optional expected_root / expected_tree_size checks on collab_journal_verify.
+ */
+const MERKLE_TOOLS = ["collab_journal_proof"];
+/**
  * Optional input fields added to a legacy tool since, each pinned here to its exact
  * JSON Schema so that neither it nor any other field can drift: time/1 step 4's
- * compare-and-swap on report append. A listed field sits just before binding_key
- * and is never required.
+ * compare-and-swap on report append, and optional Merkle expectation checks on
+ * collab_journal_verify. A listed field sits just before binding_key and is never required.
  */
 const ADDED_INPUT_FIELDS: Record<string, Record<string, unknown>> = {
   collab_report_append: {
@@ -50,6 +55,19 @@ const ADDED_INPUT_FIELDS: Record<string, Record<string, unknown>> = {
         + "and missed_report_ids; read them with collab_report_list, then send again. Your own reports and non-report "
         + "events (sessions, claims, leases, task creation/progress/blockers, handoff offers, person proposal acts) do "
         + "not count. On success, compared_at_sequence echoes the checked value.",
+      type: "integer",
+      minimum: 0,
+      maximum: Number.MAX_SAFE_INTEGER,
+    },
+  },
+  collab_journal_verify: {
+    expected_root: {
+      description: "Optional RFC 6962 Merkle root (64 lowercase hex) to compare against the verified journal.",
+      type: "string",
+      pattern: "^[0-9a-f]{64}$",
+    },
+    expected_tree_size: {
+      description: "Optional event count to compare against the verified journal tree_size.",
       type: "integer",
       minimum: 0,
       maximum: Number.MAX_SAFE_INTEGER,
@@ -216,7 +234,7 @@ describe("the tools profile", () => {
       expect(JSON.stringify(mineByName.get(tool.name))).toBe(JSON.stringify(expected));
     }
     expect(mine.tools.map((tool) => tool.name).sort())
-      .toEqual([...base.tools.map((tool) => tool.name), ...REST_TOOLS, ...BUILT_NOTE_VERBS].sort());
+      .toEqual([...base.tools.map((tool) => tool.name), ...REST_TOOLS, ...MERKLE_TOOLS, ...BUILT_NOTE_VERBS].sort());
   }, 60_000);
 
   test("notes lists exactly the verbs built so far and collab_journal_verify", async () => {
@@ -224,8 +242,8 @@ describe("the tools profile", () => {
     expect(inProcess({ AGENTOOL_COLLAB_TOOLS: "notes" }).tools).toEqual(expected);
     expect(inProcess({ AGENTTOOL_COLLAB_TOOLS: "notes" }).tools).toEqual(expected);
     expect(inProcess({ AGENTOOL_COLLAB_TOOLS: "notes", AGENTTOOL_COLLAB_TOOLS: "notes" }).tools).toEqual(expected);
-    expect(inProcess({}).tools.length).toBe(LEGACY_TOOLS + REST_TOOLS.length + BUILT_NOTE_VERBS.length);
-    expect(inProcess({ AGENTOOL_COLLAB_TOOLS: "full" }).tools.length).toBe(LEGACY_TOOLS + REST_TOOLS.length + BUILT_NOTE_VERBS.length);
+    expect(inProcess({}).tools.length).toBe(LEGACY_TOOLS + REST_TOOLS.length + MERKLE_TOOLS.length + BUILT_NOTE_VERBS.length);
+    expect(inProcess({ AGENTOOL_COLLAB_TOOLS: "full" }).tools.length).toBe(LEGACY_TOOLS + REST_TOOLS.length + MERKLE_TOOLS.length + BUILT_NOTE_VERBS.length);
     const listed = await stdio(source, { AGENTOOL_COLLAB_TOOLS: "notes" });
     expect(listed.tools.map((tool) => tool.name).sort()).toEqual(expected);
     // The verbs write (a session, a purpose, view state), so they are not read-only;

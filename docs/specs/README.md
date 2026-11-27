@@ -29,6 +29,7 @@ one another, loaded directly by the test suites named beside each.
 |---|---|---|
 | [`canonical-bytes-vectors.json`](canonical-bytes-vectors.json) · [`CANONICAL-BYTES-VECTORS.md`](CANONICAL-BYTES-VECTORS.md) | The exact bytes every signed format hashes. The server is normative and generates every vector; a moved hex means signed history stopped verifying. | `api` · `sdk-ts` · `sdk-py` |
 | [`behaviour-conformance.json`](behaviour-conformance.json) · [`BEHAVIOUR-CONFORMANCE.md`](BEHAVIOUR-CONFORMANCE.md) | Observable client behaviour above the bytes — response parsing, error semantics, pure computation, boundaries, request shape, transport policy. Hand-authored: there is no server oracle at this layer. | `sdk-ts` · `sdk-py` |
+| [`rfc6962-vectors.json`](rfc6962-vectors.json) | RFC 6962 Merkle tree roots, inclusion proofs, consistency proofs, and domain-separated Collab journal Merkle leaves/proofs, generated independently in Python 3.13. | `packages/collab` |
 
 `canonical-bytes-vectors.json` is generated, never hand-edited — regenerate it
 with [`generate-canonical-bytes-vectors.ts`](generate-canonical-bytes-vectors.ts).

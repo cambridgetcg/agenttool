@@ -7,7 +7,7 @@
 > **Code:** `src/{store,mcp,protocol,proposal,person-desk,ceremony,passkey,tty,version,host,host-binding,process-tree}.ts`.
 > **Tests:** `tests/{events-wait,mcp,package,proposal-consent,person-desk,tty}.test.ts`.
 
-**DEVELOPMENT BUILD: 0.6.0-dev.0, 45 MCP tools in the full profile. Unreleased.** Collab 0.5.0
+**DEVELOPMENT BUILD: 0.6.0-dev.0, 46 MCP tools in the full profile. Unreleased.** Collab 0.5.0
 is released on GitHub only, as the
 [`collab-v0.5.0` release](https://github.com/cambridgetcg/agenttool-collab/releases/tag/collab-v0.5.0)
 of `cambridgetcg/agenttool-collab` (2026-10-10), with 33 tools. On npm the
@@ -18,9 +18,10 @@ and its addressed mode with the Claude Code watcher, plus the unreleased
 [session-fit changes](#session-fit-migration-unreleased), the unreleased
 [declared rest and knocks](#declared-rest-and-knocks) (`collab_session_rest`) and the three unreleased
 [proposal consent tools](#proposals-and-consent-unreleased) that bring 0.5.0's 33
-tools to 37, plus the eight unreleased Collab Notes verbs, `collab_arrive`,
+tools to 37, plus the read-only RFC 6962 Merkle proof tool `collab_journal_proof` and
+the eight unreleased Collab Notes verbs, `collab_arrive`,
 `collab_inbox`, `collab_note` (with `decide`), `collab_take`, `collab_done`,
-`collab_propose`, and the sealed ballot's `collab_poll` and `collab_vote` (45 in all;
+`collab_propose`, and the sealed ballot's `collab_poll` and `collab_vote` (46 in all;
 the `notes` tools profile registers those eight and `collab_journal_verify`).
 Enabling the `notes` profile (`AGENTOOL_COLLAB_TOOLS=notes`) in a host's MCP
 configuration is a host step for the owner; this build does not take it. How agents
@@ -1303,7 +1304,7 @@ enforce their own repository, account, and publication boundaries.
 ## Codex, Claude Code, Hermes Agent, and OpenClaw
 
 The npm package root is the plugin root for Codex and Claude, so the same
-`skills/coordinate-agent-work/SKILL.md` and 45-tool standalone MCP server (full
+`skills/coordinate-agent-work/SKILL.md` and 46-tool standalone MCP server (full
 profile) ship once:
 
 - Codex reads `.codex-plugin/plugin.json`. Its MCP declaration uses `cwd: "."`
@@ -1406,9 +1407,10 @@ end, the `agenttool-collab-host` bin, host-commit acceptance, and the bound
 
 **DEVELOPMENT BUILD: 0.6.0-dev.0.** This main-branch source follows 0.5.0 and is
 unreleased. It keeps journal schema 3, adds three proposal consent tools, declared rest
-(`collab_session_rest`) and the
-Collab Notes verbs `collab_arrive`, `collab_inbox`, `collab_note`, `collab_take`,
-`collab_done`, `collab_propose`, `collab_poll` and `collab_vote` to the 33 MCP tools of 0.5.0 (45 in all under the full profile), and adds the
+(`collab_session_rest`), read-only RFC 6962 Merkle journal proofs (`collab_journal_proof`, plus
+`merkle_root`/`tree_size` and optional `expected_root`/`expected_tree_size` on `collab_journal_verify`),
+and the Collab Notes verbs `collab_arrive`, `collab_inbox`, `collab_note`, `collab_take`,
+`collab_done`, `collab_propose`, `collab_poll` and `collab_vote` to the 33 MCP tools of 0.5.0 (46 in all under the full profile), and adds the
 `agenttool-collab-host wait` host doorbell, its `--addressed` mode and the
 Claude Code doorbell watcher. With declared rest come four-state liveness, the
 addressed-waiting count, sender hints, host bindings and the read-only

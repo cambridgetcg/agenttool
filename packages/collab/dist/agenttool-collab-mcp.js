@@ -32082,7 +32082,7 @@ function removeQuietly(path) {
 
 // src/store.ts
 import { Database } from "bun:sqlite";
-import { createHash as createHash5, randomBytes, randomUUID as randomUUID4, timingSafeEqual } from "crypto";
+import { createHash as createHash6, randomBytes, randomUUID as randomUUID4, timingSafeEqual } from "crypto";
 import {
   chmodSync as chmodSync4,
   closeSync as closeSync7,
@@ -32093,8 +32093,202 @@ import {
 } from "fs";
 import { dirname as dirname5, isAbsolute as isAbsolute4, join as join6, posix, resolve as resolve5 } from "path";
 
+// src/merkle.ts
+import { createHash as createHash4 } from "crypto";
+var JOURNAL_MERKLE_LEAF_DOMAIN = "agenttool.collab/journal-leaf/v1";
+var RFC6962_EMPTY_ROOT = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+var SHA256_HEX_RE = /^[0-9a-f]{64}$/;
+var LEAF_PREFIX = new Uint8Array([0]);
+var NODE_PREFIX = new Uint8Array([1]);
+var UTF8 = new TextEncoder;
+function isSha256Hex(value) {
+  return typeof value === "string" && SHA256_HEX_RE.test(value);
+}
+function assertSha256Hex(value, label) {
+  if (!isSha256Hex(value)) {
+    throw new RangeError(`${label} must be 64 lowercase hexadecimal characters`);
+  }
+}
+function isValidEpochId(value) {
+  return typeof value === "string" && value.length > 0 && !value.includes("\x00");
+}
+function assertValidEpochId(epochId) {
+  if (!isValidEpochId(epochId)) {
+    throw new RangeError("epoch_id must be a non-empty string containing no NUL bytes");
+  }
+}
+function assertSafeNonNegativeInt(value, label) {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new RangeError(`${label} must be a non-negative safe integer`);
+  }
+}
+function largestPowerOfTwoLessThan(n) {
+  if (!Number.isSafeInteger(n) || n < 2) {
+    throw new RangeError("largestPowerOfTwoLessThan requires a safe integer >= 2");
+  }
+  let k = 1;
+  while (k * 2 < n)
+    k *= 2;
+  return k;
+}
+function rfc6962LeafHash(data) {
+  const bytes = typeof data === "string" ? UTF8.encode(data) : data;
+  return createHash4("sha256").update(LEAF_PREFIX).update(bytes).digest("hex");
+}
+function rfc6962NodeHash(leftHex, rightHex) {
+  assertSha256Hex(leftHex, "left");
+  assertSha256Hex(rightHex, "right");
+  return createHash4("sha256").update(NODE_PREFIX).update(Buffer.from(leftHex, "hex")).update(Buffer.from(rightHex, "hex")).digest("hex");
+}
+function subtreeRoot(leafHashes, start, end) {
+  const n = end - start;
+  if (n === 0)
+    return RFC6962_EMPTY_ROOT;
+  if (n === 1)
+    return leafHashes[start];
+  const k = largestPowerOfTwoLessThan(n);
+  return rfc6962NodeHash(subtreeRoot(leafHashes, start, start + k), subtreeRoot(leafHashes, start + k, end));
+}
+function rfc6962InclusionProof(leafHashes, leafIndex, treeSize = leafHashes.length) {
+  assertSafeNonNegativeInt(treeSize, "tree_size");
+  assertSafeNonNegativeInt(leafIndex, "leaf_index");
+  if (treeSize < 1 || treeSize > leafHashes.length) {
+    throw new RangeError(`tree_size (${treeSize}) must be in [1, ${leafHashes.length}]`);
+  }
+  if (leafIndex >= treeSize) {
+    throw new RangeError(`leaf_index (${leafIndex}) must be < tree_size (${treeSize})`);
+  }
+  for (let i = 0;i < treeSize; i += 1) {
+    assertSha256Hex(leafHashes[i], `leaf_hashes[${i}]`);
+  }
+  const path = [];
+  const walk = (m, start, end) => {
+    const n = end - start;
+    if (n <= 1)
+      return;
+    const k = largestPowerOfTwoLessThan(n);
+    if (m < k) {
+      walk(m, start, start + k);
+      path.push(subtreeRoot(leafHashes, start + k, end));
+    } else {
+      walk(m - k, start + k, end);
+      path.push(subtreeRoot(leafHashes, start, start + k));
+    }
+  };
+  walk(leafIndex, 0, treeSize);
+  return path;
+}
+function rfc6962ConsistencyProof(leafHashes, fromSize, toSize = leafHashes.length) {
+  assertSafeNonNegativeInt(fromSize, "from_size");
+  assertSafeNonNegativeInt(toSize, "to_size");
+  if (fromSize > toSize) {
+    throw new RangeError(`from_size (${fromSize}) must be <= to_size (${toSize})`);
+  }
+  if (toSize > leafHashes.length) {
+    throw new RangeError(`to_size (${toSize}) exceeds available leaves (${leafHashes.length})`);
+  }
+  for (let i = 0;i < toSize; i += 1) {
+    assertSha256Hex(leafHashes[i], `leaf_hashes[${i}]`);
+  }
+  if (fromSize === 0 || fromSize === toSize)
+    return [];
+  const path = [];
+  const subproof = (m, start, end, complete) => {
+    const n = end - start;
+    if (m === n) {
+      if (!complete)
+        path.push(subtreeRoot(leafHashes, start, end));
+      return;
+    }
+    const k = largestPowerOfTwoLessThan(n);
+    if (m <= k) {
+      subproof(m, start, start + k, complete);
+      path.push(subtreeRoot(leafHashes, start + k, end));
+    } else {
+      subproof(m - k, start + k, end, false);
+      path.push(subtreeRoot(leafHashes, start, start + k));
+    }
+  };
+  subproof(fromSize, 0, toSize, true);
+  return path;
+}
+function journalLeafPreimage(epochId, sequence, eventHash) {
+  assertValidEpochId(epochId);
+  if (!Number.isSafeInteger(sequence) || sequence < 1) {
+    throw new RangeError("sequence must be a safe integer >= 1");
+  }
+  assertSha256Hex(eventHash, "event_hash");
+  return UTF8.encode(`${JOURNAL_MERKLE_LEAF_DOMAIN}\x00${epochId}\x00${sequence}\x00${eventHash}`);
+}
+function journalLeafHash(epochId, sequence, eventHash) {
+  return rfc6962LeafHash(journalLeafPreimage(epochId, sequence, eventHash));
+}
+function buildJournalLeafHashes(epochId, eventHashes, limit) {
+  assertValidEpochId(epochId);
+  const leaves = new Array(limit);
+  for (let i = 0;i < limit; i += 1) {
+    leaves[i] = journalLeafHash(epochId, i + 1, eventHashes[i]);
+  }
+  return leaves;
+}
+function journalMerkleRoot(epochId, eventHashes) {
+  assertValidEpochId(epochId);
+  if (eventHashes.length === 0)
+    return RFC6962_EMPTY_ROOT;
+  const leaves = buildJournalLeafHashes(epochId, eventHashes, eventHashes.length);
+  return subtreeRoot(leaves, 0, leaves.length);
+}
+function proveJournalInclusion(epochId, eventHashes, sequence, treeSize = eventHashes.length) {
+  assertValidEpochId(epochId);
+  assertSafeNonNegativeInt(treeSize, "tree_size");
+  if (!Number.isSafeInteger(sequence) || sequence < 1) {
+    throw new RangeError("sequence must be a safe integer >= 1");
+  }
+  if (treeSize > eventHashes.length) {
+    throw new RangeError(`tree_size (${treeSize}) exceeds available events (${eventHashes.length})`);
+  }
+  if (sequence > treeSize) {
+    throw new RangeError(`sequence (${sequence}) must be <= tree_size (${treeSize})`);
+  }
+  const leaves = buildJournalLeafHashes(epochId, eventHashes, treeSize);
+  const root = subtreeRoot(leaves, 0, treeSize);
+  const path = rfc6962InclusionProof(leaves, sequence - 1, treeSize);
+  return {
+    epoch_id: epochId,
+    sequence,
+    event_hash: eventHashes[sequence - 1],
+    leaf_hash: leaves[sequence - 1],
+    tree_size: treeSize,
+    root,
+    path
+  };
+}
+function proveJournalConsistency(epochId, eventHashes, fromSize, toSize = eventHashes.length) {
+  assertValidEpochId(epochId);
+  assertSafeNonNegativeInt(fromSize, "from_size");
+  assertSafeNonNegativeInt(toSize, "to_size");
+  if (fromSize > toSize) {
+    throw new RangeError(`from_size (${fromSize}) must be <= to_size (${toSize})`);
+  }
+  if (toSize > eventHashes.length) {
+    throw new RangeError(`to_size (${toSize}) exceeds available events (${eventHashes.length})`);
+  }
+  const leaves = buildJournalLeafHashes(epochId, eventHashes, toSize);
+  const fromRoot = subtreeRoot(leaves, 0, fromSize);
+  const toRoot = subtreeRoot(leaves, 0, toSize);
+  const path = rfc6962ConsistencyProof(leaves, fromSize, toSize);
+  return {
+    epoch_id: epochId,
+    from_size: fromSize,
+    to_size: toSize,
+    from_root: fromRoot,
+    to_root: toRoot,
+    path
+  };
+}
+
 // src/passkey.ts
-import { createHash as createHash4, createPublicKey, verify } from "crypto";
+import { createHash as createHash5, createPublicKey, verify } from "crypto";
 var FLAG_USER_PRESENT = 1;
 var FLAG_USER_VERIFIED = 4;
 var BASE64URL = /^[A-Za-z0-9_-]*$/;
@@ -32109,7 +32303,7 @@ function base64urlDecode(value, field, maxBytes = 64 * 1024) {
   return bytes;
 }
 function sha2563(bytes) {
-  return createHash4("sha256").update(bytes).digest();
+  return createHash5("sha256").update(bytes).digest();
 }
 function personActChallenge(input) {
   const challenge_bytes = canonicalJson({ protocol: PERSON_ACT_PROTOCOL, ...input });
@@ -36569,6 +36763,159 @@ class CollabStoreCore {
     });
     return audit.deferred();
   }
+  verifyJournalDetails(workspaceId, expected = {}) {
+    if (expected.expected_root !== undefined && !/^[0-9a-f]{64}$/.test(expected.expected_root)) {
+      throw new CollabError("invalid_expected_root", "expected_root must be 64 lowercase hexadecimal characters");
+    }
+    if (expected.expected_tree_size !== undefined && (!Number.isSafeInteger(expected.expected_tree_size) || expected.expected_tree_size < 0)) {
+      throw new CollabError("invalid_expected_tree_size", "expected_tree_size must be a non-negative safe integer");
+    }
+    const audit = this.db.transaction(() => {
+      const workspace = this.requireWorkspace(workspaceId);
+      const rows = this.db.query(`
+        SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
+          session_id, occurred_at, payload_json, prev_hash, hash
+        FROM events WHERE workspace_id = ? ORDER BY sequence
+      `).all(workspaceId);
+      let expectedSequence = 1;
+      let previous = GENESIS_HASH;
+      let chainValid = true;
+      const eventHashes = [];
+      try {
+        for (const row of rows) {
+          const event = eventFromRow(row);
+          if (event.epoch_id !== workspace.epoch_id || event.sequence !== expectedSequence || event.prev_hash !== previous || event.hash !== eventHash(event)) {
+            chainValid = false;
+            break;
+          }
+          eventHashes.push(event.hash);
+          previous = event.hash;
+          expectedSequence += 1;
+        }
+      } catch {
+        chainValid = false;
+      }
+      if (chainValid && (workspace.event_head_sequence !== rows.length || workspace.event_head_hash !== previous)) {
+        chainValid = false;
+      }
+      const merkleRoot = chainValid ? journalMerkleRoot(workspace.epoch_id, eventHashes) : null;
+      const result = {
+        workspace_id: workspace.id,
+        chain_valid: chainValid,
+        verification_scope: "full_journal",
+        epoch_id: workspace.epoch_id,
+        tree_size: rows.length,
+        merkle_root: merkleRoot
+      };
+      if (expected.expected_root !== undefined) {
+        result.expected_root = expected.expected_root;
+        result.root_matches = chainValid && merkleRoot === expected.expected_root;
+      }
+      if (expected.expected_tree_size !== undefined) {
+        result.expected_tree_size = expected.expected_tree_size;
+        result.tree_size_matches = chainValid && rows.length === expected.expected_tree_size;
+      }
+      return result;
+    });
+    return audit.deferred();
+  }
+  journalProof(input) {
+    const read = this.db.transaction(() => {
+      const workspace = this.requireWorkspace(input.workspace_id);
+      const headSeq = workspace.event_head_sequence;
+      let targetSize;
+      let sequence = null;
+      let fromSize = null;
+      if (input.kind === "root") {
+        if (input.sequence !== undefined || input.from_size !== undefined || input.to_size !== undefined) {
+          throw new CollabError("invalid_proof_request", "kind 'root' accepts only workspace_id and optional tree_size");
+        }
+        targetSize = input.tree_size ?? headSeq;
+        if (!Number.isSafeInteger(targetSize) || targetSize < 0 || targetSize > headSeq) {
+          throw new CollabError("tree_size_out_of_range", `tree_size must be an integer between 0 and head_sequence (${headSeq})`, { head_sequence: headSeq });
+        }
+      } else if (input.kind === "inclusion") {
+        if (input.from_size !== undefined || input.to_size !== undefined) {
+          throw new CollabError("invalid_proof_request", "kind 'inclusion' accepts workspace_id, sequence, and optional tree_size");
+        }
+        targetSize = input.tree_size ?? headSeq;
+        if (!Number.isSafeInteger(targetSize) || targetSize < 1 || targetSize > headSeq) {
+          throw new CollabError("tree_size_out_of_range", `tree_size for inclusion must be an integer between 1 and head_sequence (${headSeq})`, { head_sequence: headSeq });
+        }
+        if (input.sequence === undefined || !Number.isSafeInteger(input.sequence) || input.sequence < 1 || input.sequence > targetSize) {
+          throw new CollabError("sequence_out_of_range", `sequence must be an integer between 1 and tree_size (${targetSize})`, { tree_size: targetSize, head_sequence: headSeq });
+        }
+        sequence = input.sequence;
+      } else if (input.kind === "consistency") {
+        if (input.sequence !== undefined || input.tree_size !== undefined) {
+          throw new CollabError("invalid_proof_request", "kind 'consistency' accepts workspace_id, from_size, and optional to_size");
+        }
+        targetSize = input.to_size ?? headSeq;
+        if (!Number.isSafeInteger(targetSize) || targetSize < 0 || targetSize > headSeq) {
+          throw new CollabError("tree_size_out_of_range", `to_size must be an integer between 0 and head_sequence (${headSeq})`, { head_sequence: headSeq });
+        }
+        if (input.from_size === undefined || !Number.isSafeInteger(input.from_size) || input.from_size < 0 || input.from_size > targetSize) {
+          throw new CollabError("invalid_proof_request", `from_size must be an integer between 0 and to_size (${targetSize})`, { to_size: targetSize, head_sequence: headSeq });
+        }
+        fromSize = input.from_size;
+      } else {
+        throw new CollabError("invalid_proof_request", `Unsupported proof kind: ${String(input.kind)}`);
+      }
+      const rows = targetSize === 0 ? [] : this.db.query(`
+            SELECT epoch_id, sequence, hash
+            FROM events
+            WHERE workspace_id = ? AND sequence <= ?
+            ORDER BY sequence
+          `).all(workspace.id, targetSize);
+      if (rows.length !== targetSize) {
+        throw new CollabError("database_journal_invalid", "Workspace event sequence is not contiguous up to requested tree_size", { workspace_id: workspace.id, expected: targetSize, found: rows.length });
+      }
+      const eventHashes = new Array(targetSize);
+      for (let i = 0;i < targetSize; i += 1) {
+        const row = rows[i];
+        if (row.sequence !== i + 1 || row.epoch_id !== workspace.epoch_id || !/^[0-9a-f]{64}$/.test(row.hash)) {
+          throw new CollabError("database_journal_invalid", "Workspace event row failed epoch, sequence, or hash invariant", { workspace_id: workspace.id, sequence: i + 1 });
+        }
+        eventHashes[i] = row.hash;
+      }
+      const headHash = targetSize === 0 ? GENESIS_HASH : eventHashes[targetSize - 1];
+      if (targetSize === headSeq && headHash !== workspace.event_head_hash) {
+        throw new CollabError("database_journal_invalid", "Workspace head hash does not match the last stored event hash", { workspace_id: workspace.id });
+      }
+      if (input.kind === "root") {
+        return {
+          workspace_id: workspace.id,
+          kind: "root",
+          epoch_id: workspace.epoch_id,
+          tree_size: targetSize,
+          root: journalMerkleRoot(workspace.epoch_id, eventHashes),
+          head_hash: headHash,
+          head_sequence: headSeq
+        };
+      }
+      if (input.kind === "inclusion") {
+        const proof2 = proveJournalInclusion(workspace.epoch_id, eventHashes, sequence, targetSize);
+        return {
+          workspace_id: workspace.id,
+          kind: "inclusion",
+          ...proof2,
+          head_hash: headHash,
+          head_sequence: headSeq
+        };
+      }
+      const proof = proveJournalConsistency(workspace.epoch_id, eventHashes, fromSize, targetSize);
+      return {
+        workspace_id: workspace.id,
+        kind: "consistency",
+        ...proof,
+        tree_size: targetSize,
+        root: proof.to_root,
+        head_hash: headHash,
+        head_sequence: headSeq
+      };
+    });
+    return read.deferred();
+  }
   verifyJournalRows(workspaceId) {
     const workspace = this.getWorkspace(workspaceId);
     if (!workspace)
@@ -38673,7 +39020,7 @@ function safeRepositoryIdentity(rootPath) {
   }
 }
 function sha2564(value) {
-  return createHash5("sha256").update(value).digest("hex");
+  return createHash6("sha256").update(value).digest("hex");
 }
 function addSeconds(iso, seconds) {
   return new Date(new Date(iso).getTime() + seconds * 1000).toISOString();
@@ -41115,7 +41462,7 @@ function firstLine(text) {
 }
 
 // src/verbs.ts
-import { createHash as createHash6 } from "crypto";
+import { createHash as createHash7 } from "crypto";
 import { existsSync as existsSync6, realpathSync as realpathSync3 } from "fs";
 import { hostname as hostname3 } from "os";
 import { resolve as resolve6, sep as sep2 } from "path";
@@ -41291,7 +41638,7 @@ function base32(bytes) {
   return out;
 }
 function sha256Bytes2(text) {
-  return createHash6("sha256").update(text, "utf8").digest();
+  return createHash7("sha256").update(text, "utf8").digest();
 }
 var DERIVED_KEY = /^n1:([A-Z2-7]{8}):(\d{6}):([A-Z2-7]{20})(?::(\d{2}))?$/;
 function derivedBase(sessionId, tool, input) {
@@ -47830,11 +48177,34 @@ Rationale: ${input.rationale}` : ""}`,
     title: "Verify the full local event journal",
     description: "Recompute the mixed-version hash chain. Integrity detects edits; it does not prove recorded claims true.",
     annotations: localReadOnly,
-    inputSchema: { workspace_id: workspaceId }
-  }, async ({ workspace_id }) => call(() => ({
+    inputSchema: {
+      workspace_id: workspaceId,
+      expected_root: exports_external.string().regex(/^[0-9a-f]{64}$/).optional().describe("Optional RFC 6962 Merkle root (64 lowercase hex) to compare against the verified journal."),
+      expected_tree_size: exports_external.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional().describe("Optional event count to compare against the verified journal tree_size.")
+    }
+  }, async ({ workspace_id, expected_root, expected_tree_size }) => call(() => store2.verifyJournalDetails(workspace_id, {
+    ...expected_root !== undefined ? { expected_root } : {},
+    ...expected_tree_size !== undefined ? { expected_tree_size } : {}
+  })));
+  server.registerTool("collab_journal_proof", {
+    title: "Compute an RFC 6962 Merkle root or proof for the local event journal",
+    description: "Read-only RFC 6962 Merkle root, inclusion proof, or prefix consistency proof over stored event hashes in one epoch. " + "Does not re-hash event payloads, acknowledge, or claim truth or authority; verifiers checking an actual event recompute its event hash first.",
+    annotations: localReadOnly,
+    inputSchema: {
+      workspace_id: workspaceId,
+      kind: exports_external.enum(["root", "inclusion", "consistency"]).describe("Proof kind: root (snapshot root at tree_size), inclusion (1-based sequence in tree_size), or consistency (from_size prefix of to_size)."),
+      tree_size: exports_external.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional().describe("For root or inclusion: snapshot size in events (defaults to current head_sequence)."),
+      sequence: exports_external.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional().describe("For inclusion: 1-based event sequence to prove (1 <= sequence <= tree_size)."),
+      from_size: exports_external.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional().describe("For consistency: earlier snapshot size (0 <= from_size <= to_size)."),
+      to_size: exports_external.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional().describe("For consistency: later snapshot size (defaults to current head_sequence).")
+    }
+  }, async ({ workspace_id, kind, tree_size, sequence, from_size, to_size }) => call(() => store2.journalProof({
     workspace_id,
-    chain_valid: store2.verifyJournal(workspace_id),
-    verification_scope: "full_journal"
+    kind,
+    ...tree_size !== undefined ? { tree_size } : {},
+    ...sequence !== undefined ? { sequence } : {},
+    ...from_size !== undefined ? { from_size } : {},
+    ...to_size !== undefined ? { to_size } : {}
   })));
   server.registerTool("collab_anchor_status", {
     title: "Report the journal's zerone anchor status",
